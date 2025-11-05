@@ -1,46 +1,42 @@
-﻿using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Security.Cryptography;
-using System.Text;
-using Microsoft.Extensions.Options;
-using Microsoft.IdentityModel.Tokens;
-using Users.API.Extensions;
+﻿namespace Users.API.UsersHandler.LoginUser;
 
-namespace Users.API.UsersHandler.LoginUser;
-
+// Command để đăng nhập - hỗ trợ cả email/password và Google
 public record LoginUserCommand(
-    string Email,
-    string? Password = null,
-    string? GoogleIdToken = null
+    string Email,                   // Email đăng nhập
+    string? Password = null,        // Password (cho email login)
+    string? GoogleIdToken = null    // Google ID Token (cho Google login)
 ) : ICommand<LoginUserResult>;
 
+// Result trả về sau khi đăng nhập thành công
+// Chứa tokens và thông tin user cơ bản
 public record LoginUserResult(
-    Guid UserId,
-    string Email,
-    string FullName,
-    Guid RoleId,
-    string AccessToken,
-    string RefreshToken,
-    DateTime AccessTokenExpiry,
-    DateTime RefreshTokenExpiry,
-    DateTime SessionExpiry
+    Guid UserId,                    // ID user trong database
+    string Email,                   // Email của user
+    string FullName,                // Tên đầy đủ
+    Guid RoleId,                    // ID vai trò
+    string AccessToken,             // JWT access token (dùng cho API requests)
+    string RefreshToken,            // Refresh token (dùng để lấy access token mới)
+    DateTime AccessTokenExpiry,     // Thời điểm access token hết hạn
+    DateTime RefreshTokenExpiry,    // Thời điểm refresh token hết hạn
+    DateTime SessionExpiry          // Thời điểm session hết hạn
 );
 
 public class LoginUserHandler(
     IDbConnectionFactory connectionFactory,
     ILogger<LoginUserHandler> logger,
-    LoginUserValidator validator,
-    IOptions<JwtSettings> jwtSettings)
+    LoginUserValidator validator,              // Validator để kiểm tra input
+    IOptions<JwtSettings> jwtSettings)          // JWT settings từ appsettings.json
     : ICommandHandler<LoginUserCommand, LoginUserResult>
 {
     private readonly JwtSettings _jwtSettings = jwtSettings.Value;
 
     public async Task<LoginUserResult> Handle(LoginUserCommand command, CancellationToken cancellationToken)
     {
-        // Validate JWT settings
+        // Bước 1: Validate JWT settings từ appsettings.json
+        // Đảm bảo SecretKey, Issuer, Audience đều được cấu hình đúng
         ValidateJwtSettings();
 
-        // Validate command
+        // Bước 2: Validate command input
         var validationResult = await validator.ValidateAsync(command, cancellationToken);
         if (!validationResult.IsValid)
         {
@@ -50,6 +46,7 @@ public class LoginUserHandler(
 
         try
         {
+            // Bước 3: Tạo kết nối database và transaction
             using var connection = await connectionFactory.CreateConnectionAsync();
             using var transaction = connection.BeginTransaction();
 
@@ -57,48 +54,60 @@ public class LoginUserHandler(
             {
                 Models.Users user;
 
-                // Determine login method
+                // Bước 4: Xác định phương thức đăng nhập (Google hoặc Email/Password)
                 if (!string.IsNullOrEmpty(command.GoogleIdToken))
                 {
-                    // Google Login
+                    // Đăng nhập bằng Google
+                    // Verify Google token, tìm hoặc tạo user mới
                     user = await AuthenticateWithGoogleAsync(connection, transaction, command.GoogleIdToken);
                 }
                 else
                 {
-                    // Email/Password Login
+                    // Đăng nhập bằng Email/Password
+                    // Tìm user và verify password với BCrypt
                     user = await AuthenticateWithEmailPasswordAsync(connection, transaction, command.Email, command.Password!);
                 }
 
-                // Verify Firebase user
+                // Bước 5: Verify user trên Firebase Authentication
+                // Đảm bảo tài khoản Firebase không bị disabled
                 await VerifyFirebaseUserAsync(user.FirebaseUid);
 
-                // Generate JWT tokens
+                // Bước 6: Tạo JWT tokens
+                // Access Token: Chứa userId, email, roleId - dùng cho API requests
                 var accessToken = GenerateAccessToken(user);
+                // Refresh Token: Random string - dùng để lấy access token mới
                 var refreshToken = GenerateRefreshToken();
+                
+                // Tính toán thời gian hết hạn
                 var accessTokenExpiry = DateTime.UtcNow.AddMinutes(_jwtSettings.AccessTokenExpirationMinutes);
                 var refreshTokenExpiry = DateTime.UtcNow.AddDays(_jwtSettings.RefreshTokenExpirationDays);
                 var sessionExpiry = DateTime.UtcNow.AddDays(30);
 
-                // Save UserToken (AccessToken)
+                // Bước 7: Lưu Access Token vào bảng user_tokens
+                // XÓA tất cả access tokens cũ, chỉ giữ token mới nhất
                 await SaveUserTokenAsync(connection, transaction, user.Id, accessToken, accessTokenExpiry);
 
-                // Save RefreshTokens
+                // Bước 8: Lưu Refresh Token vào bảng refresh_tokens
+                // XÓA tất cả refresh tokens cũ, chỉ giữ token mới nhất
                 await SaveRefreshTokenAsync(connection, transaction, user.Id, refreshToken, refreshTokenExpiry);
 
-                // Save or Update Session
+                // Bước 9: Tạo hoặc cập nhật Session trong bảng user_sessions
+                // Reactivate session nếu đã tồn tại
                 await SaveUserSessionAsync(connection, transaction, user.Id, sessionExpiry);
 
-                // Update last login info
+                // Bước 10: Cập nhật thông tin đăng nhập cuối
+                // Update LastLoginAt và tăng LoginCount
                 await UpdateLastLoginAsync(connection, transaction, user.Id);
 
-                // Log audit trail
+                // Bước 11: Ghi log audit trail
                 await LogAuditAsync(connection, transaction, user.Id, "LOGIN");
 
-                // Commit transaction
+                // Bước 12: Commit transaction
                 transaction.Commit();
 
                 logger.LogInformation("User logged in successfully: {Email}, UserId: {UserId}", user.Email, user.Id);
 
+                // Bước 13: Trả về kết quả với tokens và thông tin user
                 return new LoginUserResult(
                     UserId: user.Id,
                     Email: user.Email,
@@ -113,6 +122,7 @@ public class LoginUserHandler(
             }
             catch
             {
+                // Rollback nếu có lỗi
                 transaction.Rollback();
                 logger.LogWarning("Transaction rolled back due to error");
                 throw;
@@ -125,6 +135,8 @@ public class LoginUserHandler(
         }
     }
 
+    // Hàm validate cấu hình JWT từ appsettings.json
+    // Kiểm tra SecretKey, Issuer, Audience đều có giá trị hợp lệ
     private void ValidateJwtSettings()
     {
         if (_jwtSettings == null)
@@ -137,6 +149,7 @@ public class LoginUserHandler(
             throw new InvalidOperationException("JWT SecretKey is not configured in appsettings.json");
         }
 
+        // SecretKey phải ít nhất 32 ký tự (256 bits) để đảm bảo bảo mật
         if (_jwtSettings.SecretKey.Length < 32)
         {
             throw new InvalidOperationException("JWT SecretKey must be at least 32 characters long (256 bits)");
@@ -155,12 +168,15 @@ public class LoginUserHandler(
         logger.LogDebug("JWT Settings validated successfully");
     }
 
+    // Hàm xác thực user bằng Email và Password
+    // Tìm user trong database và verify password với BCrypt
     private async Task<Models.Users> AuthenticateWithEmailPasswordAsync(
         IDbConnection connection,
         IDbTransaction transaction,
         string email,
         string password)
     {
+        // Bước 1: Tìm user theo email và chưa bị xóa
         var users = await connection.GetAllAsync<Models.Users>(transaction);
         var user = users.FirstOrDefault(u => u.Email == email && !u.IsDeleted);
 
@@ -170,20 +186,23 @@ public class LoginUserHandler(
             throw new UnauthorizedAccessException("Invalid email or password");
         }
 
+        // Bước 2: Kiểm tra tài khoản có active không
         if (!user.IsActive)
         {
             logger.LogWarning("Login failed: User account inactive for email {Email}", email);
             throw new UnauthorizedAccessException("Account is inactive");
         }
 
-        // Check if password is set (not empty or null)
+        // Bước 3: Kiểm tra user có password không
+        // User đăng ký bằng Google sẽ không có password
         if (string.IsNullOrEmpty(user.Password))
         {
             logger.LogWarning("Login failed: No password set for user {Email}. User may have registered with Google.", email);
             throw new UnauthorizedAccessException("Invalid email or password. Please use Google sign-in.");
         }
 
-        // Verify password with BCrypt
+        // Bước 4: Verify password với BCrypt
+        // BCrypt tự động so sánh plaintext password với hashed password
         try
         {
             bool isPasswordValid = BCrypt.Net.BCrypt.Verify(password, user.Password);
@@ -195,6 +214,7 @@ public class LoginUserHandler(
         }
         catch (BCrypt.Net.SaltParseException ex)
         {
+            // Hash password không hợp lệ (có thể bị corrupt)
             logger.LogError(ex, "Login failed: Password hash is invalid for user {Email}", email);
             throw new UnauthorizedAccessException("Invalid email or password");
         }
@@ -203,6 +223,8 @@ public class LoginUserHandler(
         return user;
     }
 
+    // Hàm xác thực user bằng Google ID Token
+    // Verify token với Firebase, tìm hoặc tạo user mới
     private async Task<Models.Users> AuthenticateWithGoogleAsync(
         IDbConnection connection,
         IDbTransaction transaction,
@@ -210,7 +232,8 @@ public class LoginUserHandler(
     {
         try
         {
-            // Verify Google ID Token with Firebase
+            // Bước 1: Verify Google ID Token với Firebase
+            // Firebase sẽ validate token và trả về thông tin user
             var decodedToken = await FirebaseAuth.DefaultInstance.VerifyIdTokenAsync(googleIdToken);
             var firebaseUid = decodedToken.Uid;
             var email = decodedToken.Claims.ContainsKey("email") ? decodedToken.Claims["email"].ToString() : null;
@@ -220,25 +243,28 @@ public class LoginUserHandler(
                 throw new UnauthorizedAccessException("Email not found in Google token");
             }
 
-            // Find user by Firebase UID or email
+            // Bước 2: Tìm user theo Firebase UID hoặc email
             var users = await connection.GetAllAsync<Models.Users>(transaction);
             var user = users.FirstOrDefault(u => 
                 (u.FirebaseUid == firebaseUid || u.Email == email) && !u.IsDeleted);
 
             if (user == null)
             {
-                // Auto-create user if not exists (Google sign-up)
+                // Bước 3: Auto-create user nếu chưa tồn tại (Google sign-up)
+                // Tạo user mới với thông tin từ Google
                 user = await CreateGoogleUserAsync(connection, transaction, decodedToken);
             }
             else if (user.FirebaseUid != firebaseUid)
             {
-                // Update Firebase UID if changed
+                // Bước 4: Update Firebase UID nếu thay đổi
+                // User có thể đã đăng ký bằng email trước đó
                 user.FirebaseUid = firebaseUid;
                 user.AuthProvider = "google";
                 user.UpdatedAt = DateTime.UtcNow;
                 await connection.UpdateAsync(user, transaction);
             }
 
+            // Bước 5: Kiểm tra account có active không
             if (!user.IsActive)
             {
                 throw new UnauthorizedAccessException("Account is inactive");
@@ -253,16 +279,19 @@ public class LoginUserHandler(
         }
     }
 
+    // Hàm tạo user mới từ Google token
+    // Tự động tạo tài khoản khi user đăng nhập Google lần đầu
     private async Task<Models.Users> CreateGoogleUserAsync(
         IDbConnection connection,
         IDbTransaction transaction,
         FirebaseToken decodedToken)
     {
+        // Bước 1: Lấy thông tin từ Google token
         var email = decodedToken.Claims["email"].ToString()!;
         var name = decodedToken.Claims.ContainsKey("name") ? decodedToken.Claims["name"].ToString() : email;
         var picture = decodedToken.Claims.ContainsKey("picture") ? decodedToken.Claims["picture"].ToString() : null;
 
-        // Get default role
+        // Bước 2: Lấy role mặc định "guard"
         var roles = await connection.GetAllAsync<Roles>(transaction);
         var defaultRole = roles.FirstOrDefault(r => r.Name == "guard" && !r.IsDeleted);
         if (defaultRole == null)
@@ -270,6 +299,7 @@ public class LoginUserHandler(
             throw new InvalidOperationException("Default role 'guard' not found");
         }
 
+        // Bước 3: Tạo entity User mới
         var user = new Models.Users
         {
             Id = Guid.NewGuid(),
@@ -278,24 +308,27 @@ public class LoginUserHandler(
             FullName = name ?? email,
             AvatarUrl = picture,
             RoleId = defaultRole.Id,
-            AuthProvider = "google",
+            AuthProvider = "google",        // Đánh dấu là Google user
             Status = "active",
             IsActive = true,
             IsDeleted = false,
-            EmailVerified = true,
+            EmailVerified = true,           // Google email đã verified
             EmailVerifiedAt = DateTime.UtcNow,
             LoginCount = 0,
-            Password = string.Empty,
+            Password = string.Empty,        // Google user không có password
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
 
+        // Bước 4: INSERT user vào database
         await connection.InsertAsync(user, transaction);
         logger.LogInformation("Auto-created Google user: {Email}", user.Email);
 
         return user;
     }
 
+    // Hàm verify user trên Firebase Authentication
+    // Đảm bảo tài khoản Firebase không bị vô hiệu hóa
     private async Task VerifyFirebaseUserAsync(string firebaseUid)
     {
         try
@@ -313,6 +346,8 @@ public class LoginUserHandler(
         }
     }
 
+    // Hàm tạo JWT Access Token
+    // Chứa userId, email, roleId để authorization
     private string GenerateAccessToken(Models.Users user)
     {
         try
@@ -325,17 +360,19 @@ public class LoginUserHandler(
                 throw new InvalidOperationException("JWT SecretKey cannot be empty");
             }
 
+            // Tạo claims - thông tin được mã hóa trong token
             var claims = new List<Claim>
             {
-                new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
-                new(JwtRegisteredClaimNames.Email, user.Email),
-                new(ClaimTypes.Role, user.RoleId.ToString()),
-                new(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                new("userId", user.Id.ToString()),
-                new("roleId", user.RoleId.ToString()),
-                new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+                new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),      // Subject - userId
+                new(JwtRegisteredClaimNames.Email, user.Email),            // Email
+                new(ClaimTypes.Role, user.RoleId.ToString()),              // Role cho authorization
+                new(ClaimTypes.NameIdentifier, user.Id.ToString()),        // NameIdentifier - userId
+                new("userId", user.Id.ToString()),                         // Custom claim
+                new("roleId", user.RoleId.ToString()),                     // Custom claim - dùng cho RoleAuthorizationFilter
+                new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()) // JWT ID - unique identifier
             };
 
+            // Cấu hình token
             var tokenDescriptor = new SecurityTokenDescriptor
             {
                 Subject = new ClaimsIdentity(claims),
@@ -344,9 +381,10 @@ public class LoginUserHandler(
                 Audience = _jwtSettings.Audience,
                 SigningCredentials = new SigningCredentials(
                     new SymmetricSecurityKey(key),
-                    SecurityAlgorithms.HmacSha256Signature)
+                    SecurityAlgorithms.HmacSha256Signature)  // HMAC SHA256 để ký token
             };
 
+            // Tạo và serialize token
             var token = tokenHandler.CreateToken(tokenDescriptor);
             var tokenString = tokenHandler.WriteToken(token);
             
@@ -360,6 +398,8 @@ public class LoginUserHandler(
         }
     }
 
+    // Hàm tạo Refresh Token
+    // Random 64 bytes string để bảo mật cao
     private string GenerateRefreshToken()
     {
         var randomBytes = new byte[64];
@@ -368,6 +408,8 @@ public class LoginUserHandler(
         return Convert.ToBase64String(randomBytes);
     }
 
+    // Hàm lưu Access Token vào database
+    // XÓA tất cả access tokens cũ, chỉ giữ token mới nhất
     private async Task SaveUserTokenAsync(
         IDbConnection connection,
         IDbTransaction transaction,
@@ -375,7 +417,8 @@ public class LoginUserHandler(
         string token,
         DateTime expiresAt)
     {
-        // DELETE all existing access tokens for this user instead of revoking
+        // Bước 1: XÓA tất cả access tokens cũ của user
+        // Đảm bảo mỗi user chỉ có 1 access token active
         var existingTokens = await connection.GetAllAsync<UserTokens>(transaction);
         var userTokens = existingTokens.Where(t => 
             t.UserId == userId && 
@@ -386,7 +429,7 @@ public class LoginUserHandler(
             await connection.DeleteAsync(existingToken, transaction);
         }
 
-        // Insert new access token
+        // Bước 2: INSERT access token mới
         var userToken = new UserTokens
         {
             Id = Guid.NewGuid(),
@@ -402,6 +445,8 @@ public class LoginUserHandler(
         await connection.InsertAsync(userToken, transaction);
     }
 
+    // Hàm lưu Refresh Token vào database
+    // XÓA tất cả refresh tokens cũ, chỉ giữ token mới nhất
     private async Task SaveRefreshTokenAsync(
         IDbConnection connection,
         IDbTransaction transaction,
@@ -409,7 +454,7 @@ public class LoginUserHandler(
         string token,
         DateTime expiresAt)
     {
-        // DELETE all existing refresh tokens for this user instead of revoking
+        // Bước 1: XÓA tất cả refresh tokens cũ của user
         var existingTokens = await connection.GetAllAsync<RefreshTokens>(transaction);
         var userRefreshTokens = existingTokens.Where(t => 
             t.UserId == userId).ToList();
@@ -419,7 +464,7 @@ public class LoginUserHandler(
             await connection.DeleteAsync(existingToken, transaction);
         }
 
-        // Insert new refresh token
+        // Bước 2: INSERT refresh token mới
         var refreshToken = new RefreshTokens
         {
             Id = Guid.NewGuid(),
@@ -434,6 +479,8 @@ public class LoginUserHandler(
         await connection.InsertAsync(refreshToken, transaction);
     }
 
+    // Hàm lưu hoặc cập nhật User Session
+    // Reactivate session cũ nếu tồn tại, tạo mới nếu chưa có
     private async Task SaveUserSessionAsync(
         IDbConnection connection,
         IDbTransaction transaction,
@@ -445,7 +492,7 @@ public class LoginUserHandler(
 
         if (existingSession != null)
         {
-            // Reactivate existing session when user logs in again
+            // Reactivate session cũ khi user login lại
             existingSession.IsActive = true;
             existingSession.ExpiresAt = expiresAt;
             existingSession.LastActivityAt = DateTime.UtcNow;
@@ -454,6 +501,7 @@ public class LoginUserHandler(
         }
         else
         {
+            // Tạo session mới
             var session = new UserSessions
             {
                 Id = Guid.NewGuid(),
@@ -470,18 +518,21 @@ public class LoginUserHandler(
         }
     }
 
+    // Hàm cập nhật thông tin đăng nhập cuối
+    // Update LastLoginAt và tăng LoginCount
     private async Task UpdateLastLoginAsync(IDbConnection connection, IDbTransaction transaction, Guid userId)
     {
         var user = await connection.GetAsync<Models.Users>(userId, transaction);
         if (user != null)
         {
             user.LastLoginAt = DateTime.UtcNow;
-            user.LoginCount++;
+            user.LoginCount++;              // Tăng số lần đăng nhập
             user.UpdatedAt = DateTime.UtcNow;
             await connection.UpdateAsync(user, transaction);
         }
     }
 
+    // Hàm ghi log audit trail
     private async Task LogAuditAsync(IDbConnection connection, IDbTransaction transaction, Guid userId, string action)
     {
         var auditLog = new AuditLogs

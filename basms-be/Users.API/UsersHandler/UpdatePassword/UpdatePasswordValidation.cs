@@ -1,6 +1,4 @@
-﻿using FluentValidation;
-
-namespace Users.API.UsersHandler.UpdatePassword;
+﻿namespace Users.API.UsersHandler.UpdatePassword;
 
 public class UpdatePasswordValidator : AbstractValidator<UpdatePasswordCommand>
 {

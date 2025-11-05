@@ -2,26 +2,28 @@
 
 namespace Users.API.UsersHandler.CreateUser;
 
-// Request DTO from client
+// DTO (Data Transfer Object) nhận dữ liệu từ client
+// Chứa tất cả thông tin cần thiết để tạo tài khoản người dùng mới
 public record CreateUserRequest(
-    string Email,
-    string Password,
-    string FullName,
-    string? Phone,
-    string? Address,
-    int? BirthDay,
-    int? BirthMonth,
-    int? BirthYear,
-    Guid? RoleId,
-    string? AvatarUrl,
-    string AuthProvider = "email"
+    string Email,              // Email đăng nhập (bắt buộc)
+    string Password,           // Mật khẩu (bắt buộc)
+    string FullName,           // Họ và tên đầy đủ (bắt buộc)
+    string? Phone,             // Số điện thoại (tùy chọn)
+    string? Address,           // Địa chỉ (tùy chọn)
+    int? BirthDay,            // Ngày sinh (1-31)
+    int? BirthMonth,          // Tháng sinh (1-12)
+    int? BirthYear,           // Năm sinh
+    Guid? RoleId,             // ID vai trò - nếu null sẽ dùng role mặc định "guard"
+    string? AvatarUrl,        // URL ảnh đại diện (tùy chọn)
+    string AuthProvider = "email"  // Phương thức đăng ký (mặc định: email)
 );
 
-// Response DTO to client
+// DTO trả về cho client sau khi tạo user thành công
+// Chỉ chứa thông tin cơ bản và ID để bảo mật
 public record CreateUserResponse(
-    Guid Id,
-    string FirebaseUid,
-    string Email
+    Guid Id,                  // ID user trong database
+    string FirebaseUid,       // UID từ Firebase Authentication
+    string Email              // Email đã đăng ký
 );
 
 public class CreateUserEndpoint : ICarterModule
@@ -30,29 +32,34 @@ public class CreateUserEndpoint : ICarterModule
     {
         app.MapPost("/users", async (CreateUserRequest request, ISender sender) =>
         {
-            // Map request to command
+            // Bước 1: Chuyển đổi request từ client thành command để xử lý
+            // Sử dụng Mapster để tự động map các property giống nhau
             var command = request.Adapt<CreateUserCommand>();
 
-            // Send command via MediatR
+            // Bước 2: Gửi command đến Handler thông qua MediatR
+            // Handler sẽ thực hiện logic tạo user (validate, lưu DB, tạo Firebase account)
             var result = await sender.Send(command);
 
-            // Map result to response
+            // Bước 3: Chuyển đổi kết quả từ Handler thành response cho client
             var response = result.Adapt<CreateUserResponse>();
 
-            // Return 201 Created with location header
+            // Bước 4: Trả về HTTP 201 Created với location header và response body
+            // Location header chứa URL để lấy thông tin user vừa tạo
             return Results.Created($"/users/{response.Id}", response);
         })
-        .RequireAuthorization()
+        .RequireAuthorization()  // Yêu cầu user phải đăng nhập (có access token hợp lệ)
+        // Chỉ cho phép 2 roleId cụ thể tạo user mới (admin roles)
         .AddEndpointFilter(new RoleAuthorizationFilter("ddbd5fad-ba6e-11f0-bcac-00155dca8f48", "ddbd612f-ba6e-11f0-bcac-00155dca8f48"))
-        .WithTags("Users")
-        .WithName("CreateUser")
-        .Produces<CreateUserResponse>(StatusCodes.Status201Created)
-        .ProducesProblem(StatusCodes.Status400BadRequest)
-        .ProducesProblem(StatusCodes.Status401Unauthorized)
-        .ProducesProblem(StatusCodes.Status403Forbidden)
-        .ProducesProblem(StatusCodes.Status409Conflict)
-        .ProducesProblem(StatusCodes.Status500InternalServerError)
-        .WithSummary("Creates a new user")
-        .WithDescription("Creates a new user account with Firebase authentication and stores in MySQL database");
+        .WithTags("Users")  // Nhóm endpoint trong Swagger UI
+        .WithName("CreateUser")  // Tên endpoint để reference
+        // Định nghĩa các response codes có thể trả về
+        .Produces<CreateUserResponse>(StatusCodes.Status201Created)  // Thành công
+        .ProducesProblem(StatusCodes.Status400BadRequest)  // Dữ liệu không hợp lệ
+        .ProducesProblem(StatusCodes.Status401Unauthorized)  // Chưa đăng nhập
+        .ProducesProblem(StatusCodes.Status403Forbidden)  // Không có quyền (wrong roleId)
+        .ProducesProblem(StatusCodes.Status409Conflict)  // Email đã tồn tại
+        .ProducesProblem(StatusCodes.Status500InternalServerError)  // Lỗi server
+        .WithSummary("Creates a new user")  // Mô tả ngắn
+        .WithDescription("Creates a new user account with Firebase authentication and stores in MySQL database");  // Mô tả chi tiết
     }
 }

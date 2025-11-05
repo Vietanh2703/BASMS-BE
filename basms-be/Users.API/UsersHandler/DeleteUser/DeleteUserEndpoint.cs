@@ -1,6 +1,4 @@
-﻿using Users.API.Authorization;
-
-namespace Users.API.UsersHandler.DeleteUser;
+﻿namespace Users.API.UsersHandler.DeleteUser;
 
 public class DeleteUserEndpoint : ICarterModule
 {

@@ -1,6 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
-
-namespace Users.API.UsersHandler.LogoutUser;
+﻿namespace Users.API.UsersHandler.LogoutUser;
 
 public record LogoutUserResponse(bool Success, string Message);
 

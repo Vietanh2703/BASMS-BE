@@ -1,37 +1,37 @@
-﻿using BuildingBlocks.CQRS;
-using Dapper.Contrib.Extensions;
-using MediatR;
-using Users.API.Data;
-using Users.API.Models;
-using Users.API.UsersHandler.CreateOtp;
-
+﻿// Handler xử lý logic đổi mật khẩu
+// Thực hiện: Verify old password -> Tạo pending password reset -> Gửi OTP -> Chờ verify OTP để confirm
 namespace Users.API.UsersHandler.UpdatePassword;
 
+// Command để đổi password
+// Yêu cầu verify old password trước khi cho phép đổi
 public record UpdatePasswordCommand(
-    string Email,
-    string OldPassword,
-    string NewPassword,
-    string RetypePassword
+    string Email,           // Email của user
+    string OldPassword,     // Password hiện tại (để verify)
+    string NewPassword,     // Password mới
+    string RetypePassword   // Nhập lại password mới (để confirm)
 ) : ICommand<UpdatePasswordResult>;
 
+// Result trả về
+// Chứa OTP expiry time để user biết thời gian hết hạn
 public record UpdatePasswordResult(
     bool Success,
     string Message,
-    DateTime OtpExpiresAt
+    DateTime OtpExpiresAt   // Thời điểm OTP hết hạn
 );
 
 internal class UpdatePasswordHandler(
     IDbConnectionFactory connectionFactory,
     ILogger<UpdatePasswordHandler> logger,
     UpdatePasswordValidator validator,
-    ISender sender)
+    ISender sender)                         // MediatR sender để gọi CreateOtpHandler
     : ICommandHandler<UpdatePasswordCommand, UpdatePasswordResult>
 {
+    // OTP hết hạn sau 10 phút
     private const int OTP_EXPIRY_MINUTES = 10;
 
     public async Task<UpdatePasswordResult> Handle(UpdatePasswordCommand command, CancellationToken cancellationToken)
     {
-        // Validate command
+        // Bước 1: Validate command input
         var validationResult = await validator.ValidateAsync(command, cancellationToken);
         if (!validationResult.IsValid)
         {
@@ -43,13 +43,13 @@ internal class UpdatePasswordHandler(
 
         Guid userId;
         
-        // Transaction scope - only for database operations
+        // Transaction scope - chỉ cho database operations
         using (var connection = await connectionFactory.CreateConnectionAsync())
         using (var transaction = connection.BeginTransaction())
         {
             try
             {
-                // Step 1: Find user by email
+                // Bước 2: Tìm user theo email
                 var users = await connection.GetAllAsync<Models.Users>(transaction);
                 var user = users.FirstOrDefault(u => u.Email == command.Email && !u.IsDeleted);
 
@@ -61,20 +61,23 @@ internal class UpdatePasswordHandler(
 
                 userId = user.Id;
 
-                // Step 2: Verify old password
+                // Bước 3: Verify old password
+                // So sánh old password với password đã hash trong database
                 if (!BCrypt.Net.BCrypt.Verify(command.OldPassword, user.Password))
                 {
                     logger.LogWarning("Invalid old password for user: {Email}", command.Email);
                     throw new InvalidOperationException("Current password is incorrect");
                 }
 
-                // Step 3: Check if new password is same as old password
+                // Bước 4: Kiểm tra new password khác old password
+                // Không cho phép đổi sang password giống cũ
                 if (BCrypt.Net.BCrypt.Verify(command.NewPassword, user.Password))
                 {
                     throw new InvalidOperationException("New password must be different from current password");
                 }
 
-                // Step 4: Invalidate previous password reset tokens
+                // Bước 5: Vô hiệu hóa các password reset tokens cũ
+                // XÓA tất cả tokens đang active để tránh conflict
                 var existingTokens = await connection.GetAllAsync<PasswordResetTokens>(transaction);
                 var activeTokens = existingTokens.Where(t =>
                     t.UserId == user.Id &&
@@ -89,14 +92,16 @@ internal class UpdatePasswordHandler(
                     await connection.UpdateAsync(oldToken, transaction);
                 }
 
-                // Step 5: Create pending password reset entry
+                // Bước 6: Tạo pending password reset entry
+                // Lưu password mới (đã hash) vào bảng password_reset_tokens
+                // Password chưa được apply, chờ verify OTP
                 var resetToken = new PasswordResetTokens
                 {
                     Id = Guid.NewGuid(),
                     UserId = user.Id,
-                    Token = BCrypt.Net.BCrypt.HashPassword(command.NewPassword), // Store hashed new password
+                    Token = BCrypt.Net.BCrypt.HashPassword(command.NewPassword), // Hash password mới
                     ExpiresAt = DateTime.UtcNow.AddMinutes(OTP_EXPIRY_MINUTES),
-                    IsUsed = false,
+                    IsUsed = false,     // Chưa sử dụng
                     IsDeleted = false,
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
@@ -105,28 +110,33 @@ internal class UpdatePasswordHandler(
                 await connection.InsertAsync(resetToken, transaction);
                 logger.LogDebug("Password reset token created: {TokenId}", resetToken.Id);
 
+                // Commit transaction
                 transaction.Commit();
                 logger.LogInformation("Password reset token committed for user: {UserId}", userId);
             }
             catch (Exception ex)
             {
+                // Rollback nếu có lỗi
                 transaction.Rollback();
                 logger.LogError(ex, "Error in database transaction for password update: {Email}", command.Email);
                 throw;
             }
-        } // Transaction disposed here
+        } // Transaction disposed ở đây
 
-        // Step 6: Create OTP via CreateOtpHandler (outside transaction scope)
+        // Bước 7: Tạo OTP qua CreateOtpHandler (ngoài transaction scope)
+        // Gọi CreateOtpHandler thông qua MediatR để gửi OTP qua email
         try
         {
             var createOtpCommand = new CreateOtpCommand(
                 Email: command.Email,
-                Purpose: "reset_password"
+                Purpose: "reset_password"   // Mục đích: reset password
             );
 
+            // Gửi command đến CreateOtpHandler
             var otpResult = await sender.Send(createOtpCommand, cancellationToken);
             logger.LogInformation("Password change OTP created: {OtpId}", otpResult.OtpId);
 
+            // Trả về kết quả với OTP expiry time
             return new UpdatePasswordResult(
                 true,
                 "OTP has been sent to your email. Please verify to complete password change.",
@@ -135,6 +145,8 @@ internal class UpdatePasswordHandler(
         }
         catch (Exception ex)
         {
+            // Nếu gửi OTP thất bại, password reset token vẫn được tạo
+            // User có thể thử lại sau
             logger.LogError(ex, "Error creating OTP for password change: {Email}", command.Email);
             throw new InvalidOperationException("Password reset token created but failed to send OTP. Please try again.", ex);
         }

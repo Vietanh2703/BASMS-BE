@@ -1,8 +1,4 @@
-﻿using Carter;
-using MediatR;
-using Microsoft.AspNetCore.Mvc;
-
-namespace Users.API.UsersHandler.UpdatePassword;
+﻿namespace Users.API.UsersHandler.UpdatePassword;
 
 public record UpdatePasswordRequest(
     string Email,
