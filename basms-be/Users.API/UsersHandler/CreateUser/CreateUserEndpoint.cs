@@ -1,4 +1,6 @@
-﻿namespace Users.API.UsersHandler.CreateUser;
+﻿using Users.API.Authorization;
+
+namespace Users.API.UsersHandler.CreateUser;
 
 // Request DTO from client
 public record CreateUserRequest(
@@ -40,10 +42,14 @@ public class CreateUserEndpoint : ICarterModule
             // Return 201 Created with location header
             return Results.Created($"/users/{response.Id}", response);
         })
+        .RequireAuthorization()
+        .AddEndpointFilter(new RoleAuthorizationFilter("ddbd5fad-ba6e-11f0-bcac-00155dca8f48", "ddbd612f-ba6e-11f0-bcac-00155dca8f48"))
         .WithTags("Users")
         .WithName("CreateUser")
         .Produces<CreateUserResponse>(StatusCodes.Status201Created)
         .ProducesProblem(StatusCodes.Status400BadRequest)
+        .ProducesProblem(StatusCodes.Status401Unauthorized)
+        .ProducesProblem(StatusCodes.Status403Forbidden)
         .ProducesProblem(StatusCodes.Status409Conflict)
         .ProducesProblem(StatusCodes.Status500InternalServerError)
         .WithSummary("Creates a new user")

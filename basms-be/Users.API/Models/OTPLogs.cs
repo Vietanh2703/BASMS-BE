@@ -1,5 +1,3 @@
-using Dapper.Contrib.Extensions;
-
 namespace Users.API.Models;
 
 [Table("otp_logs")]

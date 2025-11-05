@@ -1,10 +1,3 @@
-using BuildingBlocks.CQRS;
-using Dapper.Contrib.Extensions;
-using MediatR;
-using Users.API.Data;
-using Users.API.Models;
-using Users.API.UsersHandler.VerifyOtp;
-
 namespace Users.API.UsersHandler.ConfirmPasswordChange;
 
 public record ConfirmPasswordChangeCommand(
@@ -42,7 +35,7 @@ internal class ConfirmPasswordChangeHandler(
             var verifyOtpCommand = new VerifyOtpCommand(
                 Email: command.Email,
                 OtpCode: command.OtpCode,
-                Purpose: "change_password"
+                Purpose: "reset_password"
             );
 
             var verifyResult = await sender.Send(verifyOtpCommand, cancellationToken);

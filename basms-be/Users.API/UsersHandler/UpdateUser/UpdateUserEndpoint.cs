@@ -37,10 +37,12 @@ public class UpdateUserEndpoint : ICarterModule
 
             return Results.Ok(result);
         })
+        .RequireAuthorization()
         .WithTags("Users")
         .WithName("UpdateUser")
         .Produces<UpdateUserResult>(StatusCodes.Status200OK)
         .ProducesProblem(StatusCodes.Status400BadRequest)
+        .ProducesProblem(StatusCodes.Status401Unauthorized)
         .ProducesProblem(StatusCodes.Status404NotFound)
         .ProducesProblem(StatusCodes.Status500InternalServerError)
         .WithSummary("Update user")

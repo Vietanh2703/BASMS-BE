@@ -10,7 +10,7 @@ public class UserTokens
 
     public string Token { get; set; } = string.Empty;
 
-    public string TokenType { get; set; } = string.Empty; // access, refresh, reset_password, email_verification
+    public string TokenType { get; set; } = "access_token";
 
     public DateTime ExpiresAt { get; set; }
 

@@ -53,5 +53,9 @@ public class Users
     
     [Write(false)]
     [Computed]
+    public virtual ICollection<UserSessions> UserSessions { get; set; } = new List<UserSessions>();
+    
+    [Write(false)]
+    [Computed]
     public virtual ICollection<OTPLogs> OTPLogs { get; set; } = new List<OTPLogs>();
 }

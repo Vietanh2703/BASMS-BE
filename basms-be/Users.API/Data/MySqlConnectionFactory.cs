@@ -95,11 +95,11 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     await connection.ExecuteAsync(@"
                         INSERT INTO `roles` (`Id`, `Name`, `DisplayName`, `Description`, `IsDeleted`, `CreatedAt`)
                         VALUES 
-                            (UUID(), 'admin', 'Administrator', 'System administrator with full access', FALSE, NOW()),
-                            (UUID(), 'director', 'Director', 'Giám đốc công ty bảo vệ với quyền quản lý toàn bộ hệ thống', FALSE, NOW()),
-                            (UUID(), 'manager', 'Manager', 'Quản lý công ty bảo vệ với quyền điều hành nhân sự và dự án', FALSE, NOW()),
-                            (UUID(), 'guard', 'Guard', 'Nhân viên bảo vệ thực hiện nhiệm vụ bảo vệ', FALSE, NOW()),
-                            (UUID(), 'customer', 'Customer', 'Đối tác thuê dịch vụ bảo vệ (nhà hàng, trường học, ...)', FALSE, NOW());
+                            ('ddbd5bad-ba6e-11f0-bcac-00155dca8f48', 'admin', 'Administrator', 'System administrator with full access', FALSE, NOW()),
+                            ('ddbd5fad-ba6e-11f0-bcac-00155dca8f48', 'director', 'Director', 'Giám đốc công ty bảo vệ với quyền quản lý toàn bộ hệ thống', FALSE, NOW()),
+                            ('ddbd612f-ba6e-11f0-bcac-00155dca8f48', 'manager', 'Manager', 'Quản lý công ty bảo vệ với quyền điều hành nhân sự và dự án', FALSE, NOW()),
+                            ('ddbd6230-ba6e-11f0-bcac-00155dca8f48', 'guard', 'Guard', 'Nhân viên bảo vệ thực hiện nhiệm vụ bảo vệ', FALSE, NOW()),
+                            ('ddbd630a-ba6e-11f0-bcac-00155dca8f48', 'customer', 'Customer', 'Đối tác thuê dịch vụ bảo vệ (nhà hàng, trường học, ...)', FALSE, NOW());
                     ");
                 }
 
@@ -169,7 +169,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     ");
                 }
                 
-                // Create refresh_tokens table if not exists
+                // Create refresh_token table if not exists
                 var refreshTokensTableExists = await connection.ExecuteScalarAsync<bool>(
                     "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'refresh_tokens'");
 
@@ -179,12 +179,12 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                         CREATE TABLE `refresh_tokens` (
                             `Id` CHAR(36) PRIMARY KEY,
                             `UserId` CHAR(36) NOT NULL,
-                            `Token` VARCHAR(500) NOT NULL UNIQUE,
+                            `Token` TEXT NOT NULL,
                             `ExpiresAt` DATETIME NOT NULL,
                             `IsRevoked` BOOLEAN NOT NULL DEFAULT FALSE,
                             `RevokedAt` DATETIME NULL,
                             `RevokedByIp` VARCHAR(50) NULL,
-                            `ReplacedByToken` VARCHAR(500) NULL,
+                            `ReplacedByToken` TEXT NULL,
                             `IpAddress` VARCHAR(50) NULL,
                             `UserAgent` TEXT NULL,
                             `DeviceId` VARCHAR(255) NULL,
@@ -192,10 +192,11 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                             `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                             `UpdatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                             INDEX `idx_user_id` (`UserId`),
-                            INDEX `idx_token` (`Token`),
+                            INDEX `idx_token` (`Token`(255)),
                             INDEX `idx_expires_at` (`ExpiresAt`),
                             INDEX `idx_is_revoked` (`IsRevoked`),
-                            FOREIGN KEY (`UserId`) REFERENCES `users`(`Id`) ON DELETE CASCADE
+                            FOREIGN KEY (`UserId`) REFERENCES `users`(`Id`) ON DELETE CASCADE,
+                            UNIQUE INDEX `uniq_token` (`Token`(255))
                         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
                     ");
                 }
@@ -211,7 +212,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                         CREATE TABLE `user_sessions` (
                             `Id` CHAR(36) PRIMARY KEY,
                             `UserId` CHAR(36) NOT NULL,
-                            `SessionToken` VARCHAR(500) NOT NULL UNIQUE,
+                            `SessionToken` TEXT NOT NULL,
                             `DeviceId` VARCHAR(255) NULL,
                             `IpAddress` VARCHAR(50) NULL,
                             `UserAgent` TEXT NULL,
@@ -222,15 +223,47 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                             `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                             `UpdatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                             INDEX `idx_user_id` (`UserId`),
-                            INDEX `idx_session_token` (`SessionToken`),
+                            INDEX `idx_session_token` (`SessionToken`(255)),
                             INDEX `idx_is_active` (`IsActive`),
                             INDEX `idx_expires_at` (`ExpiresAt`),
-                            FOREIGN KEY (`UserId`) REFERENCES `users`(`Id`) ON DELETE CASCADE
+                            FOREIGN KEY (`UserId`) REFERENCES `users`(`Id`) ON DELETE CASCADE,
+                            UNIQUE INDEX `uniq_session_token` (`SessionToken`(255))
                         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
                     ");
                 }
 
-                
+                // Create user_tokens table if not exists
+                var userTokensTableExists = await connection.ExecuteScalarAsync<bool>(
+                    "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'user_tokens'");
+
+                if (!userTokensTableExists)
+                {
+                    await connection.ExecuteAsync(@"
+                        CREATE TABLE `user_tokens` (
+                            `Id` CHAR(36) PRIMARY KEY,
+                            `UserId` CHAR(36) NOT NULL,
+                            `Token` TEXT NOT NULL,
+                            `TokenType` VARCHAR(50) NOT NULL DEFAULT 'access_token',
+                            `ExpiresAt` DATETIME NOT NULL,
+                            `IsRevoked` BOOLEAN NOT NULL DEFAULT FALSE,
+                            `RevokedAt` DATETIME NULL,
+                            `RevokedReason` VARCHAR(255) NULL,
+                            `IpAddress` VARCHAR(50) NULL,
+                            `UserAgent` TEXT NULL,
+                            `DeviceId` VARCHAR(255) NULL,
+                            `IsDeleted` BOOLEAN NOT NULL DEFAULT FALSE,
+                            `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                            `UpdatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                            INDEX `idx_user_id` (`UserId`),
+                            INDEX `idx_token` (`Token`(255)),
+                            INDEX `idx_token_type` (`TokenType`),
+                            INDEX `idx_expires_at` (`ExpiresAt`),
+                            INDEX `idx_is_revoked` (`IsRevoked`),
+                            FOREIGN KEY (`UserId`) REFERENCES `users`(`Id`) ON DELETE CASCADE,
+                            UNIQUE INDEX `uniq_token` (`Token`(255))
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+                    ");
+                }
 
                 // Create password_reset_tokens table if not exists
                 var passwordResetTokensTableExists = await connection.ExecuteScalarAsync<bool>(
@@ -242,7 +275,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                         CREATE TABLE `password_reset_tokens` (
                             `Id` CHAR(36) PRIMARY KEY,
                             `UserId` CHAR(36) NOT NULL,
-                            `Token` VARCHAR(500) NOT NULL UNIQUE,
+                            `Token` TEXT NOT NULL,
                             `ExpiresAt` DATETIME NOT NULL,
                             `IsUsed` BOOLEAN NOT NULL DEFAULT FALSE,
                             `UsedAt` DATETIME NULL,
@@ -252,10 +285,11 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                             `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                             `UpdatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                             INDEX `idx_user_id` (`UserId`),
-                            INDEX `idx_token` (`Token`),
+                            INDEX `idx_token` (`Token`(255)),
                             INDEX `idx_expires_at` (`ExpiresAt`),
                             INDEX `idx_is_used` (`IsUsed`),
-                            FOREIGN KEY (`UserId`) REFERENCES `users`(`Id`) ON DELETE CASCADE
+                            FOREIGN KEY (`UserId`) REFERENCES `users`(`Id`) ON DELETE CASCADE,
+                            UNIQUE INDEX `uniq_token` (`Token`(255))
                         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
                     ");
                 }

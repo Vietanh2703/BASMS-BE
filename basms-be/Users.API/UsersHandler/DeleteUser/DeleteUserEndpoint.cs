@@ -1,4 +1,6 @@
-﻿namespace Users.API.UsersHandler.DeleteUser;
+﻿using Users.API.Authorization;
+
+namespace Users.API.UsersHandler.DeleteUser;
 
 public class DeleteUserEndpoint : ICarterModule
 {
@@ -16,9 +18,13 @@ public class DeleteUserEndpoint : ICarterModule
 
             return Results.Ok(result);
         })
+        .RequireAuthorization()
+        .AddEndpointFilter(new RoleAuthorizationFilter("ddbd5fad-ba6e-11f0-bcac-00155dca8f48", "ddbd612f-ba6e-11f0-bcac-00155dca8f48"))
         .WithTags("Users")
         .WithName("DeleteUser")
         .Produces<DeleteUserResult>(StatusCodes.Status200OK)
+        .ProducesProblem(StatusCodes.Status401Unauthorized)
+        .ProducesProblem(StatusCodes.Status403Forbidden)
         .ProducesProblem(StatusCodes.Status404NotFound)
         .ProducesProblem(StatusCodes.Status500InternalServerError)
         .WithSummary("Delete user")

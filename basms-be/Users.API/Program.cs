@@ -1,4 +1,7 @@
 using Users.API.UsersHandler.UpdateOtp;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -41,6 +44,41 @@ builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("Emai
 // Register EmailHandler
 builder.Services.AddScoped<EmailHandler>();
 
+// Add JWT Settings
+builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
+
+// Add Authentication
+var jwtSettings = builder.Configuration.GetSection("JwtSettings").Get<JwtSettings>();
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = jwtSettings?.Issuer,
+        ValidAudience = jwtSettings?.Audience,
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings?.SecretKey ?? ""))
+    };
+});
+
+// Add Authorization
+builder.Services.AddAuthorization();
+
+// Add HttpContextAccessor for accessing user claims in handlers
+builder.Services.AddHttpContextAccessor();
+
 var app = builder.Build();
+
+// Add Authentication & Authorization middleware
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.MapCarter();
 app.Run();
