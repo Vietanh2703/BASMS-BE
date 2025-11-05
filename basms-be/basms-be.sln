@@ -1,0 +1,38 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Services", "Services", "{52CC788C-4123-40C4-A781-4D5095CEE46A}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Users", "Users", "{966A908C-B3B1-4A69-92C1-8996392BC26B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Users.API", "Users.API\Users.API.csproj", "{253449CD-C18A-46B6-A92B-2442F366E790}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{27E71B12-F16A-4784-8508-8C1A15C7BA81}"
+	ProjectSection(SolutionItems) = preProject
+		compose.yaml = compose.yaml
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "BuildingBlocks", "BuildingBlocks", "{4D834C35-393F-49FD-9C17-FBF741628C92}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BuildingBlocks", "BuildingBlocks\BuildingBlocks.csproj", "{2EE9EE8B-6F74-4981-AD3C-AD7D0F504F53}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{253449CD-C18A-46B6-A92B-2442F366E790}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{253449CD-C18A-46B6-A92B-2442F366E790}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{253449CD-C18A-46B6-A92B-2442F366E790}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{253449CD-C18A-46B6-A92B-2442F366E790}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2EE9EE8B-6F74-4981-AD3C-AD7D0F504F53}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2EE9EE8B-6F74-4981-AD3C-AD7D0F504F53}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2EE9EE8B-6F74-4981-AD3C-AD7D0F504F53}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2EE9EE8B-6F74-4981-AD3C-AD7D0F504F53}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{966A908C-B3B1-4A69-92C1-8996392BC26B} = {52CC788C-4123-40C4-A781-4D5095CEE46A}
+		{253449CD-C18A-46B6-A92B-2442F366E790} = {966A908C-B3B1-4A69-92C1-8996392BC26B}
+		{2EE9EE8B-6F74-4981-AD3C-AD7D0F504F53} = {4D834C35-393F-49FD-9C17-FBF741628C92}
+	EndGlobalSection
+EndGlobal

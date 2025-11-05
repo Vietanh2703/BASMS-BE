@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <Content Include="..\.dockerignore">
+        <Link>.dockerignore</Link>
+      </Content>
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="BCrypt" Version="1.0.0" />
+      <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
+      <PackageReference Include="Carter" Version="8.1.0" />
+      <PackageReference Include="Dapper" Version="2.1.66" />
+      <PackageReference Include="Dapper.Contrib" Version="2.0.78" />
+      <PackageReference Include="FirebaseAdmin" Version="3.4.0" />
+      <PackageReference Include="FirebaseAuthentication.net" Version="4.1.0" />
+      <PackageReference Include="Google.Cloud.Firestore" Version="3.11.0" />
+      <PackageReference Include="MailKit" Version="4.14.1" />
+      <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.21" />
+      <PackageReference Include="MimeKit" Version="4.14.0" />
+      <PackageReference Include="MySql.Data" Version="8.1.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\BuildingBlocks\BuildingBlocks.csproj" />
+    </ItemGroup>
+
+</Project>
