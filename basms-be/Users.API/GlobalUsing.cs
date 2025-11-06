@@ -36,3 +36,4 @@ global using Users.API.UsersHandler.UpdateOtp;
 global using Microsoft.AspNetCore.Authentication.JwtBearer;
 global using Microsoft.AspNetCore.Authorization;
 global using Users.API.Authorization;
+global using MassTransit;

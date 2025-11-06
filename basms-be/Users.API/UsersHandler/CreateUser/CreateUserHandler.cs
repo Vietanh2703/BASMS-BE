@@ -1,6 +1,5 @@
 ﻿// Handler xử lý logic tạo user mới
 // Thực hiện: Validate -> Tạo Firebase account -> Lưu database -> Gửi email -> Log audit
-using Users.API.Extensions;
 
 namespace Users.API.UsersHandler.CreateUser;
 
@@ -27,7 +26,8 @@ public class CreateUserHandler(
     IDbConnectionFactory connectionFactory,  // Factory để tạo kết nối database
     ILogger<CreateUserHandler> logger,       // Logger để ghi log
     CreateUserValidator validator,          // Validator để kiểm tra dữ liệu đầu vào
-    EmailHandler emailHandler)              // Handler để gửi email
+    EmailHandler emailHandler,              // Handler để gửi email
+    Users.API.Messaging.UserEventPublisher eventPublisher)  // Publisher để gửi events đến RabbitMQ
     : ICommandHandler<CreateUserCommand, CreateUserResult>
 {
     public async Task<CreateUserResult> Handle(CreateUserCommand command, CancellationToken cancellationToken)
@@ -121,6 +121,29 @@ public class CreateUserHandler(
                 // Nếu có lỗi ở các bước trước, sẽ rollback tự động
                 transaction.Commit();
                 logger.LogDebug("Transaction committed successfully for user: {UserId}", user.Id);
+
+                // Bước 11.5: Lấy thông tin role để publish event
+                var role = await connection.GetAsync<Roles>(roleId);
+                if (role == null)
+                {
+                    logger.LogWarning("Role not found with ID {RoleId} for user {UserId}", roleId, user.Id);
+                }
+
+                // Bước 11.6: Publish UserCreatedEvent to RabbitMQ for other services
+                // Shifts.API sẽ nhận event này và tạo cache cho manager/guard
+                if (role != null)
+                {
+                    try
+                    {
+                        await eventPublisher.PublishUserCreatedAsync(user, role, cancellationToken);
+                        logger.LogInformation("UserCreatedEvent published successfully for user: {UserId}", user.Id);
+                    }
+                    catch (Exception eventEx)
+                    {
+                        // Log lỗi nhưng không throw - user đã được tạo thành công
+                        logger.LogError(eventEx, "Failed to publish UserCreatedEvent for user {UserId}, but user was created successfully", user.Id);
+                    }
+                }
 
                 // Bước 12: Gửi email chào mừng cho user mới
                 // Chạy riêng biệt, không ảnh hưởng đến việc tạo user nếu thất bại

@@ -44,12 +44,38 @@ FirebaseApp.Create(new AppOptions
     Credential = credential
 });
 
+// Đăng ký MassTransit with RabbitMQ
+builder.Services.AddMassTransit(x =>
+{
+    // Configure RabbitMQ
+    x.UsingRabbitMq((context, cfg) =>
+    {
+        // Get configuration from appsettings.json or environment variables
+        var rabbitMqHost = builder.Configuration["RabbitMQ:Host"] ?? "localhost";
+        var rabbitMqUsername = builder.Configuration["RabbitMQ:Username"] ?? "guest";
+        var rabbitMqPassword = builder.Configuration["RabbitMQ:Password"] ?? "guest";
+
+        cfg.Host(rabbitMqHost, h =>
+        {
+            h.Username(rabbitMqUsername);
+            h.Password(rabbitMqPassword);
+        });
+
+        // Configure endpoint names and serialization
+        cfg.ConfigureEndpoints(context);
+    });
+});
+
+
 // Đăng ký EmailSettings từ appsettings.json
 // Options pattern để inject cấu hình
 builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("EmailSettings"));
 
 // Đăng ký EmailHandler để gửi email
 builder.Services.AddScoped<EmailHandler>();
+
+// Đăng ký UserEventPublisher
+builder.Services.AddScoped<Users.API.Messaging.UserEventPublisher>();
 
 // Đăng ký JwtSettings từ appsettings.json
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));

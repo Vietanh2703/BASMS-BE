@@ -1,0 +1,67 @@
+var builder = WebApplication.CreateBuilder(args);
+
+// Đăng ký Carter - Library để tổ chức API endpoints theo module
+builder.Services.AddCarter();
+
+// Đăng ký MediatR - Library để implement CQRS pattern
+// Tự động scan và đăng ký tất cả handlers trong assembly
+builder.Services.AddMediatR(config =>
+{
+    config.RegisterServicesFromAssembly(typeof(Program).Assembly);
+});
+
+// Đăng ký Dapper connection factory cho MySQL
+// Singleton vì connection factory có thể tái sử dụng
+builder.Services.AddSingleton<IDbConnectionFactory>(sp =>
+{
+    // Lấy connection string từ appsettings.json
+    var connectionString = builder.Configuration.GetConnectionString("Database")!;
+    return new MySqlConnectionFactory(connectionString);
+});
+
+// Đăng ký MassTransit with RabbitMQ and Consumers
+builder.Services.AddMassTransit(x =>
+{
+    // Register all consumers
+    x.AddConsumer<Shifts.API.Consumers.UserCreatedConsumer>();
+    x.AddConsumer<Shifts.API.Consumers.UserUpdatedConsumer>();
+    x.AddConsumer<Shifts.API.Consumers.UserDeletedConsumer>();
+
+    // Configure RabbitMQ
+    x.UsingRabbitMq((context, cfg) =>
+    {
+        var rabbitMqHost = builder.Configuration["RabbitMQ:Host"] ?? "localhost";
+        var rabbitMqUsername = builder.Configuration["RabbitMQ:Username"] ?? "guest";
+        var rabbitMqPassword = builder.Configuration["RabbitMQ:Password"] ?? "guest";
+
+        cfg.Host(rabbitMqHost, h =>
+        {
+            h.Username(rabbitMqUsername);
+            h.Password(rabbitMqPassword);
+        });
+
+        // Configure endpoints
+        cfg.ConfigureEndpoints(context);
+
+        // Configure retry policy
+        cfg.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(5)));
+    });
+});
+
+
+var app = builder.Build();
+
+// Initialize database tables
+using (var scope = app.Services.CreateScope())
+{
+    var dbFactory = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>();
+    if (dbFactory is MySqlConnectionFactory mysqlFactory)
+    {
+        await mysqlFactory.EnsureTablesCreatedAsync();
+        Console.WriteLine("✓ Database tables initialized successfully");
+    }
+}
+
+app.MapGet("/", () => "Hello World!");
+
+app.Run();
