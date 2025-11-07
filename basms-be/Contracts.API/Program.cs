@@ -4,37 +4,26 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddCarter();
 
 // Đăng ký MediatR - Library để implement CQRS pattern
-// Tự động scan và đăng ký tất cả handlers trong assembly
 builder.Services.AddMediatR(config =>
 {
     config.RegisterServicesFromAssembly(typeof(Program).Assembly);
 });
 
 // Đăng ký Dapper connection factory cho MySQL
-// Singleton vì connection factory có thể tái sử dụng
 builder.Services.AddSingleton<IDbConnectionFactory>(sp =>
 {
-    // Lấy connection string từ appsettings.json
     var connectionString = builder.Configuration.GetConnectionString("Database")!;
     return new MySqlConnectionFactory(connectionString);
 });
 
-// Đăng ký HTTP Client để gọi Contracts.API
-builder.Services.AddHttpClient<Shifts.API.Services.ContractsApiClient>(client =>
-{
-    var contractsApiUrl = builder.Configuration["ContractsApi:BaseUrl"] ?? "http://localhost:5002";
-    client.BaseAddress = new Uri(contractsApiUrl);
-    client.Timeout = TimeSpan.FromSeconds(30);
-});
-
-// Đăng ký MassTransit with RabbitMQ and Consumers
+// Đăng ký MassTransit with RabbitMQ
 builder.Services.AddMassTransit(x =>
 {
     // Register all consumers
-    x.AddConsumer<Shifts.API.Consumers.UserCreatedConsumer>();
-    x.AddConsumer<Shifts.API.Consumers.UserUpdatedConsumer>();
-    x.AddConsumer<Shifts.API.Consumers.UserDeletedConsumer>();
-    x.AddConsumer<Shifts.API.Consumers.ContractActivatedConsumer>();
+    x.AddConsumer<Contracts.API.Consumers.UserCreatedConsumer>();
+    x.AddConsumer<Contracts.API.Consumers.UserUpdatedConsumer>();
+    x.AddConsumer<Contracts.API.Consumers.UserDeletedConsumer>();
+    x.AddConsumer<Contracts.API.Consumers.ShiftsGeneratedConsumer>();
 
     // Configure RabbitMQ
     x.UsingRabbitMq((context, cfg) =>
@@ -57,7 +46,6 @@ builder.Services.AddMassTransit(x =>
     });
 });
 
-
 var app = builder.Build();
 
 // Initialize database tables
@@ -67,7 +55,7 @@ using (var scope = app.Services.CreateScope())
     if (dbFactory is MySqlConnectionFactory mysqlFactory)
     {
         await mysqlFactory.EnsureTablesCreatedAsync();
-        Console.WriteLine("✓ Shifts database tables initialized successfully");
+        Console.WriteLine("✓ Contracts database tables initialized successfully");
     }
 }
 
@@ -75,6 +63,6 @@ using (var scope = app.Services.CreateScope())
 app.MapCarter();
 Console.WriteLine("✓ Carter endpoints mapped");
 
-app.MapGet("/", () => "Shifts API - Shift & Team Management Service");
+app.MapGet("/", () => "Contracts API - Customer & Contract Management Service");
 
 app.Run();

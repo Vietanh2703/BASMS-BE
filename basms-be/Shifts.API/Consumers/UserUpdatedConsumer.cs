@@ -1,7 +1,3 @@
-using BuildingBlocks.Messaging.Events;
-using MassTransit;
-using Shifts.API.Models;
-
 namespace Shifts.API.Consumers;
 
 /// <summary>

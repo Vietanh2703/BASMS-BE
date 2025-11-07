@@ -128,7 +128,7 @@ public class Shifts
     public int UnpaidBreakMinutes { get; set; } = 60;
 
     // ============================================================================
-    // PHÂN LOẠI CA - QUAN TRỌNG CHO TÍNH LƯƠNG!
+    // PHÂN LOẠI CA - CHO SHIFT SCHEDULING & FILTERING
     // ============================================================================
 
     /// <summary>
@@ -137,50 +137,51 @@ public class Shifts
     public string ShiftType { get; set; } = "REGULAR";
 
     // ============================================================================
-    // PHÂN LOẠI THEO NGÀY (critical cho pay rates!)
+    // PHÂN LOẠI THEO NGÀY - CHO FILTERING & REPORTING (KHÔNG DÙNG CHO PRICING)
+    // NOTE: Pricing/lương được quản lý bởi Payroll Service riêng
     // ============================================================================
 
     /// <summary>
-    /// T2-T6 → Lương 100%
+    /// T2-T6 - Ngày làm việc thường
     /// </summary>
     public bool IsRegularWeekday { get; set; } = true;
 
     /// <summary>
-    /// T7 → 150% (8h đầu), 200% (OT)
+    /// Thứ 7 - Useful for shift filtering
     /// </summary>
     public bool IsSaturday { get; set; } = false;
 
     /// <summary>
-    /// CN → 200% (8h đầu), 300% (OT)
+    /// Chủ nhật - Useful for shift filtering
     /// </summary>
     public bool IsSunday { get; set; } = false;
 
     /// <summary>
-    /// Lễ → 300% (8h đầu), 400% (OT)
+    /// Ngày lễ quốc gia - Synced from Contracts.PublicHolidays
     /// </summary>
     public bool IsPublicHoliday { get; set; } = false;
 
     /// <summary>
-    /// Tết (5 ngày) → 300% + nghỉ bù
+    /// Ngày Tết - Special holiday period
     /// </summary>
     public bool IsTetHoliday { get; set; } = false;
 
     // ============================================================================
-    // PHÂN LOẠI THEO THỜI GIAN TRONG NGÀY
+    // PHÂN LOẠI THEO THỜI GIAN TRONG NGÀY - CHO SCHEDULING
     // ============================================================================
 
     /// <summary>
-    /// Ca đêm (22h-6h) → +30% phụ cấp
+    /// Ca đêm (22h-6h) - For scheduling purposes
     /// </summary>
     public bool IsNightShift { get; set; } = false;
 
     /// <summary>
-    /// Số giờ đêm (22h-6h)
+    /// Số giờ đêm (22h-6h) - For reporting
     /// </summary>
     public decimal NightHours { get; set; } = 0;
 
     /// <summary>
-    /// Số giờ ngày (6h-22h)
+    /// Số giờ ngày (6h-22h) - For reporting
     /// </summary>
     public decimal DayHours { get; set; } = 0;
 

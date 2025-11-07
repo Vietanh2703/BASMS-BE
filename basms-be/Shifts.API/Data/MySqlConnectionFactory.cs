@@ -33,8 +33,33 @@ public class MySqlConnectionFactory : IDbConnectionFactory
         {
             if (_tablesCreated) return;
 
+            // ====================================================================
+            // STEP 1: TẠO DATABASE NẾU CHƯA TỒN TẠI
+            // ====================================================================
+            // Kết nối không chỉ định database để tạo database mới
+            var connectionStringBuilder = new MySqlConnectionStringBuilder(_connectionString);
+            var databaseName = connectionStringBuilder.Database;
+            connectionStringBuilder.Database = null; // Kết nối không chỉ định DB
+
+            using (var tempConnection = new MySqlConnection(connectionStringBuilder.ConnectionString))
+            {
+                await tempConnection.OpenAsync();
+
+                // Tạo database nếu chưa tồn tại
+                await tempConnection.ExecuteAsync($@"
+                    CREATE DATABASE IF NOT EXISTS `{databaseName}`
+                    CHARACTER SET utf8mb4
+                    COLLATE utf8mb4_unicode_ci;
+                ");
+
+                Console.WriteLine($"✓ Database '{databaseName}' ready");
+            }
+
+            // ====================================================================
+            // STEP 2: KẾT NỐI ĐẾN DATABASE VỪA TẠO VÀ CHECK/CREATE TABLES
+            // ====================================================================
             using var connection = await CreateConnectionAsync();
-            
+
             // ========================================================================
             // 1. MANAGERS TABLE - Cache managers từ User Service
             // ========================================================================
