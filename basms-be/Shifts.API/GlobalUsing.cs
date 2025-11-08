@@ -15,3 +15,4 @@ global using Microsoft.AspNetCore.Authentication.JwtBearer;
 global using Microsoft.AspNetCore.Authorization;
 global using MassTransit;
 global using BuildingBlocks.Messaging.Events;
+global using Shifts.API.ShiftsHandler.GenerateShifts;
