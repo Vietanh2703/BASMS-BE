@@ -57,8 +57,23 @@ public class UserCreatedConsumer : IConsumer<UserCreatedEvent>
             // Tạo customer cache
             await CreateCustomerCacheAsync(connection, @event);
 
-            // Tạo customer record chính thức
-            await CreateCustomerAsync(connection, @event);
+            // Kiểm tra xem đã có customer record chưa
+            var existingCustomer = await connection.QueryFirstOrDefaultAsync<Customer>(
+                "SELECT * FROM customers WHERE UserId = @UserId AND IsDeleted = 0 LIMIT 1",
+                new { UserId = @event.UserId });
+
+            if (existingCustomer == null)
+            {
+                // Chỉ tạo customer record nếu chưa tồn tại
+                // (có thể đã được tạo từ import contract)
+                await CreateCustomerAsync(connection, @event);
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "Customer record already exists for User {UserId}, skipping creation",
+                    @event.UserId);
+            }
 
             // Log successful sync
             await LogSyncAsync(connection, @event, syncStarted, "SUCCESS", null);

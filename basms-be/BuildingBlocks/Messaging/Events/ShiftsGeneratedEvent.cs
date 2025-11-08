@@ -69,7 +69,7 @@ public record ShiftsGeneratedEvent
     /// Lý do bỏ qua (JSON array)
     /// ["holiday", "location_closed", "exception_defined", "duplicate"]
     /// </summary>
-    public string? SkipReasons { get; init; }
+    public List<string> SkipReasons { get; init; }
 
     /// <summary>
     /// Trạng thái: success, partial, failed

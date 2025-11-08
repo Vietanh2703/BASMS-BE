@@ -42,7 +42,7 @@ public class ShiftsGeneratedConsumer : IConsumer<ShiftsGeneratedEvent>
                 GeneratedAt = @event.GeneratedAt,
                 ShiftsCreatedCount = @event.ShiftsCreatedCount,
                 ShiftsSkippedCount = @event.ShiftsSkippedCount,
-                SkipReasons = @event.SkipReasons,
+                SkipReasons = @event.SkipReasons.ToString(),
                 Status = @event.Status,
                 ErrorMessage = @event.ErrorMessage,
                 GeneratedByJob = @event.GeneratedByJob
@@ -76,7 +76,7 @@ public class ShiftsGeneratedConsumer : IConsumer<ShiftsGeneratedEvent>
             }
 
             // Log skip reasons nếu có
-            if (@event.ShiftsSkippedCount > 0 && !string.IsNullOrEmpty(@event.SkipReasons))
+            if (@event.ShiftsSkippedCount > 0 && !string.IsNullOrEmpty(@event.SkipReasons.ToString()))
             {
                 _logger.LogInformation(
                     "Skipped shifts reasons: {Reasons}",

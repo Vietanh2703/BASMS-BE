@@ -19,13 +19,15 @@ builder.Services.AddSingleton<IDbConnectionFactory>(sp =>
     return new MySqlConnectionFactory(connectionString);
 });
 
-// Đăng ký HTTP Client để gọi Contracts.API
-builder.Services.AddHttpClient<Shifts.API.Services.ContractsApiClient>(client =>
-{
-    var contractsApiUrl = builder.Configuration["ContractsApi:BaseUrl"] ?? "http://localhost:5002";
-    client.BaseAddress = new Uri(contractsApiUrl);
-    client.Timeout = TimeSpan.FromSeconds(30);
-});
+// Đăng ký EmailSettings từ appsettings.json
+builder.Services.Configure<Shifts.API.ExtendModels.EmailSettings>(
+    builder.Configuration.GetSection("EmailSettings"));
+
+// Đăng ký EmailHandler - Gửi email notifications cho guards
+builder.Services.AddScoped<Shifts.API.Extensions.EmailHandler>();
+
+// Đăng ký ShiftValidator - Validator cho shift validation (overlap, contract period)
+builder.Services.AddScoped<Shifts.API.Validators.ShiftValidator>();
 
 // Đăng ký MassTransit with RabbitMQ and Consumers
 builder.Services.AddMassTransit(x =>
@@ -35,6 +37,16 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<Shifts.API.Consumers.UserUpdatedConsumer>();
     x.AddConsumer<Shifts.API.Consumers.UserDeletedConsumer>();
     x.AddConsumer<Shifts.API.Consumers.ContractActivatedConsumer>();
+
+    // Register Request Clients for RabbitMQ Request/Response pattern
+    x.AddRequestClient<Shifts.API.Messages.GetContractRequest>();
+    x.AddRequestClient<Shifts.API.Messages.GetLocationRequest>();
+    x.AddRequestClient<Shifts.API.Messages.GetCustomerRequest>();
+
+    // Request Clients for Auto-Generate Shifts feature (from BuildingBlocks.Messaging.Contracts)
+    x.AddRequestClient<CheckPublicHolidayRequest>();
+    x.AddRequestClient<CheckLocationClosedRequest>();
+    x.AddRequestClient<GetContractShiftSchedulesRequest>();
 
     // Configure RabbitMQ
     x.UsingRabbitMq((context, cfg) =>

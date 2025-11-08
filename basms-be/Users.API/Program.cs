@@ -47,6 +47,9 @@ FirebaseApp.Create(new AppOptions
 // Đăng ký MassTransit with RabbitMQ
 builder.Services.AddMassTransit(x =>
 {
+    // Register consumers
+    x.AddConsumer<Users.API.Consumers.CreateUserRequestConsumer>();
+
     // Configure RabbitMQ
     x.UsingRabbitMq((context, cfg) =>
     {

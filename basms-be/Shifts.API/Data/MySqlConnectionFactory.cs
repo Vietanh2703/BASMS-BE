@@ -4,7 +4,7 @@ namespace Shifts.API.Data;
 
 /// <summary>
 ///     MySQL connection factory for Shifts service
-///     Creates all 12 tables based on ERD: managers, guards, teams, shifts, etc.
+///     Creates all 13 tables based on ERD: managers, guards, teams, shifts, notification_logs, etc.
 /// </summary>
 public class MySqlConnectionFactory : IDbConnectionFactory
 {
@@ -823,11 +823,75 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             }
 
             // ============================================================================
-            // 12. VIOLATION_RECORDS TABLE - Bản ghi vi phạm
+            // 12. NOTIFICATION_LOGS TABLE - Lịch sử thông báo cho director và customer
+            // ============================================================================
+            var notificationLogsTableExists = await connection.ExecuteScalarAsync<bool>(
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'notification_logs'");
+
+            if (!notificationLogsTableExists)
+            {
+                await connection.ExecuteAsync(@"
+                    CREATE TABLE IF NOT EXISTS `notification_logs` (
+                        `Id` CHAR(36) PRIMARY KEY,
+
+                        -- Liên kết
+                        `ShiftId` CHAR(36) NOT NULL COMMENT 'Shift liên quan',
+                        `ContractId` CHAR(36) NULL COMMENT 'Contract liên quan',
+                        `RecipientId` CHAR(36) NOT NULL COMMENT 'User nhận thông báo',
+
+                        -- Thông tin người nhận
+                        `RecipientType` VARCHAR(50) NOT NULL DEFAULT 'DIRECTOR' COMMENT 'DIRECTOR | CUSTOMER | MANAGER',
+
+                        -- Thông tin thông báo
+                        `Action` VARCHAR(50) NOT NULL DEFAULT 'SHIFT_CREATED' COMMENT 'SHIFT_CREATED | SHIFT_UPDATED | SHIFT_CANCELLED | SHIFT_APPROVED',
+                        `Title` VARCHAR(255) NOT NULL,
+                        `Message` TEXT NOT NULL,
+                        `Metadata` TEXT NULL COMMENT 'JSON - shift info, location info, etc.',
+
+                        -- Phương thức gửi
+                        `DeliveryMethod` VARCHAR(50) NOT NULL DEFAULT 'IN_APP' COMMENT 'EMAIL | SMS | PUSH | IN_APP',
+                        `Status` VARCHAR(50) NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING | SENT | FAILED | DELIVERED | READ',
+
+                        -- Thời gian
+                        `SentAt` DATETIME NULL,
+                        `ReadAt` DATETIME NULL,
+                        `IsRead` BOOLEAN NOT NULL DEFAULT FALSE,
+
+                        -- Xử lý lỗi
+                        `RetryCount` INT NOT NULL DEFAULT 0,
+                        `ErrorMessage` TEXT NULL,
+                        `LastRetryAt` DATETIME NULL,
+
+                        -- Ưu tiên
+                        `Priority` VARCHAR(50) NOT NULL DEFAULT 'NORMAL' COMMENT 'LOW | NORMAL | HIGH | URGENT',
+                        `ExpiresAt` DATETIME NULL COMMENT 'Thời gian hết hạn',
+                        `IsExpired` BOOLEAN NOT NULL DEFAULT FALSE,
+
+                        -- Audit
+                        `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        `UpdatedAt` DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
+                        `IsDeleted` BOOLEAN NOT NULL DEFAULT FALSE,
+                        `DeletedAt` DATETIME NULL,
+
+                        -- Indexes
+                        INDEX `idx_notifications_shift` (`ShiftId`),
+                        INDEX `idx_notifications_contract` (`ContractId`),
+                        INDEX `idx_notifications_recipient` (`RecipientId`, `Status`),
+                        INDEX `idx_notifications_recipient_type` (`RecipientType`, `Status`),
+                        INDEX `idx_notifications_status` (`Status`, `CreatedAt`),
+                        INDEX `idx_notifications_action` (`Action`, `CreatedAt`),
+                        INDEX `idx_notifications_unread` (`RecipientId`, `IsRead`, `CreatedAt`)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                    COMMENT='Lịch sử thông báo cho director và customer về shift';
+                ");
+            }
+
+            // ============================================================================
+            // 13. VIOLATION_RECORDS TABLE - Bản ghi vi phạm
             // ============================================================================
             var violationRecordsTableExists = await connection.ExecuteScalarAsync<bool>(
                 "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'violation_records'");
-            
+
             if (!violationRecordsTableExists)
             {
                 await connection.ExecuteAsync(@"

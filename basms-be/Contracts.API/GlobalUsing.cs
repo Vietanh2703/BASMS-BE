@@ -9,3 +9,8 @@ global using BuildingBlocks.CQRS;
 global using BuildingBlocks.Messaging;
 global using Contracts.API.Data;
 global using Contracts.API.Models;
+global using DocumentFormat.OpenXml.Packaging;
+global using DocumentFormat.OpenXml.Wordprocessing;
+global using iTextSharp.text.pdf;
+global using System.Text;
+global using System.Text.RegularExpressions;

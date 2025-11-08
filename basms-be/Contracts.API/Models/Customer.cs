@@ -14,7 +14,7 @@ public class Customer
     /// <summary>
     /// Link tới User ID từ User Service (1-1 relationship)
     /// </summary>
-    public Guid UserId { get; set; }
+    public Guid? UserId { get; set; }
 
     /// <summary>
     /// Mã khách hàng tự động: CUST-001, CUST-002...
