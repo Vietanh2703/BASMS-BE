@@ -14,13 +14,16 @@
     </ItemGroup>
 
     <ItemGroup>
+      <Folder Include="ContractsHandler\GetContractById\" />
+      <Folder Include="ContractsHandler\UploadContract\" />
       <Folder Include="Data\" />
       <Folder Include="Models\" />
-      <Folder Include="ContractsHandler\" />
       <Folder Include="Consumers\" />
     </ItemGroup>
 
     <ItemGroup>
+      <PackageReference Include="AWSSDK.Extensions.NETCore.Setup" Version="4.0.3.11" />
+      <PackageReference Include="AWSSDK.S3" Version="4.0.11.1" />
       <PackageReference Include="Carter" Version="8.1.0" />
       <PackageReference Include="Dapper" Version="2.1.66" />
       <PackageReference Include="Dapper.Contrib" Version="2.0.78" />

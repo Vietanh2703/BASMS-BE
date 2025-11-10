@@ -1,4 +1,5 @@
-using BuildingBlocks.Messaging.Events;
+using Amazon;
+using Amazon.Runtime;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,6 +23,19 @@ builder.Services.AddSingleton<IDbConnectionFactory>(sp =>
 builder.Services.Configure<Contracts.API.Extensions.EmailSettings>(
     builder.Configuration.GetSection("EmailSettings"));
 builder.Services.AddScoped<Contracts.API.Extensions.EmailHandler>();
+
+// Đăng ký AWS S3
+builder.Services.Configure<Contracts.API.Extensions.AwsS3Settings>(
+    builder.Configuration.GetSection("AWS"));
+builder.Services.AddAWSService<IAmazonS3>();
+builder.Services.AddScoped<Contracts.API.Extensions.IS3Service, Contracts.API.Extensions.S3Service>();
+var awsOptions = builder.Configuration.GetAWSOptions();
+awsOptions.Credentials = new BasicAWSCredentials(
+    builder.Configuration["AWS:AccessKey"],
+    builder.Configuration["AWS:SecretKey"]
+);
+awsOptions.Region = RegionEndpoint.GetBySystemName(builder.Configuration["AWS:Region"]);
+builder.Services.AddDefaultAWSOptions(awsOptions);
 
 // Đăng ký MassTransit with RabbitMQ
 builder.Services.AddMassTransit(x =>

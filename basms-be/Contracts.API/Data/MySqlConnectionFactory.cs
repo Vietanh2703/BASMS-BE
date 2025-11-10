@@ -82,32 +82,8 @@ public class MySqlConnectionFactory : IDbConnectionFactory
 
             try
             {
-                // ====================================================================
-                // 1. COMPANY_PROFILE - Hồ sơ công ty bảo vệ
-                // ====================================================================
-                Console.WriteLine("Creating table: company_profile");
-                await connection.ExecuteAsync(@"
-                CREATE TABLE IF NOT EXISTS `company_profile` (
-                    `Id` CHAR(36) PRIMARY KEY,
-                    `CompanyName` VARCHAR(255) NOT NULL COMMENT 'Tên công ty bảo vệ',
-                    `BusinessLicense` VARCHAR(100) UNIQUE NOT NULL COMMENT 'Giấy phép KD',
-                    `TaxCode` VARCHAR(50) UNIQUE NOT NULL COMMENT 'Mã số thuế',
-                    `Address` TEXT NOT NULL,
-                    `Phone` VARCHAR(20) NOT NULL,
-                    `Email` VARCHAR(255) NOT NULL,
-                    `Website` VARCHAR(255) NULL,
-                    `LogoUrl` VARCHAR(500) NULL,
-                    `DefaultWorkWeekStart` INT NOT NULL DEFAULT 1 COMMENT '1=T2, 7=CN',
-                    `DefaultWeekendDays` VARCHAR(20) NOT NULL DEFAULT '6,7',
-                    `IsDeleted` BOOLEAN NOT NULL DEFAULT FALSE,
-                    `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    `UpdatedAt` DATETIME NULL ON UPDATE CURRENT_TIMESTAMP
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-                COMMENT='Hồ sơ công ty bảo vệ';
-            ");
-
             // ====================================================================
-            // 2. CUSTOMERS - Khách hàng
+            // 1. CUSTOMERS - Khách hàng
             // ====================================================================
             Console.WriteLine("Creating table: customers");
             await connection.ExecuteAsync(@"
@@ -142,7 +118,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             ");
 
             // ====================================================================
-            // 3. CUSTOMER_LOCATIONS - Địa điểm khách hàng
+            // 2. CUSTOMER_LOCATIONS - Địa điểm khách hàng
             // ====================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `customer_locations` (
@@ -186,60 +162,9 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 COMMENT='Địa điểm khách hàng - nơi triển khai bảo vệ';
             ");
-
+            
             // ====================================================================
-            // 4. LOCATION_OPERATING_SCHEDULE - Lịch hoạt động địa điểm
-            // ====================================================================
-            await connection.ExecuteAsync(@"
-                CREATE TABLE IF NOT EXISTS `location_operating_schedule` (
-                    `Id` CHAR(36) PRIMARY KEY,
-                    `LocationId` CHAR(36) NOT NULL,
-                    `ScheduleName` VARCHAR(255) NOT NULL,
-                    `DayOfWeek` INT NOT NULL COMMENT '1=T2, 7=CN',
-                    `IsOperating` BOOLEAN NOT NULL DEFAULT TRUE,
-                    `TimeSlot1Start` TIME NULL,
-                    `TimeSlot1End` TIME NULL,
-                    `TimeSlot2Start` TIME NULL,
-                    `TimeSlot2End` TIME NULL,
-                    `TimeSlot3Start` TIME NULL,
-                    `TimeSlot3End` TIME NULL,
-                    `EffectiveFrom` DATE NOT NULL,
-                    `EffectiveTo` DATE NULL,
-                    `Notes` VARCHAR(500) NULL,
-                    `IsActive` BOOLEAN NOT NULL DEFAULT TRUE,
-                    `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    INDEX `idx_schedule_location_day` (`LocationId`, `DayOfWeek`, `EffectiveFrom`),
-                    FOREIGN KEY (`LocationId`) REFERENCES `customer_locations`(`Id`) ON DELETE CASCADE
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-                COMMENT='Lịch hoạt động địa điểm theo ngày trong tuần';
-            ");
-
-            // ====================================================================
-            // 5. LOCATION_SPECIAL_DAYS - Ngày đặc biệt của địa điểm
-            // ====================================================================
-            await connection.ExecuteAsync(@"
-                CREATE TABLE IF NOT EXISTS `location_special_days` (
-                    `Id` CHAR(36) PRIMARY KEY,
-                    `LocationId` CHAR(36) NOT NULL,
-                    `SpecialDayDate` DATE NOT NULL,
-                    `DayType` VARCHAR(50) NOT NULL COMMENT 'closed, half_day, extended_hours...',
-                    `Reason` VARCHAR(255) NULL,
-                    `IsOperating` BOOLEAN NOT NULL DEFAULT FALSE,
-                    `CustomStartTime` TIME NULL,
-                    `CustomEndTime` TIME NULL,
-                    `AffectsRegularShifts` BOOLEAN NOT NULL DEFAULT TRUE,
-                    `RequiresSpecialShift` BOOLEAN NOT NULL DEFAULT FALSE,
-                    `Notes` TEXT NULL,
-                    `CreatedBy` CHAR(36) NULL,
-                    `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE INDEX `uk_special_day_location` (`LocationId`, `SpecialDayDate`),
-                    FOREIGN KEY (`LocationId`) REFERENCES `customer_locations`(`Id`) ON DELETE CASCADE
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-                COMMENT='Ngày đặc biệt địa điểm - đóng cửa, sự kiện...';
-            ");
-
-            // ====================================================================
-            // 6. PUBLIC_HOLIDAYS - Ngày lễ quốc gia
+            // 3. PUBLIC_HOLIDAYS - Ngày lễ quốc gia
             // ====================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `public_holidays` (
@@ -270,7 +195,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             ");
 
             // ====================================================================
-            // 7. HOLIDAY_SUBSTITUTE_WORK_DAYS - Ngày làm bù
+            // 4. HOLIDAY_SUBSTITUTE_WORK_DAYS - Ngày làm bù
             // ====================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `holiday_substitute_work_days` (
@@ -288,7 +213,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             ");
 
             // ====================================================================
-            // 8. CONTRACTS - Hợp đồng dịch vụ
+            // 5. CONTRACTS - Hợp đồng dịch vụ
             // ====================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `contracts` (
@@ -338,7 +263,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             ");
 
             // ====================================================================
-            // 9. CONTRACT_LOCATIONS - Địa điểm trong hợp đồng
+            // 6. CONTRACT_LOCATIONS - Địa điểm trong hợp đồng
             // ====================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `contract_locations` (
@@ -366,7 +291,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             ");
 
             // ====================================================================
-            // 10. CONTRACT_SHIFT_SCHEDULES - Mẫu ca trong hợp đồng
+            // 7. CONTRACT_SHIFT_SCHEDULES - Mẫu ca trong hợp đồng
             // ====================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `contract_shift_schedules` (
@@ -418,7 +343,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             ");
 
             // ====================================================================
-            // 11. CONTRACT_SHIFT_EXCEPTIONS - Ngoại lệ ca
+            // 8. CONTRACT_SHIFT_EXCEPTIONS - Ngoại lệ ca
             // ====================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `contract_shift_exceptions` (
@@ -440,7 +365,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             ");
 
             // ====================================================================
-            // 12. CONTRACT_PERIODS - Kỳ hạn hợp đồng
+            // 9. CONTRACT_PERIODS - Kỳ hạn hợp đồng
             // ====================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `contract_periods` (
@@ -461,7 +386,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             ");
 
             // ====================================================================
-            // 13. CONTRACT_AMENDMENTS - Phụ lục hợp đồng
+            // 10. CONTRACT_AMENDMENTS - Phụ lục hợp đồng
             // ====================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `contract_amendments` (
@@ -488,7 +413,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             ");
 
             // ====================================================================
-            // 14. CONTRACT_DOCUMENTS - Tài liệu hợp đồng
+            // 11. CONTRACT_DOCUMENTS - Tài liệu hợp đồng
             // ====================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `contract_documents` (
@@ -504,14 +429,15 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     `UploadedBy` CHAR(36) NULL,
                     `IsDeleted` BOOLEAN NOT NULL DEFAULT FALSE,
                     `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    INDEX `idx_doc_contract_type` (`ContractId`, `DocumentType`),
+                    INDEX `idx_doc_type` (`DocumentType`),
+                    INDEX `idx_doc_contract` (`ContractId`),
                     FOREIGN KEY (`ContractId`) REFERENCES `contracts`(`Id`) ON DELETE CASCADE
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 COMMENT='Tài liệu hợp đồng';
-            ");
+             ");
 
             // ====================================================================
-            // 15. SHIFT_GENERATION_LOG - Log tự động tạo ca
+            // 12. SHIFT_GENERATION_LOG - Log tự động tạo ca
             // ====================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `shift_generation_log` (
@@ -535,7 +461,79 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             ");
 
             // ====================================================================
-            // 16. ATTENDANCE_SYNC_LOG - Log đồng bộ attendance
+            // 13. CONTRACT_WORKING_CONDITIONS - Điều kiện làm việc
+            // ====================================================================
+            Console.WriteLine("Creating table: contract_working_conditions");
+            await connection.ExecuteAsync(@"
+                CREATE TABLE IF NOT EXISTS `contract_working_conditions` (
+                    `Id` CHAR(36) PRIMARY KEY,
+                    `ContractId` CHAR(36) NOT NULL,
+
+                    -- Giờ làm việc chuẩn
+                    `StandardHoursPerDay` DECIMAL(5,2) NULL COMMENT 'Số giờ làm việc tiêu chuẩn/ngày: 8, 9, 12',
+                    `StandardHoursPerWeek` DECIMAL(5,2) NULL COMMENT 'Số giờ làm việc tiêu chuẩn/tuần: 40, 44, 48',
+                    `StandardHoursPerMonth` DECIMAL(5,2) NULL COMMENT 'Số giờ làm việc tiêu chuẩn/tháng: 160, 176, 192',
+
+                    -- Giới hạn tăng ca
+                    `MaxOvertimeHoursPerDay` DECIMAL(5,2) NULL COMMENT 'Số giờ tăng ca tối đa/ngày: 4, 6, 8',
+                    `MaxOvertimeHoursPerMonth` DECIMAL(5,2) NULL COMMENT 'Số giờ tăng ca tối đa/tháng: 30, 40, 60',
+                    `MaxOvertimeHoursPerYear` DECIMAL(5,2) NULL COMMENT 'Số giờ tăng ca tối đa/năm: 200, 300',
+                    `AllowOvertimeOnWeekends` BOOLEAN NOT NULL DEFAULT TRUE,
+                    `AllowOvertimeOnHolidays` BOOLEAN NOT NULL DEFAULT TRUE,
+                    `RequireOvertimeApproval` BOOLEAN NOT NULL DEFAULT TRUE,
+
+                    -- Ca đêm
+                    `NightShiftStartTime` TIME NULL COMMENT 'Giờ bắt đầu ca đêm: 22:00',
+                    `NightShiftEndTime` TIME NULL COMMENT 'Giờ kết thúc ca đêm: 06:00',
+                    `MinimumNightShiftHours` DECIMAL(5,2) NULL COMMENT 'Số giờ tối thiểu để tính ca đêm: 2, 4',
+
+                    -- Ca trực liên tục
+                    `AllowContinuous24hShift` BOOLEAN NOT NULL DEFAULT FALSE,
+                    `AllowContinuous48hShift` BOOLEAN NOT NULL DEFAULT FALSE,
+                    `CountSleepTimeInContinuousShift` BOOLEAN NOT NULL DEFAULT FALSE,
+                    `SleepTimeCalculationRatio` DECIMAL(5,2) NULL COMMENT 'Tỷ lệ tính giờ ngủ: 0.5, 0.7',
+                    `MinimumRestHoursBetweenShifts` DECIMAL(5,2) NULL COMMENT 'Số giờ nghỉ tối thiểu giữa 2 ca: 8, 11, 12',
+
+                    -- Ngày nghỉ & Ngày lễ
+                    `AnnualLeaveDays` INT NULL COMMENT 'Số ngày nghỉ phép/năm: 12, 14, 15',
+                    `TetHolidayDates` TEXT NULL COMMENT 'JSON array của ngày Tết',
+                    `LocalHolidaysList` TEXT NULL COMMENT 'JSON array của ngày lễ địa phương',
+                    `HolidayWeekendCalculationMethod` VARCHAR(50) NULL COMMENT 'max, cumulative, replace',
+                    `SaturdayAsRegularWorkday` BOOLEAN NOT NULL DEFAULT FALSE,
+
+                    -- Chính sách vi phạm
+                    `OvertimeLimitViolationPolicy` VARCHAR(50) NULL COMMENT 'block, warning, compensate',
+                    `UnapprovedOvertimePolicy` VARCHAR(50) NULL COMMENT 'block, penalty, allow',
+                    `InsufficientRestPolicy` VARCHAR(50) NULL COMMENT 'block, compensate, allow',
+
+                    -- Ca đặc biệt
+                    `AllowEventShift` BOOLEAN NOT NULL DEFAULT FALSE,
+                    `AllowEmergencyCall` BOOLEAN NOT NULL DEFAULT TRUE,
+                    `AllowReplacementShift` BOOLEAN NOT NULL DEFAULT TRUE,
+                    `MinimumEmergencyNoticeMinutes` INT NULL COMMENT 'Thời gian thông báo tối thiểu: 30, 60, 120',
+
+                    -- Ghi chú
+                    `GeneralNotes` TEXT NULL,
+                    `SpecialTerms` TEXT NULL,
+
+                    -- Trạng thái & Thời gian
+                    `IsActive` BOOLEAN NOT NULL DEFAULT TRUE,
+                    `EffectiveFrom` DATETIME NOT NULL,
+                    `EffectiveTo` DATETIME NULL,
+                    `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    `UpdatedAt` DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
+                    `CreatedBy` CHAR(36) NULL,
+                    `UpdatedBy` CHAR(36) NULL,
+
+                    INDEX `idx_wc_contract` (`ContractId`, `IsActive`),
+                    INDEX `idx_wc_effective` (`EffectiveFrom`, `EffectiveTo`),
+                    FOREIGN KEY (`ContractId`) REFERENCES `contracts`(`Id`) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                COMMENT='Điều kiện làm việc: giờ làm, tăng ca, ca đêm, nghỉ phép';
+            ");
+
+            // ====================================================================
+            // 14. ATTENDANCE_SYNC_LOG - Log đồng bộ attendance
             // ====================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `attendance_sync_log` (
@@ -555,37 +553,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             ");
 
             // ====================================================================
-            // 17. CUSTOMER_CACHE - Cache customer từ Users Service
-            // ====================================================================
-            await connection.ExecuteAsync(@"
-                CREATE TABLE IF NOT EXISTS `customer_cache` (
-                    `Id` CHAR(36) PRIMARY KEY,
-                    `UserId` CHAR(36) UNIQUE NOT NULL COMMENT 'Link to Users Service',
-                    `FirebaseUid` VARCHAR(255) NOT NULL,
-                    `Email` VARCHAR(255) UNIQUE NOT NULL,
-                    `FullName` VARCHAR(200) NOT NULL,
-                    `Phone` VARCHAR(20) NULL,
-                    `AvatarUrl` TEXT NULL,
-                    `RoleId` CHAR(36) NOT NULL,
-                    `RoleName` VARCHAR(50) NOT NULL DEFAULT 'customer',
-                    `CompanyName` VARCHAR(255) NULL,
-                    `Address` TEXT NULL,
-                    `Industry` VARCHAR(100) NULL,
-                    `LastSyncedAt` DATETIME NULL,
-                    `SyncStatus` VARCHAR(50) NOT NULL DEFAULT 'SYNCED',
-                    `UserServiceVersion` INT NULL,
-                    `IsActive` BOOLEAN NOT NULL DEFAULT TRUE,
-                    `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    `UpdatedAt` DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
-                    INDEX `idx_customer_cache_user` (`UserId`),
-                    INDEX `idx_customer_cache_email` (`Email`),
-                    INDEX `idx_customer_cache_active` (`IsActive`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-                COMMENT='Cache customer từ Users Service';
-            ");
-
-            // ====================================================================
-            // 18. CUSTOMER_SYNC_LOG - Log đồng bộ customer
+            // 15. CUSTOMER_SYNC_LOG - Log đồng bộ customer
             // ====================================================================
             Console.WriteLine("Creating table: customer_sync_log");
             await connection.ExecuteAsync(@"
@@ -615,7 +583,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             ");
 
                 _tablesCreated = true;
-                Console.WriteLine("✓ Created all 18 Contracts database tables successfully");
+                Console.WriteLine("✓ Created all 17 Contracts database tables successfully");
             }
             catch (Exception ex)
             {

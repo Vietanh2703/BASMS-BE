@@ -4,7 +4,7 @@ namespace Contracts.API.Consumers;
 
 /// <summary>
 /// Consumer nhận UserUpdatedEvent từ Users Service
-/// Cập nhật customer cache
+/// Log customer update sync
 /// </summary>
 public class UserUpdatedConsumer : IConsumer<UserUpdatedEvent>
 {
@@ -33,40 +33,77 @@ public class UserUpdatedConsumer : IConsumer<UserUpdatedEvent>
         {
             using var connection = await _dbFactory.CreateConnectionAsync();
 
-            // Check if customer cache exists
-            var existingCache = await connection.GetAsync<CustomerCache>(@event.UserId);
+            // Check if customer exists
+            var existingCustomer = await connection.QueryFirstOrDefaultAsync<Customer>(
+                "SELECT * FROM customers WHERE UserId = @UserId AND IsDeleted = 0 LIMIT 1",
+                new { UserId = @event.UserId });
 
-            if (existingCache == null)
+            if (existingCustomer == null)
             {
                 _logger.LogInformation(
-                    "Customer cache not found for User {UserId} - skipping update",
+                    "Customer not found for User {UserId} - skipping update",
                     @event.UserId);
                 return;
             }
 
-            // Update customer cache
-            existingCache.Email = @event.Email;
-            existingCache.FullName = @event.FullName;
-            existingCache.Phone = @event.Phone;
-            existingCache.AvatarUrl = @event.AvatarUrl;
-            existingCache.Address = @event.Address;
-            existingCache.LastSyncedAt = DateTime.UtcNow;
-            existingCache.SyncStatus = "SYNCED";
-            existingCache.UserServiceVersion = @event.Version;
-            existingCache.UpdatedAt = DateTime.UtcNow;
+            // Update customer record if needed
+            bool customerUpdated = false;
+            var oldValues = new Dictionary<string, object?>();
+            var newValues = new Dictionary<string, object?>();
 
-            await connection.UpdateAsync(existingCache);
+            if (@event.ChangedFields.Contains("Email") && existingCustomer.Email != @event.Email)
+            {
+                oldValues["Email"] = existingCustomer.Email;
+                newValues["Email"] = @event.Email;
+                existingCustomer.Email = @event.Email;
+                customerUpdated = true;
+            }
 
-            // Log successful sync
+            if (@event.ChangedFields.Contains("Phone") && existingCustomer.Phone != @event.Phone)
+            {
+                oldValues["Phone"] = existingCustomer.Phone;
+                newValues["Phone"] = @event.Phone;
+                existingCustomer.Phone = @event.Phone ?? "";
+                customerUpdated = true;
+            }
+
+            if (@event.ChangedFields.Contains("Address") && existingCustomer.Address != @event.Address)
+            {
+                oldValues["Address"] = existingCustomer.Address;
+                newValues["Address"] = @event.Address;
+                existingCustomer.Address = @event.Address ?? "";
+                customerUpdated = true;
+            }
+
+            if (@event.ChangedFields.Contains("FullName") && existingCustomer.ContactPersonName != @event.FullName)
+            {
+                oldValues["ContactPersonName"] = existingCustomer.ContactPersonName;
+                newValues["ContactPersonName"] = @event.FullName;
+                existingCustomer.ContactPersonName = @event.FullName;
+                customerUpdated = true;
+            }
+
+            if (customerUpdated)
+            {
+                existingCustomer.UpdatedAt = DateTime.UtcNow;
+                await connection.UpdateAsync(existingCustomer);
+                _logger.LogInformation(
+                    "✓ Updated customer record for User {UserId}",
+                    @event.UserId);
+            }
+
+            // Log sync
             var log = new CustomerSyncLog
             {
                 Id = Guid.NewGuid(),
                 UserId = @event.UserId,
                 SyncType = "UPDATE",
                 SyncStatus = "SUCCESS",
-                FieldsChanged = @event.ChangedFields,
+                FieldsChanged = System.Text.Json.JsonSerializer.Serialize(@event.ChangedFields),
+                OldValues = oldValues.Count > 0 ? System.Text.Json.JsonSerializer.Serialize(oldValues) : null,
+                NewValues = newValues.Count > 0 ? System.Text.Json.JsonSerializer.Serialize(newValues) : null,
                 SyncInitiatedBy = "WEBHOOK",
-                UserServiceVersionBefore = existingCache.UserServiceVersion ?? 0,
+                RetryCount = 0,
                 UserServiceVersionAfter = @event.Version,
                 SyncStartedAt = syncStarted,
                 SyncCompletedAt = DateTime.UtcNow,
@@ -77,7 +114,7 @@ public class UserUpdatedConsumer : IConsumer<UserUpdatedEvent>
             await connection.InsertAsync(log);
 
             _logger.LogInformation(
-                "✓ Successfully updated customer cache for User {UserId}",
+                "✓ Successfully logged customer update for User {UserId}",
                 @event.UserId);
         }
         catch (Exception ex)

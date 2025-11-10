@@ -4,7 +4,7 @@ namespace Contracts.API.Consumers;
 
 /// <summary>
 /// Consumer nhận UserDeletedEvent từ Users Service
-/// Đánh dấu customer cache là inactive (soft delete)
+/// Đánh dấu customer là deleted (soft delete) và log sync
 /// </summary>
 public class UserDeletedConsumer : IConsumer<UserDeletedEvent>
 {
@@ -33,24 +33,25 @@ public class UserDeletedConsumer : IConsumer<UserDeletedEvent>
         {
             using var connection = await _dbFactory.CreateConnectionAsync();
 
-            // Check if customer cache exists
-            var existingCache = await connection.GetAsync<CustomerCache>(@event.UserId);
+            // Check if customer exists
+            var existingCustomer = await connection.QueryFirstOrDefaultAsync<Customer>(
+                "SELECT * FROM customers WHERE UserId = @UserId AND IsDeleted = 0 LIMIT 1",
+                new { UserId = @event.UserId });
 
-            if (existingCache == null)
+            if (existingCustomer == null)
             {
                 _logger.LogInformation(
-                    "Customer cache not found for User {UserId} - skipping delete",
+                    "Customer not found for User {UserId} - skipping delete",
                     @event.UserId);
                 return;
             }
 
-            // Soft delete - set IsActive = false
-            existingCache.IsActive = false;
-            existingCache.LastSyncedAt = DateTime.UtcNow;
-            existingCache.SyncStatus = "SYNCED";
-            existingCache.UpdatedAt = DateTime.UtcNow;
+            // Soft delete - set IsDeleted = true, Status = inactive
+            existingCustomer.IsDeleted = true;
+            existingCustomer.Status = "inactive";
+            existingCustomer.UpdatedAt = DateTime.UtcNow;
 
-            await connection.UpdateAsync(existingCache);
+            await connection.UpdateAsync(existingCustomer);
 
             // Log successful sync
             var log = new CustomerSyncLog
@@ -59,7 +60,11 @@ public class UserDeletedConsumer : IConsumer<UserDeletedEvent>
                 UserId = @event.UserId,
                 SyncType = "DELETE",
                 SyncStatus = "SUCCESS",
+                FieldsChanged = System.Text.Json.JsonSerializer.Serialize(new[] { "IsDeleted", "Status" }),
+                OldValues = System.Text.Json.JsonSerializer.Serialize(new { IsDeleted = false, Status = existingCustomer.Status }),
+                NewValues = System.Text.Json.JsonSerializer.Serialize(new { IsDeleted = true, Status = "inactive" }),
                 SyncInitiatedBy = "WEBHOOK",
+                RetryCount = 0,
                 SyncStartedAt = syncStarted,
                 SyncCompletedAt = DateTime.UtcNow,
                 SyncDurationMs = (int)(DateTime.UtcNow - syncStarted).TotalMilliseconds,
@@ -69,7 +74,7 @@ public class UserDeletedConsumer : IConsumer<UserDeletedEvent>
             await connection.InsertAsync(log);
 
             _logger.LogInformation(
-                "✓ Successfully marked customer cache as inactive for User {UserId}",
+                "✓ Successfully marked customer as deleted for User {UserId}",
                 @event.UserId);
         }
         catch (Exception ex)

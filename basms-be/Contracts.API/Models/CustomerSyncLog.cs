@@ -26,9 +26,9 @@ public class CustomerSyncLog
     public string SyncStatus { get; set; } = string.Empty;
 
     /// <summary>
-    /// Fields được thay đổi (JSON array)
+    /// Fields được thay đổi (JSON array string)
     /// </summary>
-    public List<string> FieldsChanged { get; set; }
+    public string? FieldsChanged { get; set; }
 
     /// <summary>
     /// Giá trị cũ (JSON)

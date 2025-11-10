@@ -4,7 +4,7 @@ namespace Contracts.API.Consumers;
 
 /// <summary>
 /// Consumer nhận UserCreatedEvent từ Users Service
-/// Chỉ lưu cache cho users có role = "customer"
+/// Chỉ xử lý users có role = "customer"
 /// </summary>
 public class UserCreatedConsumer : IConsumer<UserCreatedEvent>
 {
@@ -40,7 +40,7 @@ public class UserCreatedConsumer : IConsumer<UserCreatedEvent>
         if (@event.RoleName.ToLower() != "customer")
         {
             _logger.LogInformation(
-                "User {UserId} has role {RoleName} - not caching (only customer role is cached)",
+                "User {UserId} has role {RoleName} - skipping (only customer role is processed)",
                 @event.UserId,
                 @event.RoleName);
             return;
@@ -53,9 +53,6 @@ public class UserCreatedConsumer : IConsumer<UserCreatedEvent>
         try
         {
             using var connection = await _dbFactory.CreateConnectionAsync();
-
-            // Tạo customer cache
-            await CreateCustomerCacheAsync(connection, @event);
 
             // Kiểm tra xem đã có customer record chưa
             var existingCustomer = await connection.QueryFirstOrDefaultAsync<Customer>(
@@ -76,7 +73,7 @@ public class UserCreatedConsumer : IConsumer<UserCreatedEvent>
             }
 
             // Log successful sync
-            await LogSyncAsync(connection, @event, syncStarted, "SUCCESS", null);
+            await LogSyncAsync(connection, @event, syncStarted, "SUCCESS", null, existingCustomer != null);
 
             _logger.LogInformation(
                 "✓ Successfully synced customer {UserId} - {Email}",
@@ -91,46 +88,10 @@ public class UserCreatedConsumer : IConsumer<UserCreatedEvent>
 
             // Log failed sync
             using var connection = await _dbFactory.CreateConnectionAsync();
-            await LogSyncAsync(connection, @event, syncStarted, "FAILED", ex.Message);
+            await LogSyncAsync(connection, @event, syncStarted, "FAILED", ex.Message, false);
 
             throw; // Re-throw to trigger MassTransit retry
         }
-    }
-
-    private async Task CreateCustomerCacheAsync(IDbConnection connection, UserCreatedEvent @event)
-    {
-        var customerCache = new CustomerCache
-        {
-            Id = Guid.NewGuid(),
-            UserId = @event.UserId,
-            FirebaseUid = @event.FirebaseUid,
-            Email = @event.Email,
-            FullName = @event.FullName,
-            Phone = @event.Phone,
-            AvatarUrl = @event.AvatarUrl,
-            RoleId = @event.RoleId,
-            RoleName = @event.RoleName,
-
-            // Customer specific (có thể null nếu chưa có)
-            CompanyName = null,
-            Address = @event.Address,
-            Industry = null,
-
-            // Sync metadata
-            LastSyncedAt = DateTime.UtcNow,
-            SyncStatus = "SYNCED",
-            UserServiceVersion = @event.Version,
-
-            IsActive = true,
-            CreatedAt = @event.CreatedAt
-        };
-
-        await connection.InsertAsync(customerCache);
-
-        _logger.LogInformation(
-            "Created customer cache for User {UserId}: {Email}",
-            @event.UserId,
-            customerCache.Email);
     }
 
     private async Task CreateCustomerAsync(IDbConnection connection, UserCreatedEvent @event)
@@ -222,15 +183,32 @@ public class UserCreatedConsumer : IConsumer<UserCreatedEvent>
         UserCreatedEvent @event,
         DateTime syncStarted,
         string status,
-        string? errorMessage)
+        string? errorMessage,
+        bool customerAlreadyExists)
     {
+        string? fieldsChangedJson = null;
+        if (!customerAlreadyExists)
+        {
+            fieldsChangedJson = System.Text.Json.JsonSerializer.Serialize(new[] { "CompanyName", "Email", "Phone", "Address", "ContactPersonName" });
+        }
+
         var log = new CustomerSyncLog
         {
             Id = Guid.NewGuid(),
             UserId = @event.UserId,
             SyncType = "CREATE",
             SyncStatus = status,
+            FieldsChanged = fieldsChangedJson,
+            NewValues = status == "SUCCESS" && !customerAlreadyExists ? System.Text.Json.JsonSerializer.Serialize(new
+            {
+                CompanyName = @event.FullName,
+                Email = @event.Email,
+                Phone = @event.Phone,
+                Address = @event.Address,
+                ContactPersonName = @event.FullName
+            }) : null,
             SyncInitiatedBy = "WEBHOOK",
+            RetryCount = 0,
             UserServiceVersionAfter = @event.Version,
             ErrorMessage = errorMessage,
             SyncStartedAt = syncStarted,

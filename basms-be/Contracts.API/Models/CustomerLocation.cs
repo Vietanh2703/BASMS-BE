@@ -139,16 +139,6 @@ public class CustomerLocation
     /// </summary>
     public int MinimumGuardsRequired { get; set; } = 1;
 
-    /// <summary>
-    /// Hướng dẫn vào cửa: "Gặp lễ tân tầng 1, đưa giấy tờ"
-    /// </summary>
-    public string? AccessInstructions { get; set; }
-
-    /// <summary>
-    /// Yêu cầu đặc biệt: "Phải mang bộ đàm, đèn pin"
-    /// </summary>
-    public string? SpecialRequirements { get; set; }
-
     // ============================================================================
     // TRẠNG THÁI
     // ============================================================================
