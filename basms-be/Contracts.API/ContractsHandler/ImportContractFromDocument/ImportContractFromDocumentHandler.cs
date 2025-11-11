@@ -826,32 +826,76 @@ internal class ImportContractFromDocumentHandler(
     {
         var patterns = new[]
         {
+            // Pattern 1: Số thứ tự/năm/HĐDV-BV/HCM/tên đối tác (001/2025/HDDV-BV/HCM/NVHSV)
+            @"(?:Số\s*HĐ|Hợp\s*đồng\s*số|Contract\s*No\.?)\s*[:：]?\s*(\d{3,4}/\d{4}/[A-Z\-]+/[A-Z]+/[A-Z]+)",
+        
+            // Pattern 2: Fallback - match trực tiếp format XXX/YYYY/HDDV-BV/...
+            @"(\d{3,4}/\d{4}/HĐDV-BV/[A-Z]+/[A-Z]+)",
+        
+            // Pattern 3: Format cũ - HĐ số hoặc Contract No
             @"(?:Số\s*HĐ|Hợp\s*đồng\s*số|Contract\s*No\.?)\s*[:：]\s*([A-Z0-9\-/]+)",
+        
+            // Pattern 4: HĐ với mã
             @"HĐ\s*[-:]?\s*([A-Z0-9\-/]{5,})",
+        
+            // Pattern 5: CTR format
             @"CTR[-\s]?(\d{4})[-\s]?(\d{3})"
         };
 
         foreach (var pattern in patterns)
         {
             var match = Regex.Match(text, pattern, RegexOptions.IgnoreCase);
-            if (match.Success) return match.Groups[1].Value.Trim();
+            if (match.Success)
+            {
+                // Với pattern 5 (CTR), cần ghép groups
+                if (match.Groups.Count > 2 && !string.IsNullOrEmpty(match.Groups[2].Value))
+                {
+                    return $"{match.Groups[1].Value}-{match.Groups[2].Value}".Trim();
+                }
+            
+                return match.Groups[1].Value.Trim();
+            }
         }
+    
         return null;
     }
 
+
     private (DateTime? startDate, DateTime? endDate) ExtractDates(string text)
     {
-        var pattern = @"(?:Từ\s*ngày|From)\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}).*?(?:đến\s*ngày|to)\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})";
-        var match = Regex.Match(text, pattern, RegexOptions.IgnoreCase);
+        // Mở rộng patterns để cover nhiều trường hợp hơn
+        var patterns = new[]
+        {
+            // Pattern 1: "có hiệu lực từ ngày ... đến hết ngày ..."
+            @"(?:có\s+hiệu\s+lực\s+)?từ\s+ngày\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})\s+đến\s+(?:hết\s+)?ngày\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})",
+        
+            // Pattern 2: "Từ ngày ... đến ngày ..."
+            @"(?:Từ|từ)\s+ngày\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})\s+đến\s+ngày\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})",
+        
+            // Pattern 3: English format
+            @"(?:From|from)\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})\s+(?:to|until)\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})",
+        
+            // Pattern 4: "Bắt đầu từ ... kết thúc ..."
+            @"(?:Bắt\s+đầu\s+từ|bắt\s+đầu\s+từ)\s+(?:ngày\s+)?(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})\s+(?:kết\s+thúc|đến)\s+(?:ngày\s+)?(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})"
+        };
 
         DateTime? startDate = null, endDate = null;
-        if (match.Success)
+
+        foreach (var pattern in patterns)
         {
-            if (DateTime.TryParse(match.Groups[1].Value, out var start))
-                startDate = start;
-            if (DateTime.TryParse(match.Groups[2].Value, out var end))
-                endDate = end;
+            var match = Regex.Match(text, pattern, RegexOptions.IgnoreCase);
+            if (match.Success)
+            {
+                if (DateTime.TryParse(match.Groups[1].Value, out var start))
+                    startDate = start;
+                if (DateTime.TryParse(match.Groups[2].Value, out var end))
+                    endDate = end;
+            
+                if (startDate.HasValue && endDate.HasValue)
+                    break; // Tìm thấy thì dừng
+            }
         }
+
         return (startDate, endDate);
     }
 
@@ -865,8 +909,8 @@ internal class ImportContractFromDocumentHandler(
         string searchText = text;
         if (dieu2Index >= 0)
         {
-            // Lấy khoảng 800 ký tự sau "ĐIỀU 2" để tìm thông tin thời hạn
-            searchText = text.Substring(dieu2Index, Math.Min(800, text.Length - dieu2Index));
+            // Lấy khoảng 1000 ký tự sau "ĐIỀU 2" để tìm thông tin thời hạn (tăng từ 800)
+            searchText = text.Substring(dieu2Index, Math.Min(1000, text.Length - dieu2Index));
             logger.LogInformation("📋 Found ĐIỀU 2 section for contract period extraction");
         }
 
@@ -874,17 +918,37 @@ internal class ImportContractFromDocumentHandler(
         string? duration = null;
 
         // Pattern 1: "Từ ngày DD/MM/YYYY đến ngày DD/MM/YYYY"
-        var datePattern = @"(?:Từ\s*ngày|từ\s*ngày|Bắt\s*đầu\s*từ)\s*[:\s]*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}).*?(?:đến\s*ngày|đến|tới\s*ngày)\s*[:\s]*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})";
-        var dateMatch = Regex.Match(searchText, datePattern, RegexOptions.IgnoreCase);
-
-        if (dateMatch.Success)
+        var datePatterns = new[]
         {
-            if (DateTime.TryParse(dateMatch.Groups[1].Value, out var start))
-                startDate = start;
-            if (DateTime.TryParse(dateMatch.Groups[2].Value, out var end))
-                endDate = end;
+            // Match với "có hiệu lực từ ngày ... đến hết ngày ..."
+            @"(?:có\s+hiệu\s+lực\s+)?từ\s+ngày\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})\s+đến\s+(?:hết\s+)?ngày\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})",
+        
+            // Match với "Từ ngày ... đến ngày ..."
+            @"(?:Từ|từ)\s+ngày\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})\s+đến\s+ngày\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})",
+        
+            // Match với "Bắt đầu từ ngày ... đến ngày ..."
+            @"(?:Bắt\s+đầu\s+từ|bắt\s+đầu\s+từ)\s+ngày\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})\s+đến\s+(?:ngày\s+)?(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})",
+        
+            // Match với "hiệu lực kể từ ... đến ..."
+            @"(?:hiệu\s+lực\s+)?kể\s+từ\s+(?:ngày\s+)?(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})\s+đến\s+(?:hết\s+)?(?:ngày\s+)?(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})"
+        };
+        foreach (var pattern in datePatterns)
+        {
+            var dateMatch = Regex.Match(searchText, pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        
+            if (dateMatch.Success)
+            {
+                if (DateTime.TryParse(dateMatch.Groups[1].Value, out var start))
+                    startDate = start;
+                if (DateTime.TryParse(dateMatch.Groups[2].Value, out var end))
+                    endDate = end;
 
-            logger.LogInformation("✓ Extracted period dates: {Start} to {End}", startDate, endDate);
+                if (startDate.HasValue && endDate.HasValue)
+                {
+                    logger.LogInformation("✓ Extracted period dates: {Start} to {End}", startDate, endDate);
+                    break; // Tìm thấy thì dừng
+                }
+            }
         }
 
         // Pattern 2: "Thời hạn X tháng/năm" hoặc "Hợp đồng có hiệu lực X tháng/năm"

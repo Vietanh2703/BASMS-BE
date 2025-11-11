@@ -3,7 +3,6 @@ namespace Contracts.API.Models;
 /// <summary>
 /// ĐIỀU KIỆN LÀM VIỆC TRONG HỢP ĐỒNG
 /// Định nghĩa các quy định về giờ làm, ca trực, nghỉ ngơi, và các điều kiện làm việc khác
-/// KHÔNG BAO GỒM: Lương, hệ số lương, phụ cấp (thuộc về Payroll Service)
 /// </summary>
 [Table("contract_working_conditions")]
 public class ContractWorkingConditions
@@ -35,6 +34,57 @@ public class ContractWorkingConditions
     /// </summary>
     public decimal? StandardHoursPerMonth { get; set; }
 
+//     // ============================================================================
+// // GIỚI HẠN RIÊNG CHO NỮ NHÂN VIÊN
+// // ============================================================================
+//
+//     /// <summary>
+//     /// Số giờ làm việc tối đa/ngày cho nữ: 8, 10
+//     /// Theo luật lao động VN: không quá 10h/ngày
+//     /// </summary>
+//     public decimal? MaxWorkingHoursPerDayForFemale { get; set; }
+//
+//     /// <summary>
+//     /// Số giờ tăng ca tối đa/ngày cho nữ: 2, 3
+//     /// Theo luật lao động VN: không quá 30h/tháng
+//     /// </summary>
+//     public decimal? MaxOvertimeHoursPerDayForFemale { get; set; }
+//
+//     /// <summary>
+//     /// Số giờ tăng ca tối đa/tháng cho nữ: 20, 30
+//     /// Theo luật lao động VN: không quá 30h/tháng
+//     /// </summary>
+//     public decimal? MaxOvertimeHoursPerMonthForFemale { get; set; }
+//
+//     /// <summary>
+//     /// Số giờ tăng ca tối đa/năm cho nữ: 150, 200
+//     /// Theo luật lao động VN: có quy định riêng cho lao động nữ
+//     /// </summary>
+//     public decimal? MaxOvertimeHoursPerYearForFemale { get; set; }
+//
+//     /// <summary>
+//     /// Cấm làm ca đêm cho nữ? true/false
+//     /// Theo luật lao động VN: có giới hạn với nữ mang thai, nuôi con dưới 12 tháng
+//     /// </summary>
+//     public bool ProhibitNightShiftForFemale { get; set; }
+//
+//     /// <summary>
+//     /// Cấm tăng ca cho nữ mang thai? true/false
+//     /// Theo luật lao động VN: không được bắt buộc
+//     /// </summary>
+//     public bool ProhibitOvertimeForPregnantFemale { get; set; }
+//
+//     /// <summary>
+//     /// Cấm tăng ca cho nữ nuôi con dưới 12 tháng? true/false
+//     /// Theo luật lao động VN: không được bắt buộc
+//     /// </summary>
+//     public bool ProhibitOvertimeForNursingMother { get; set; }
+//
+//     /// <summary>
+//     /// Thời gian nghỉ cho nữ giữa ca (phút): 15, 30
+//     /// Theo luật lao động VN: ít nhất 30 phút nghỉ khi làm việc 8h
+//     /// </summary>
+//     public int? FemaleRestBreakMinutes { get; set; }
     // ============================================================================
     // GIỚI HẠN TĂNG CA
     // ============================================================================
