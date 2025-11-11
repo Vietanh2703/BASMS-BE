@@ -20,3 +20,4 @@ global using Amazon.S3.Transfer;
 global using Microsoft.Extensions.Options;
 global using Contracts.API.Extensions;
 global using Microsoft.AspNetCore.Mvc;
+global using System.Text.Json;

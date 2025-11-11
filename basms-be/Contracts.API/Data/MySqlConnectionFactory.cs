@@ -172,26 +172,32 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     `HolidayDate` DATE UNIQUE NOT NULL,
                     `HolidayName` VARCHAR(200) NOT NULL,
                     `HolidayNameEn` VARCHAR(200) NULL,
-                    `HolidayCategory` VARCHAR(50) NOT NULL COMMENT 'national, tet, regional...',
-                    `IsTetPeriod` BOOLEAN NOT NULL DEFAULT FALSE,
-                    `TetDayNumber` INT NULL COMMENT '1=Mùng 1, 2=Mùng 2...',
-                    `IsOfficialHoliday` BOOLEAN NOT NULL DEFAULT TRUE,
-                    `IsObserved` BOOLEAN NOT NULL DEFAULT TRUE,
-                    `OriginalDate` DATE NULL,
-                    `ObservedDate` DATE NULL,
+                    `HolidayCategory` VARCHAR(50) NOT NULL COMMENT 'national, tet, regional, substitute',
+                    `IsTetPeriod` BOOLEAN NOT NULL DEFAULT FALSE COMMENT 'Có phải ngày Tết không?',
+                    `IsTetHoliday` BOOLEAN NOT NULL DEFAULT FALSE COMMENT 'Có phải kỳ nghỉ Tết chính (Tết Nguyên Đán) không?',
+                    `TetDayNumber` INT NULL COMMENT '1=Mùng 1, 2=Mùng 2... (thường 1-5)',
+                    `HolidayStartDate` DATE NULL COMMENT 'Ngày bắt đầu nghỉ (cho kỳ nghỉ dài ngày như Tết)',
+                    `HolidayEndDate` DATE NULL COMMENT 'Ngày kết thúc nghỉ (cho kỳ nghỉ dài ngày như Tết)',
+                    `TotalHolidayDays` INT NULL COMMENT 'Tổng số ngày nghỉ (bao gồm cả ngày nghỉ bù)',
+                    `IsOfficialHoliday` BOOLEAN NOT NULL DEFAULT TRUE COMMENT 'Ngày nghỉ chính thức theo luật',
+                    `IsObserved` BOOLEAN NOT NULL DEFAULT TRUE COMMENT 'Có được thực tế nghỉ không?',
+                    `OriginalDate` DATE NULL COMMENT 'Ngày gốc (nếu bị dời do trùng cuối tuần)',
+                    `ObservedDate` DATE NULL COMMENT 'Ngày thực tế nghỉ (sau khi dời)',
                     `AppliesNationwide` BOOLEAN NOT NULL DEFAULT TRUE,
-                    `AppliesToRegions` VARCHAR(255) NULL COMMENT 'JSON array',
-                    `StandardWorkplacesClosed` BOOLEAN NOT NULL DEFAULT TRUE,
-                    `EssentialServicesOperating` BOOLEAN NOT NULL DEFAULT TRUE,
+                    `AppliesToRegions` VARCHAR(255) NULL COMMENT 'JSON array: [""TP.HCM"", ""Hà Nội""]',
+                    `StandardWorkplacesClosed` BOOLEAN NOT NULL DEFAULT TRUE COMMENT 'Các công sở thường đóng cửa không?',
+                    `EssentialServicesOperating` BOOLEAN NOT NULL DEFAULT TRUE COMMENT 'Dịch vụ thiết yếu vẫn hoạt động?',
                     `Description` TEXT NULL,
                     `Year` INT NOT NULL,
                     `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     `UpdatedAt` DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
                     INDEX `idx_holiday_date` (`HolidayDate`),
                     INDEX `idx_holiday_year_cat` (`Year`, `HolidayCategory`),
-                    INDEX `idx_holiday_tet` (`IsTetPeriod`, `Year`)
+                    INDEX `idx_holiday_tet` (`IsTetPeriod`, `Year`),
+                    INDEX `idx_holiday_tet_main` (`IsTetHoliday`, `Year`),
+                    INDEX `idx_holiday_date_range` (`HolidayStartDate`, `HolidayEndDate`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-                COMMENT='Ngày lễ quốc gia Việt Nam';
+                COMMENT='Ngày lễ quốc gia Việt Nam - bao gồm Tết và các ngày lễ khác';
             ");
 
             // ====================================================================
@@ -297,7 +303,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                 CREATE TABLE IF NOT EXISTS `contract_shift_schedules` (
                     `Id` CHAR(36) PRIMARY KEY,
                     `ContractId` CHAR(36) NOT NULL,
-                    `ContractLocationId` CHAR(36) NULL,
+                    `LocationId` CHAR(36) NULL COMMENT 'Link trực tiếp đến customer_locations.Id',
                     `ScheduleName` VARCHAR(255) NOT NULL,
                     `ScheduleType` VARCHAR(50) NOT NULL DEFAULT 'regular',
                     `ShiftStartTime` TIME NOT NULL,
@@ -334,10 +340,10 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     `UpdatedAt` DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
                     `CreatedBy` CHAR(36) NULL,
                     INDEX `idx_schedule_contract` (`ContractId`, `IsActive`),
-                    INDEX `idx_schedule_location` (`ContractLocationId`, `IsActive`),
+                    INDEX `idx_schedule_location` (`LocationId`, `IsActive`),
                     INDEX `idx_schedule_dates` (`EffectiveFrom`, `EffectiveTo`),
                     FOREIGN KEY (`ContractId`) REFERENCES `contracts`(`Id`) ON DELETE CASCADE,
-                    FOREIGN KEY (`ContractLocationId`) REFERENCES `contract_locations`(`Id`) ON DELETE SET NULL
+                    FOREIGN KEY (`LocationId`) REFERENCES `customer_locations`(`Id`) ON DELETE SET NULL
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 COMMENT='Mẫu ca shift trong hợp đồng - để tự động tạo shifts';
             ");
@@ -460,78 +466,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                 COMMENT='Log tự động tạo shifts - debugging và audit';
             ");
 
-            // ====================================================================
-            // 13. CONTRACT_WORKING_CONDITIONS - Điều kiện làm việc
-            // ====================================================================
-            Console.WriteLine("Creating table: contract_working_conditions");
-            await connection.ExecuteAsync(@"
-                CREATE TABLE IF NOT EXISTS `contract_working_conditions` (
-                    `Id` CHAR(36) PRIMARY KEY,
-                    `ContractId` CHAR(36) NOT NULL,
-
-                    -- Giờ làm việc chuẩn
-                    `StandardHoursPerDay` DECIMAL(5,2) NULL COMMENT 'Số giờ làm việc tiêu chuẩn/ngày: 8, 9, 12',
-                    `StandardHoursPerWeek` DECIMAL(5,2) NULL COMMENT 'Số giờ làm việc tiêu chuẩn/tuần: 40, 44, 48',
-                    `StandardHoursPerMonth` DECIMAL(5,2) NULL COMMENT 'Số giờ làm việc tiêu chuẩn/tháng: 160, 176, 192',
-
-                    -- Giới hạn tăng ca
-                    `MaxOvertimeHoursPerDay` DECIMAL(5,2) NULL COMMENT 'Số giờ tăng ca tối đa/ngày: 4, 6, 8',
-                    `MaxOvertimeHoursPerMonth` DECIMAL(5,2) NULL COMMENT 'Số giờ tăng ca tối đa/tháng: 30, 40, 60',
-                    `MaxOvertimeHoursPerYear` DECIMAL(5,2) NULL COMMENT 'Số giờ tăng ca tối đa/năm: 200, 300',
-                    `AllowOvertimeOnWeekends` BOOLEAN NOT NULL DEFAULT TRUE,
-                    `AllowOvertimeOnHolidays` BOOLEAN NOT NULL DEFAULT TRUE,
-                    `RequireOvertimeApproval` BOOLEAN NOT NULL DEFAULT TRUE,
-
-                    -- Ca đêm
-                    `NightShiftStartTime` TIME NULL COMMENT 'Giờ bắt đầu ca đêm: 22:00',
-                    `NightShiftEndTime` TIME NULL COMMENT 'Giờ kết thúc ca đêm: 06:00',
-                    `MinimumNightShiftHours` DECIMAL(5,2) NULL COMMENT 'Số giờ tối thiểu để tính ca đêm: 2, 4',
-
-                    -- Ca trực liên tục
-                    `AllowContinuous24hShift` BOOLEAN NOT NULL DEFAULT FALSE,
-                    `AllowContinuous48hShift` BOOLEAN NOT NULL DEFAULT FALSE,
-                    `CountSleepTimeInContinuousShift` BOOLEAN NOT NULL DEFAULT FALSE,
-                    `SleepTimeCalculationRatio` DECIMAL(5,2) NULL COMMENT 'Tỷ lệ tính giờ ngủ: 0.5, 0.7',
-                    `MinimumRestHoursBetweenShifts` DECIMAL(5,2) NULL COMMENT 'Số giờ nghỉ tối thiểu giữa 2 ca: 8, 11, 12',
-
-                    -- Ngày nghỉ & Ngày lễ
-                    `AnnualLeaveDays` INT NULL COMMENT 'Số ngày nghỉ phép/năm: 12, 14, 15',
-                    `TetHolidayDates` TEXT NULL COMMENT 'JSON array của ngày Tết',
-                    `LocalHolidaysList` TEXT NULL COMMENT 'JSON array của ngày lễ địa phương',
-                    `HolidayWeekendCalculationMethod` VARCHAR(50) NULL COMMENT 'max, cumulative, replace',
-                    `SaturdayAsRegularWorkday` BOOLEAN NOT NULL DEFAULT FALSE,
-
-                    -- Chính sách vi phạm
-                    `OvertimeLimitViolationPolicy` VARCHAR(50) NULL COMMENT 'block, warning, compensate',
-                    `UnapprovedOvertimePolicy` VARCHAR(50) NULL COMMENT 'block, penalty, allow',
-                    `InsufficientRestPolicy` VARCHAR(50) NULL COMMENT 'block, compensate, allow',
-
-                    -- Ca đặc biệt
-                    `AllowEventShift` BOOLEAN NOT NULL DEFAULT FALSE,
-                    `AllowEmergencyCall` BOOLEAN NOT NULL DEFAULT TRUE,
-                    `AllowReplacementShift` BOOLEAN NOT NULL DEFAULT TRUE,
-                    `MinimumEmergencyNoticeMinutes` INT NULL COMMENT 'Thời gian thông báo tối thiểu: 30, 60, 120',
-
-                    -- Ghi chú
-                    `GeneralNotes` TEXT NULL,
-                    `SpecialTerms` TEXT NULL,
-
-                    -- Trạng thái & Thời gian
-                    `IsActive` BOOLEAN NOT NULL DEFAULT TRUE,
-                    `EffectiveFrom` DATETIME NOT NULL,
-                    `EffectiveTo` DATETIME NULL,
-                    `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    `UpdatedAt` DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
-                    `CreatedBy` CHAR(36) NULL,
-                    `UpdatedBy` CHAR(36) NULL,
-
-                    INDEX `idx_wc_contract` (`ContractId`, `IsActive`),
-                    INDEX `idx_wc_effective` (`EffectiveFrom`, `EffectiveTo`),
-                    FOREIGN KEY (`ContractId`) REFERENCES `contracts`(`Id`) ON DELETE CASCADE
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-                COMMENT='Điều kiện làm việc: giờ làm, tăng ca, ca đêm, nghỉ phép';
-            ");
-
+            
             // ====================================================================
             // 14. ATTENDANCE_SYNC_LOG - Log đồng bộ attendance
             // ====================================================================

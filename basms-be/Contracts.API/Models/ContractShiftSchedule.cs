@@ -17,9 +17,10 @@ public class ContractShiftSchedule
     public Guid ContractId { get; set; }
 
     /// <summary>
-    /// Áp dụng cho địa điểm cụ thể nào? (NULL = all locations)
+    /// Áp dụng cho địa điểm cụ thể nào? (NULL = all locations in contract)
+    /// Link trực tiếp đến CustomerLocation.Id
     /// </summary>
-    public Guid? ContractLocationId { get; set; }
+    public Guid? LocationId { get; set; }
 
     /// <summary>
     /// Tên mẫu ca: "Morning Shift", "Night Patrol", "Weekend Coverage"

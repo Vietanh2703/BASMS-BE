@@ -41,9 +41,33 @@ public class PublicHoliday
     public bool IsTetPeriod { get; set; } = false;
 
     /// <summary>
+    /// Có phải kỳ nghỉ Tết chính (Tết Nguyên Đán) không? (1 = true, 0 = false)
+    /// Dùng để phân biệt Tết Nguyên Đán với các ngày lễ khác
+    /// </summary>
+    public bool IsTetHoliday { get; set; } = false;
+
+    /// <summary>
     /// Ngày thứ mấy của Tết: 1=Mùng 1, 2=Mùng 2... (thường 1-5)
     /// </summary>
     public int? TetDayNumber { get; set; }
+
+    /// <summary>
+    /// Ngày bắt đầu nghỉ (cho kỳ nghỉ dài ngày như Tết)
+    /// Ví dụ: Tết 2025 bắt đầu từ 29/01/2025
+    /// </summary>
+    public DateTime? HolidayStartDate { get; set; }
+
+    /// <summary>
+    /// Ngày kết thúc nghỉ (cho kỳ nghỉ dài ngày như Tết)
+    /// Ví dụ: Tết 2025 kết thúc 04/02/2025
+    /// </summary>
+    public DateTime? HolidayEndDate { get; set; }
+
+    /// <summary>
+    /// Tổng số ngày nghỉ (bao gồm cả ngày nghỉ bù nếu có)
+    /// Ví dụ: Tết 2025 nghỉ 7 ngày (29/01 - 04/02)
+    /// </summary>
+    public int? TotalHolidayDays { get; set; }
 
     // ============================================================================
     // QUY ĐỊNH NGHỈ

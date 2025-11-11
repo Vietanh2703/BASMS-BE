@@ -1,6 +1,3 @@
-using BuildingBlocks.Messaging.Events;
-using System.Text.Json;
-
 namespace Contracts.API.ContractsHandler.ImportContractFromDocument;
 
 // ================================================================
@@ -109,9 +106,9 @@ internal class ImportContractFromDocumentHandler(
             var contactPersonTitle = ExtractContactPersonTitle(rawText); 
             var guardsRequired = ExtractGuardsRequired(rawText);
             var coverageType = ExtractCoverageType(rawText);
-            var shiftSchedules = ExtractShiftSchedules(rawText);
-            var workOnHolidays = CheckWorkOnHolidays(rawText);
-            var workOnWeekends = CheckWorkOnWeekends(rawText);
+
+            // Parse ĐIỀU 3 toàn bộ
+            var dieu3Info = ParseDieu3(rawText, startDate, endDate);
             
             var (locationName, locationAddress) = ExtractLocationDetails(rawText);
             
@@ -277,7 +274,7 @@ internal class ImportContractFromDocumentHandler(
                     DurationMonths = contractTypeInfo.DurationMonths,
                     Status = "draft", // Draft để manager review trước khi activate
                     FollowsCustomerCalendar = true,
-                    WorkOnPublicHolidays = workOnHolidays ?? false,
+                    WorkOnPublicHolidays = dieu3Info.WorkOnPublicHolidays,
                     WorkOnCustomerClosedDays = false,
                     AutoGenerateShifts = contractTypeInfo.AutoGenerateShifts,
                     GenerateShiftsAdvanceDays = contractTypeInfo.GenerateShiftsAdvanceDays,
@@ -306,6 +303,7 @@ internal class ImportContractFromDocumentHandler(
 
                 // 3.3: Tạo Default Location nếu có thông tin guards required
                 var locationIds = new List<Guid>();
+                var scheduleIds = new List<Guid>();
                 if (guardsRequired > 0)
                 {
                     // Lấy địa chỉ location từ ĐIỀU 1, fallback về customer address
@@ -388,144 +386,148 @@ internal class ImportContractFromDocumentHandler(
 
                     await connection.InsertAsync(contractLocation, transaction);
                     logger.LogInformation("Location linked to contract: {LocationId}", location.Id);
+
+                    // 3.4: Tạo Shift Schedules từ ĐIỀU 3 cho location này
+                    foreach (var shiftInfo in dieu3Info.ShiftSchedules)
+                    {
+                        var schedule = new Models.ContractShiftSchedule
+                        {
+                            Id = Guid.NewGuid(),
+                            ContractId = contract.Id,
+                            LocationId = location.Id, // Link tới location
+                            ScheduleName = shiftInfo.ShiftName,
+                            ScheduleType = "regular",
+                            ShiftStartTime = shiftInfo.StartTime,
+                            ShiftEndTime = shiftInfo.EndTime,
+                            CrossesMidnight = shiftInfo.CrossesMidnight,
+                            DurationHours = CalculateDuration(shiftInfo.StartTime, shiftInfo.EndTime),
+                            BreakMinutes = 60, // Default
+                            GuardsPerShift = guardsRequired,
+                            RecurrenceType = "weekly",
+
+                            // Áp dụng T2-T6 (weekdays)
+                            AppliesMonday = true,
+                            AppliesTuesday = true,
+                            AppliesWednesday = true,
+                            AppliesThursday = true,
+                            AppliesFriday = true,
+
+                            // Cuối tuần từ ĐIỀU 3.3
+                            AppliesSaturday = dieu3Info.AppliesSaturday,
+                            AppliesSunday = dieu3Info.AppliesSunday,
+                            AppliesOnWeekends = dieu3Info.AppliesOnWeekends,
+
+                            // Ngày lễ từ ĐIỀU 3.4
+                            AppliesOnPublicHolidays = dieu3Info.WorkOnPublicHolidays,
+                            AppliesOnCustomerHolidays = true,
+
+                            SkipWhenLocationClosed = false, // Vẫn canh khi đóng cửa
+                            RequiresArmedGuard = false,
+                            RequiresSupervisor = false,
+                            MinimumExperienceMonths = 0,
+                            AutoGenerateEnabled = true,
+                            GenerateAdvanceDays = 30,
+                            EffectiveFrom = startDate.Value,
+                            EffectiveTo = endDate,
+                            IsActive = true,
+                            IsDeleted = false,
+                            CreatedAt = DateTime.UtcNow,
+                            CreatedBy = request.CreatedBy
+                        };
+
+                        await connection.InsertAsync(schedule, transaction);
+                        scheduleIds.Add(schedule.Id);
+
+                        logger.LogInformation(
+                            "Shift schedule created: {ScheduleName} ({Start}-{End}) for Location {LocationId} - Sat={Sat}, Sun={Sun}, Weekend={Weekend}, Holiday={Holiday}",
+                            schedule.ScheduleName, schedule.ShiftStartTime, schedule.ShiftEndTime, location.Id,
+                            schedule.AppliesSaturday, schedule.AppliesSunday, schedule.AppliesOnWeekends, schedule.AppliesOnPublicHolidays);
+                    }
+
+                    if (!scheduleIds.Any())
+                    {
+                        warnings.Add("Không tìm thấy thông tin ca làm việc trong ĐIỀU 3 - chưa tạo shift schedules");
+                    }
                 }
                 else
                 {
                     warnings.Add("Không tìm thấy số lượng bảo vệ - chưa tạo location");
                 }
 
-                // 3.4: Tạo Shift Schedules từ thông tin đã parse
-                var scheduleIds = new List<Guid>();
-                foreach (var shiftInfo in shiftSchedules)
+                // ================================================================
+                // 3.5: LƯU PUBLIC HOLIDAYS TỪ ĐIỀU 3.4
+                // ================================================================
+                foreach (var holidayInfo in dieu3Info.PublicHolidays)
                 {
-                    if (!shiftInfo.StartTime.HasValue || !shiftInfo.EndTime.HasValue)
-                        continue;
+                    // Kiểm tra xem ngày lễ này đã tồn tại chưa
+                    var existingHoliday = await connection.QueryFirstOrDefaultAsync<Models.PublicHoliday>(
+                        "SELECT * FROM public_holidays WHERE HolidayDate = @Date AND Year = @Year LIMIT 1",
+                        new { Date = holidayInfo.HolidayDate, Year = holidayInfo.Year },
+                        transaction);
 
-                    var schedule = new Models.ContractShiftSchedule
+                    if (existingHoliday == null)
                     {
-                        Id = Guid.NewGuid(),
-                        ContractId = contract.Id,
-                        ContractLocationId = null, // Áp dụng cho tất cả locations
-                        ScheduleName = shiftInfo.ShiftName ?? "Ca làm việc",
-                        ScheduleType = "regular",
-                        ShiftStartTime = shiftInfo.StartTime.Value,
-                        ShiftEndTime = shiftInfo.EndTime.Value,
-                        CrossesMidnight = shiftInfo.EndTime.Value < shiftInfo.StartTime.Value,
-                        DurationHours = CalculateDuration(shiftInfo.StartTime.Value, shiftInfo.EndTime.Value),
-                        BreakMinutes = 60,
-                        GuardsPerShift = shiftInfo.GuardsPerShift ?? guardsRequired,
-                        RecurrenceType = "weekly",
-                        // Default: T2-T6
-                        AppliesMonday = true,
-                        AppliesTuesday = true,
-                        AppliesWednesday = true,
-                        AppliesThursday = true,
-                        AppliesFriday = true,
-                        AppliesSaturday = workOnWeekends ?? false,
-                        AppliesSunday = workOnWeekends ?? false,
-                        AppliesOnPublicHolidays = workOnHolidays ?? false,
-                        AppliesOnCustomerHolidays = true,
-                        AppliesOnWeekends = workOnWeekends ?? false,
-                        SkipWhenLocationClosed = true,
-                        RequiresArmedGuard = false,
-                        RequiresSupervisor = false,
-                        MinimumExperienceMonths = 0,
-                        AutoGenerateEnabled = true,
-                        GenerateAdvanceDays = 30,
-                        EffectiveFrom = startDate.Value,
-                        EffectiveTo = endDate,
-                        IsActive = true,
-                        IsDeleted = false,
-                        CreatedAt = DateTime.UtcNow,
-                        CreatedBy = request.CreatedBy
-                    };
+                        var holiday = new Models.PublicHoliday
+                        {
+                            Id = Guid.NewGuid(),
+                            HolidayDate = holidayInfo.HolidayDate,
+                            HolidayName = holidayInfo.HolidayName,
+                            HolidayNameEn = holidayInfo.HolidayNameEn,
+                            HolidayCategory = holidayInfo.HolidayCategory,
+                            IsTetPeriod = holidayInfo.IsTetPeriod,
+                            IsTetHoliday = holidayInfo.IsTetHoliday,
+                            TetDayNumber = holidayInfo.TetDayNumber,
+                            HolidayStartDate = holidayInfo.HolidayStartDate,
+                            HolidayEndDate = holidayInfo.HolidayEndDate,
+                            TotalHolidayDays = holidayInfo.TotalHolidayDays,
+                            IsOfficialHoliday = true,
+                            IsObserved = true,
+                            AppliesNationwide = true,
+                            StandardWorkplacesClosed = true,
+                            EssentialServicesOperating = true, // Bảo vệ vẫn làm
+                            Year = holidayInfo.Year,
+                            CreatedAt = DateTime.UtcNow
+                        };
 
-                    await connection.InsertAsync(schedule, transaction);
-                    scheduleIds.Add(schedule.Id);
-
-                    logger.LogInformation("Shift schedule created: {ScheduleId} - {ScheduleName}",
-                        schedule.Id, schedule.ScheduleName);
-                }
-
-                if (!scheduleIds.Any())
-                {
-                    warnings.Add("Không tìm thấy thông tin ca làm việc - chưa tạo shift schedules");
+                        await connection.InsertAsync(holiday, transaction);
+                        logger.LogInformation("✓ Public holiday created: {Name} on {Date}",
+                            holiday.HolidayName, holiday.HolidayDate.ToShortDateString());
+                    }
+                    else
+                    {
+                        logger.LogInformation("  Public holiday already exists: {Name} on {Date}",
+                            existingHoliday.HolidayName, existingHoliday.HolidayDate.ToShortDateString());
+                    }
                 }
 
                 // ================================================================
-                // 3.5: TRÍCH XUẤT VÀ LƯU ĐIỀU KIỆN LÀM VIỆC
+                // 3.6: LƯU SUBSTITUTE WORK DAYS TỪ ĐIỀU 3.4
                 // ================================================================
-                var workingConditions = ExtractWorkingConditions(rawText);
-
-                var contractWorkingConditions = new Models.ContractWorkingConditions
+                foreach (var subInfo in dieu3Info.SubstituteWorkDays)
                 {
-                    Id = Guid.NewGuid(),
-                    ContractId = contract.Id,
+                    // Tìm holiday tương ứng
+                    var relatedHoliday = await connection.QueryFirstOrDefaultAsync<Models.PublicHoliday>(
+                        "SELECT * FROM public_holidays WHERE HolidayDate >= @SubDate - INTERVAL 7 DAY AND HolidayDate <= @SubDate + INTERVAL 7 DAY AND Year = @Year LIMIT 1",
+                        new { SubDate = subInfo.SubstituteDate, Year = subInfo.Year },
+                        transaction);
 
-                    // Giờ làm việc chuẩn
-                    StandardHoursPerDay = 8m,
-                    StandardHoursPerWeek = 40m,
-                    StandardHoursPerMonth = 160m,
+                    if (relatedHoliday != null)
+                    {
+                        var substituteDay = new Models.HolidaySubstituteWorkDay
+                        {
+                            Id = Guid.NewGuid(),
+                            HolidayId = relatedHoliday.Id,
+                            SubstituteDate = subInfo.SubstituteDate,
+                            Reason = subInfo.Reason ?? $"Work on {subInfo.SubstituteDate.ToShortDateString()} to substitute for {relatedHoliday.HolidayName}",
+                            Year = subInfo.Year,
+                            CreatedAt = DateTime.UtcNow
+                        };
 
-                    // Giới hạn tăng ca
-                    MaxOvertimeHoursPerDay = workingConditions.MaxOvertimeHoursPerDay,
-                    MaxOvertimeHoursPerMonth = workingConditions.MaxOvertimeHoursPerMonth,
-                    MaxOvertimeHoursPerYear = workingConditions.MaxOvertimeHoursPerMonth.HasValue 
-                        ? workingConditions.MaxOvertimeHoursPerMonth.Value * 12m 
-                        : null,
-                    AllowOvertimeOnWeekends = workingConditions.AllowsOvertime,
-                    AllowOvertimeOnHolidays = workingConditions.AllowsOvertime,
-                    RequireOvertimeApproval = workingConditions.RequiresOvertimeApproval,
-
-                    // Ca đêm
-                    NightShiftStartTime = workingConditions.NightShiftStartTime,
-                    NightShiftEndTime = workingConditions.NightShiftEndTime.HasValue 
-                        ? TimeSpan.FromHours((double)workingConditions.NightShiftEndTime.Value) 
-                        : null,
-                    MinimumNightShiftHours = 2m,
-
-                    // Ca trực liên tục
-                    AllowContinuous24hShift = workingConditions.ContinuousShift24hRate.HasValue,
-                    AllowContinuous48hShift = workingConditions.ContinuousShift48hRate.HasValue,
-                    CountSleepTimeInContinuousShift = workingConditions.CountSleepTimeInContinuousShift,
-                    SleepTimeCalculationRatio = workingConditions.SleepTimeCalculationRatio,
-                    MinimumRestHoursBetweenShifts = workingConditions.MinimumRestHoursBetweenShifts,
-
-                    // Ngày nghỉ & ngày lễ
-                    AnnualLeaveDays = workingConditions.PaidLeaveDaysPerYear,
-                    TetHolidayDates = workingConditions.TetHolidayDates,
-                    LocalHolidaysList = workingConditions.LocalHolidaysList,
-                    HolidayWeekendCalculationMethod = workingConditions.HolidayWeekendCalculationMethod,
-                    SaturdayAsRegularWorkday = workingConditions.SaturdayAsRegularWorkday,
-
-                    // Chính sách vi phạm
-                    OvertimeLimitViolationPolicy = workingConditions.OvertimeLimitViolationPolicy,
-                    UnapprovedOvertimePolicy = workingConditions.UnapprovedOvertimePolicy,
-                    InsufficientRestPolicy = "compensate",
-
-                    // Ca đặc biệt
-                    AllowEventShift = workingConditions.EventShiftRate.HasValue,
-                    AllowEmergencyCall = workingConditions.EmergencyCallRate.HasValue,
-                    AllowReplacementShift = workingConditions.ReplacementShiftRate.HasValue,
-                    MinimumEmergencyNoticeMinutes = 60,
-
-                    // Ghi chú
-                    GeneralNotes = workingConditions.SpecialRequirements,
-                    SpecialTerms = workingConditions.PenaltyTerms,
-
-                    IsActive = true,
-                    EffectiveFrom = contract.StartDate,
-                    CreatedBy = request.CreatedBy,
-                    UpdatedBy = request.CreatedBy,
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
-                };
-
-                await connection.InsertAsync(contractWorkingConditions, transaction);
-
-                logger.LogInformation(
-                    "Working conditions saved for contract: {ContractId}",
-                    contract.Id);
+                        await connection.InsertAsync(substituteDay, transaction);
+                        logger.LogInformation("✓ Substitute work day created: {Date} for {Holiday}",
+                            substituteDay.SubstituteDate.ToShortDateString(), relatedHoliday.HolidayName);
+                    }
+                }
 
                 // ================================================================
                 // BƯỚC 5: COMMIT TRANSACTION
@@ -562,7 +564,7 @@ internal class ImportContractFromDocumentHandler(
                 // Calculate confidence score
                 int score = CalculateConfidenceScore(
                     contractNumber, customerName, startDate, endDate,
-                    guardsRequired, shiftSchedules.Count);
+                    guardsRequired, scheduleIds.Count);
 
                 var result = new ImportContractFromDocumentResult
                 {
@@ -863,37 +865,61 @@ internal class ImportContractFromDocumentHandler(
 
     private (DateTime? startDate, DateTime? endDate) ExtractDates(string text)
     {
-        // Mở rộng patterns để cover nhiều trường hợp hơn
-        var patterns = new[]
-        {
-            // Pattern 1: "có hiệu lực từ ngày ... đến hết ngày ..."
-            @"(?:có\s+hiệu\s+lực\s+)?từ\s+ngày\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})\s+đến\s+(?:hết\s+)?ngày\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})",
-        
-            // Pattern 2: "Từ ngày ... đến ngày ..."
-            @"(?:Từ|từ)\s+ngày\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})\s+đến\s+ngày\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})",
-        
-            // Pattern 3: English format
-            @"(?:From|from)\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})\s+(?:to|until)\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})",
-        
-            // Pattern 4: "Bắt đầu từ ... kết thúc ..."
-            @"(?:Bắt\s+đầu\s+từ|bắt\s+đầu\s+từ)\s+(?:ngày\s+)?(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})\s+(?:kết\s+thúc|đến)\s+(?:ngày\s+)?(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})"
-        };
+        // Tìm ĐIỀU 2 section
+        var dieu2Match = Regex.Match(text, @"ĐIỀU\s*2[:\.\s]+(.*?)(?=ĐIỀU\s*3|$)",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline);
 
+        string searchText = dieu2Match.Success ? dieu2Match.Value : text;
+
+        if (dieu2Match.Success)
+        {
+            logger.LogInformation("📋 Found ĐIỀU 2 section ({Length} chars)", searchText.Length);
+        }
+        else
+        {
+            logger.LogWarning("⚠ ĐIỀU 2 not found, searching entire document");
+        }
+
+        // Tìm TẤT CẢ các dates trong section
+        var allDates = new List<DateTime>();
+        var datePattern = @"\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\b";
+        var dateMatches = Regex.Matches(searchText, datePattern);
+
+        foreach (Match match in dateMatches)
+        {
+            var dateStr = match.Value;
+            if (DateTime.TryParseExact(dateStr, new[] { "dd/MM/yyyy", "d/M/yyyy", "dd-MM-yyyy", "d-M-yyyy" },
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var date))
+            {
+                allDates.Add(date);
+                logger.LogInformation("  Found date: {Date}", date.ToString("dd/MM/yyyy"));
+            }
+        }
+
+        // Logic: date đầu tiên là start, date cuối cùng là end
         DateTime? startDate = null, endDate = null;
 
-        foreach (var pattern in patterns)
+        if (allDates.Count >= 2)
         {
-            var match = Regex.Match(text, pattern, RegexOptions.IgnoreCase);
-            if (match.Success)
-            {
-                if (DateTime.TryParse(match.Groups[1].Value, out var start))
-                    startDate = start;
-                if (DateTime.TryParse(match.Groups[2].Value, out var end))
-                    endDate = end;
-            
-                if (startDate.HasValue && endDate.HasValue)
-                    break; // Tìm thấy thì dừng
-            }
+            // Sắp xếp dates
+            allDates.Sort();
+            startDate = allDates.First();
+            endDate = allDates.Last();
+
+            logger.LogInformation("✓ Contract period: {Start} to {End} ({Days} days)",
+                startDate.Value.ToString("dd/MM/yyyy"),
+                endDate.Value.ToString("dd/MM/yyyy"),
+                (endDate.Value - startDate.Value).Days);
+        }
+        else if (allDates.Count == 1)
+        {
+            logger.LogWarning("⚠ Only found 1 date: {Date}", allDates[0].ToString("dd/MM/yyyy"));
+            startDate = allDates[0];
+        }
+        else
+        {
+            logger.LogWarning("⚠ No dates found in ĐIỀU 2");
         }
 
         return (startDate, endDate);
@@ -1246,7 +1272,7 @@ internal class ImportContractFromDocumentHandler(
             result = await QueryNominatim(httpClient, addr, "simple");
             if (result.HasValue) return result;
 
-            logger.LogWarning("❌ No GPS found for: {Address}", address);
+            logger.LogWarning("No GPS found for: {Address}", address);
             return null;
         }
         catch (Exception ex)
@@ -1576,6 +1602,490 @@ internal class ImportContractFromDocumentHandler(
         return shifts.Distinct().ToList();
     }
 
+    /// <summary>
+    /// Parse toàn bộ ĐIỀU 3: LỊCH LÀM VIỆC, CA TRỰC, NGÀY NGHỈ VÀ TĂNG CA
+    /// </summary>
+    private Dieu3ParsedInfo ParseDieu3(string fullText, DateTime? contractStartDate, DateTime? contractEndDate)
+    {
+        var info = new Dieu3ParsedInfo();
+
+        // Tìm ĐIỀU 3
+        var dieu3Section = ExtractSection(fullText, "ĐIỀU 3", "ĐIỀU 4");
+        if (string.IsNullOrEmpty(dieu3Section))
+        {
+            logger.LogWarning("❌ Không tìm thấy ĐIỀU 3 trong hợp đồng");
+            return info;
+        }
+
+        logger.LogInformation("✓ Found ĐIỀU 3 section ({Length} chars)", dieu3Section.Length);
+
+        // 3.1 - Ca làm việc
+        info.ShiftSchedules = ParseDieu3_1_ShiftSchedules(dieu3Section);
+        logger.LogInformation("✓ Parsed {Count} shift schedules from section 3.1", info.ShiftSchedules.Count);
+
+        // 3.3 - Ca trực cuối tuần
+        ParseDieu3_3_WeekendWork(dieu3Section, info);
+        logger.LogInformation("✓ Weekend: Sat={Sat}, Sun={Sun}, AppliesWeekend={Weekend}",
+            info.AppliesSaturday, info.AppliesSunday, info.AppliesOnWeekends);
+
+        // 3.4 - Ngày lễ Tết
+        var startYear = contractStartDate?.Year ?? DateTime.Now.Year;
+        var endYear = contractEndDate?.Year ?? startYear + 1;
+
+        info.PublicHolidays = ParseDieu3_4_PublicHolidays(dieu3Section, startYear, endYear);
+        info.SubstituteWorkDays = ParseDieu3_4_SubstituteWorkDays(dieu3Section, startYear, endYear);
+        info.WorkOnPublicHolidays = CheckDieu3_4_WorkOnHolidays(dieu3Section);
+
+        logger.LogInformation("✓ Holidays: {Count} public holidays, {SubCount} substitute days, WorkOnHolidays={Work}",
+            info.PublicHolidays.Count, info.SubstituteWorkDays.Count, info.WorkOnPublicHolidays);
+
+        return info;
+    }
+
+    /// <summary>
+    /// Extract một section từ văn bản
+    /// </summary>
+    private string ExtractSection(string text, string startMarker, string? endMarker = null)
+    {
+        var startIndex = text.IndexOf(startMarker, StringComparison.OrdinalIgnoreCase);
+        if (startIndex == -1)
+            return string.Empty;
+
+        if (!string.IsNullOrEmpty(endMarker))
+        {
+            var endIndex = text.IndexOf(endMarker, startIndex + startMarker.Length, StringComparison.OrdinalIgnoreCase);
+            if (endIndex > startIndex)
+            {
+                return text.Substring(startIndex, endIndex - startIndex);
+            }
+        }
+
+        // Nếu không có end marker, lấy 5000 ký tự
+        return text.Substring(startIndex, Math.Min(5000, text.Length - startIndex));
+    }
+
+    /// <summary>
+    /// Parse 3.1 - Ca làm việc
+    /// </summary>
+    private List<Dieu3ShiftSchedule> ParseDieu3_1_ShiftSchedules(string dieu3Text)
+    {
+        var shifts = new List<Dieu3ShiftSchedule>();
+
+        // Pattern cho các ca: "• Ca sáng: 06h00 – 14h00"
+        var patterns = new[]
+        {
+            // Pattern 1: "• Ca XXX: 06h00 – 14h00"
+            @"[•\-]\s*Ca\s+(sáng|chiều|tối|đêm|khuya)\s*[:：]\s*(\d{1,2})h(\d{2})?\s*[–\-—]\s*(\d{1,2})h(\d{2})?(?:\s+ngày\s+hôm\s+sau)?",
+
+            // Pattern 2: Không có bullet
+            @"Ca\s+(sáng|chiều|tối|đêm|khuya)\s*[:：]\s*(\d{1,2})h(\d{2})?\s*[–\-—]\s*(\d{1,2})h(\d{2})?(?:\s+ngày\s+hôm\s+sau)?"
+        };
+
+        foreach (var pattern in patterns)
+        {
+            var matches = Regex.Matches(dieu3Text, pattern, RegexOptions.IgnoreCase | RegexOptions.Multiline);
+
+            foreach (Match match in matches)
+            {
+                var shiftName = match.Groups[1].Value.Trim();
+                var startHour = match.Groups[2].Value;
+                var startMin = match.Groups[3].Success && !string.IsNullOrEmpty(match.Groups[3].Value) ? match.Groups[3].Value : "00";
+                var endHour = match.Groups[4].Value;
+                var endMin = match.Groups[5].Success && !string.IsNullOrEmpty(match.Groups[5].Value) ? match.Groups[5].Value : "00";
+
+                if (TimeSpan.TryParse($"{startHour}:{startMin}", out var start) &&
+                    TimeSpan.TryParse($"{endHour}:{endMin}", out var end))
+                {
+                    var normalizedName = NormalizeShiftName(shiftName);
+                    var crossesMidnight = end < start;
+
+                    shifts.Add(new Dieu3ShiftSchedule
+                    {
+                        ShiftName = $"Ca {normalizedName}",
+                        StartTime = start,
+                        EndTime = end,
+                        CrossesMidnight = crossesMidnight
+                    });
+
+                    logger.LogInformation("  ✓ Shift: {Name} ({Start} - {End}) CrossMidnight={Cross}",
+                        $"Ca {normalizedName}", start, end, crossesMidnight);
+                }
+            }
+        }
+
+        return shifts.DistinctBy(s => new { s.StartTime, s.EndTime }).ToList();
+    }
+
+    /// <summary>
+    /// Parse 3.3 - Ca trực cuối tuần (Thứ Bảy và Chủ Nhật)
+    /// Logic:
+    /// - Nếu không có section 3.3 → KHÔNG làm cuối tuần (0, 0, 0)
+    /// - Nếu có "duy trì/bố trí như ngày làm việc bình thường" → LÀM cuối tuần (1, 1, 1)
+    /// - Nếu có "nghỉ riêng cho cuối tuần" → KHÔNG làm cuối tuần (0, 0, 0)
+    /// - Nếu mention "Thứ 7" và/hoặc "Chủ nhật" → Tùy theo ngày (1/0, 0/1, 1)
+    /// - Default nếu có section 3.3 → LÀM cuối tuần (1, 1, 1)
+    /// </summary>
+    private void ParseDieu3_3_WeekendWork(string dieu3Text, Dieu3ParsedInfo info)
+    {
+        // Tìm subsection 3.3
+        var section33Match = Regex.Match(dieu3Text,
+            @"3\.3\.?\s+[^\r\n]*(?:cuối\s*tuần|Thứ\s*Bảy|Chủ\s*Nhật)[^\r\n]*",
+            RegexOptions.IgnoreCase);
+
+        if (!section33Match.Success)
+        {
+            // Không có section 3.3 → mặc định KHÔNG làm cuối tuần
+            info.AppliesSaturday = false;
+            info.AppliesSunday = false;
+            info.AppliesOnWeekends = false;
+            logger.LogInformation("  ❌ No section 3.3 found → weekends OFF (0, 0, 0)");
+            return;
+        }
+
+        // Lấy nội dung section 3.3 (từ 3.3 đến 3.4 hoặc 1200 ký tự)
+        var section33Start = section33Match.Index;
+        var section34Match = Regex.Match(dieu3Text, @"3\.4\.?", RegexOptions.IgnoreCase);
+        var section33Length = section34Match.Success && section34Match.Index > section33Start
+            ? section34Match.Index - section33Start
+            : Math.Min(1200, dieu3Text.Length - section33Start);
+
+        var section33 = dieu3Text.Substring(section33Start, section33Length);
+
+        logger.LogInformation("  📄 Section 3.3 content ({Length} chars): {Preview}",
+            section33.Length, section33.Length > 250 ? section33.Substring(0, 250) + "..." : section33);
+
+        // ================================================================
+        // KIỂM TRA CÁC PATTERN THEO THỨ TỰ ƯU TIÊN
+        // ================================================================
+
+        // 1. Kiểm tra "duy trì/bố trí như ngày làm việc bình thường" (LÀM VIỆC cuối tuần)
+        var workNormalPatterns = new[]
+        {
+            @"(?:duy\s*trì|bố\s*trí).*?(?:lực\s*lượng|bảo\s*vệ).*?(?:như\s*ngày\s*làm\s*việc\s*bình\s*thường|bình\s*thường)",
+            @"(?:duy\s*trì|bố\s*trí).*?(?:như\s*ngày\s*làm\s*việc\s*bình\s*thường|bình\s*thường)",
+            @"làm\s*việc.*?(?:như\s*)?bình\s*thường.*?cuối\s*tuần"
+        };
+
+        foreach (var pattern in workNormalPatterns)
+        {
+            if (Regex.IsMatch(section33, pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline))
+            {
+                info.AppliesSaturday = true;
+                info.AppliesSunday = true;
+                info.AppliesOnWeekends = true;
+                logger.LogInformation("  ✅ Section 3.3: 'DUY TRÌ NHƯ BÌNH THƯỜNG' → weekends ON (1, 1, 1)");
+                return;
+            }
+        }
+
+        // 2. Kiểm tra "KHÔNG áp dụng chế độ nghỉ riêng cho cuối tuần" (LÀM VIỆC cuối tuần)
+        if (Regex.IsMatch(section33,
+            @"(?:Không|không)\s+áp\s+dụng\s+(?:chế\s+độ\s+)?nghỉ\s+riêng.*?cuối\s*tuần",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline))
+        {
+            info.AppliesSaturday = true;
+            info.AppliesSunday = true;
+            info.AppliesOnWeekends = true;
+            logger.LogInformation("  ✅ Section 3.3: 'KHÔNG ÁP DỤNG NGHỈ RIÊNG' → weekends ON (1, 1, 1)");
+            return;
+        }
+
+        // 3. Kiểm tra "nghỉ riêng cho cuối tuần" hoặc "không làm việc cuối tuần" (NGHỈ cuối tuần)
+        var offPatterns = new[]
+        {
+            @"áp\s*dụng\s+(?:chế\s+độ\s+)?nghỉ\s+riêng.*?cuối\s*tuần",
+            @"nghỉ.*?(?:vào|trong).*?cuối\s*tuần",
+            @"không\s+làm\s+việc.*?cuối\s*tuần",
+            @"cuối\s*tuần.*?được\s+nghỉ"
+        };
+
+        foreach (var pattern in offPatterns)
+        {
+            if (Regex.IsMatch(section33, pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline))
+            {
+                info.AppliesSaturday = false;
+                info.AppliesSunday = false;
+                info.AppliesOnWeekends = false;
+                logger.LogInformation("  ❌ Section 3.3: 'NGHỈ RIÊNG/KHÔNG LÀM VIỆC' → weekends OFF (0, 0, 0)");
+                return;
+            }
+        }
+
+        // 4. Kiểm tra mention cụ thể "Thứ 7" hoặc "Chủ nhật"
+        var hasSaturday = Regex.IsMatch(section33, @"(?:thứ\s*(?:7|bảy)|saturday)(?!\s*và\s*chủ\s*nhật.*?nghỉ)", RegexOptions.IgnoreCase);
+        var hasSunday = Regex.IsMatch(section33, @"(?:chủ\s*nhật|sunday)(?!\s*nghỉ)", RegexOptions.IgnoreCase);
+
+        if (hasSaturday && hasSunday)
+        {
+            info.AppliesSaturday = true;
+            info.AppliesSunday = true;
+            info.AppliesOnWeekends = true;
+            logger.LogInformation("  ✅ Section 3.3: Mentions 'THỨ 7 VÀ CHỦ NHẬT' → weekends ON (1, 1, 1)");
+            return;
+        }
+
+        if (hasSaturday && !hasSunday)
+        {
+            info.AppliesSaturday = true;
+            info.AppliesSunday = false;
+            info.AppliesOnWeekends = true; // Vẫn = 1 vì có ít nhất 1 ngày cuối tuần
+            logger.LogInformation("  ⚠ Section 3.3: Mentions 'THỨ 7' only → Saturday ON (1, 0, 1)");
+            return;
+        }
+
+        if (!hasSaturday && hasSunday)
+        {
+            info.AppliesSaturday = false;
+            info.AppliesSunday = true;
+            info.AppliesOnWeekends = true; // Vẫn = 1 vì có ít nhất 1 ngày cuối tuần
+            logger.LogInformation("  ⚠ Section 3.3: Mentions 'CHỦ NHẬT' only → Sunday ON (0, 1, 1)");
+            return;
+        }
+
+        // 5. Default: Nếu có section 3.3 nhưng không match pattern nào → LÀM cuối tuần
+        info.AppliesSaturday = true;
+        info.AppliesSunday = true;
+        info.AppliesOnWeekends = true;
+        logger.LogInformation("  ⚠ Section 3.3: Ambiguous/default → weekends ON (1, 1, 1)");
+    }
+
+    /// <summary>
+    /// Parse 3.4 - Ngày lễ, Tết
+    /// </summary>
+    private List<Dieu3PublicHoliday> ParseDieu3_4_PublicHolidays(string dieu3Text, int startYear, int endYear)
+    {
+        var holidays = new List<Dieu3PublicHoliday>();
+
+        // Tìm section 3.4
+        var section34Match = Regex.Match(dieu3Text, @"3\.4\.?\s+[^\r\n]*(?:Ngày\s*lễ|Tết)", RegexOptions.IgnoreCase);
+        if (!section34Match.Success)
+        {
+            logger.LogWarning("  No section 3.4 found");
+            return holidays;
+        }
+
+        var section34Start = section34Match.Index;
+        var section34 = dieu3Text.Substring(section34Start, Math.Min(3000, dieu3Text.Length - section34Start));
+
+        logger.LogInformation("📋 Section 3.4 content preview (first 500 chars):\n{Preview}",
+            section34.Length > 500 ? section34.Substring(0, 500) : section34);
+
+        // 1. Tết Nguyên Đán - Multiple patterns to handle various formats
+        // Pattern 1: "Tết Nguyên đán 2025: Từ Thứ Tư, 29/01/2025 đến hết Thứ Ba, 04/02/2025"
+        // Pattern 2: "Tết Nguyên Đán: 29/01/2025 - 04/02/2025"
+        // Pattern 3: Without year number but has date range
+        var tetPatterns = new[]
+        {
+            @"Tết\s+Nguy[eê]n\s+[ĐđDd][áaA]n\s+(\d{4})[:\s,]*.*?(\d{1,2}/\d{1,2}/\d{4}).*?(?:đến|[-–])\s*(?:hết\s+)?.*?(\d{1,2}/\d{1,2}/\d{4})",
+            @"Tết\s+Nguy[eê]n\s+[ĐđDd][áaA]n[:\s,]*.*?(\d{1,2}/01/\d{4}|(\d{1,2}/02/\d{4})).*?(?:đến|[-–])\s*(?:hết\s+)?.*?(\d{1,2}/01/\d{4}|(\d{1,2}/02/\d{4}))",
+            @"Tết\s+(?:âm\s+lịch|Nguy[eê]n\s+[ĐđDd][áaA]n)[:\s,]*.*?(\d{1,2}/\d{1,2}/\d{4}).*?(?:đến|[-–]).*?(\d{1,2}/\d{1,2}/\d{4})"
+        };
+
+        bool tetFound = false;
+        foreach (var tetPattern in tetPatterns)
+        {
+            var tetMatch = Regex.Match(section34, tetPattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (tetMatch.Success)
+            {
+                logger.LogInformation("  🎉 Tết pattern matched! Groups: {Count}", tetMatch.Groups.Count);
+                for (int i = 0; i < tetMatch.Groups.Count; i++)
+                {
+                    logger.LogInformation("    Group[{Index}]: {Value}", i, tetMatch.Groups[i].Value);
+                }
+
+                // Extract dates from matched groups
+                List<DateTime> tetDates = new List<DateTime>();
+                for (int i = 1; i < tetMatch.Groups.Count; i++)
+                {
+                    if (!string.IsNullOrEmpty(tetMatch.Groups[i].Value) &&
+                        DateTime.TryParse(tetMatch.Groups[i].Value, out var date))
+                    {
+                        tetDates.Add(date);
+                    }
+                }
+
+                if (tetDates.Count >= 2)
+                {
+                    tetDates.Sort();
+                    var tetStart = tetDates.First();
+                    var tetEnd = tetDates.Last();
+                    var year = tetStart.Year;
+
+                    int totalDays = (tetEnd - tetStart).Days + 1;
+                    int dayNumber = 1;
+                    for (var date = tetStart.Date; date <= tetEnd.Date; date = date.AddDays(1))
+                    {
+                        holidays.Add(new Dieu3PublicHoliday
+                        {
+                            HolidayDate = date,
+                            HolidayName = dayNumber == 1 ? "Tết Nguyên Đán" : $"Tết Nguyên Đán (Ngày {dayNumber})",
+                            HolidayNameEn = $"Lunar New Year (Day {dayNumber})",
+                            HolidayCategory = "tet",
+                            IsTetPeriod = true,
+                            IsTetHoliday = true,
+                            TetDayNumber = dayNumber,
+                            HolidayStartDate = tetStart,
+                            HolidayEndDate = tetEnd,
+                            TotalHolidayDays = totalDays,
+                            Year = year
+                        });
+                        dayNumber++;
+                    }
+                    logger.LogInformation("  ✓ Tết {Year}: {Days} days ({Start} - {End})",
+                        year, dayNumber - 1, tetStart.ToString("dd/MM/yyyy"), tetEnd.ToString("dd/MM/yyyy"));
+                    tetFound = true;
+                    break;
+                }
+            }
+        }
+
+        if (!tetFound)
+        {
+            logger.LogWarning("  ⚠ Tết Nguyên Đán not found in section 3.4");
+        }
+
+        // 2. Giỗ Tổ Hùng Vương
+        var hungVuongPattern = @"Giỗ\s+Tổ\s+Hùng\s+Vương.*?(\d{1,2}/\d{1,2}/\d{4})";
+        var hungVuongMatch = Regex.Match(section34, hungVuongPattern, RegexOptions.IgnoreCase);
+        if (hungVuongMatch.Success && DateTime.TryParse(hungVuongMatch.Groups[1].Value, out var hungVuongDate))
+        {
+            holidays.Add(new Dieu3PublicHoliday
+            {
+                HolidayDate = hungVuongDate,
+                HolidayName = "Giỗ Tổ Hùng Vương",
+                HolidayNameEn = "Hung Kings' Festival",
+                HolidayCategory = "national",
+                Year = hungVuongDate.Year
+            });
+        }
+
+        // 3. Ngày 30/4 và 1/5
+        var liberationPattern = @"(?:30/4|Giải\s*phóng).*?(\d{1,2}/04/\d{4}).*?(?:01/5|1/5|Lao\s*động).*?(\d{1,2}/05/\d{4})";
+        var liberationMatch = Regex.Match(section34, liberationPattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        if (liberationMatch.Success)
+        {
+            if (DateTime.TryParse(liberationMatch.Groups[1].Value, out var day304))
+            {
+                holidays.Add(new Dieu3PublicHoliday
+                {
+                    HolidayDate = day304,
+                    HolidayName = "Ngày Giải phóng miền Nam",
+                    HolidayNameEn = "Reunification Day",
+                    HolidayCategory = "national",
+                    Year = day304.Year
+                });
+            }
+
+            if (DateTime.TryParse(liberationMatch.Groups[2].Value, out var day015))
+            {
+                holidays.Add(new Dieu3PublicHoliday
+                {
+                    HolidayDate = day015,
+                    HolidayName = "Ngày Quốc tế Lao động",
+                    HolidayNameEn = "International Labor Day",
+                    HolidayCategory = "national",
+                    Year = day015.Year
+                });
+            }
+        }
+
+        // 4. Quốc khánh 2/9
+        var nationalDayPattern = @"Quốc\s*khánh.*?(\d{1,2}/09/\d{4})";
+        var nationalDayMatch = Regex.Match(section34, nationalDayPattern, RegexOptions.IgnoreCase);
+        if (nationalDayMatch.Success && DateTime.TryParse(nationalDayMatch.Groups[1].Value, out var nationalDay))
+        {
+            holidays.Add(new Dieu3PublicHoliday
+            {
+                HolidayDate = nationalDay,
+                HolidayName = "Ngày Quốc khánh",
+                HolidayNameEn = "National Day",
+                HolidayCategory = "national",
+                Year = nationalDay.Year
+            });
+        }
+
+        // 5. Tết Dương lịch
+        var newYearPattern = @"Tết\s+Dương\s+lịch.*?(\d{1,2}/01/\d{4})";
+        var newYearMatch = Regex.Match(section34, newYearPattern, RegexOptions.IgnoreCase);
+        if (newYearMatch.Success && DateTime.TryParse(newYearMatch.Groups[1].Value, out var newYearDay))
+        {
+            holidays.Add(new Dieu3PublicHoliday
+            {
+                HolidayDate = newYearDay,
+                HolidayName = "Tết Dương lịch",
+                HolidayNameEn = "New Year's Day",
+                HolidayCategory = "national",
+                Year = newYearDay.Year
+            });
+        }
+
+        return holidays;
+    }
+
+    /// <summary>
+    /// Parse ngày làm bù từ 3.4
+    /// </summary>
+    private List<Dieu3SubstituteWorkDay> ParseDieu3_4_SubstituteWorkDays(string dieu3Text, int startYear, int endYear)
+    {
+        var substitutes = new List<Dieu3SubstituteWorkDay>();
+
+        var section34Match = Regex.Match(dieu3Text, @"3\.4\.?\s+[^\r\n]*(?:Ngày\s*lễ|Tết)", RegexOptions.IgnoreCase);
+        if (!section34Match.Success)
+            return substitutes;
+
+        var section34 = dieu3Text.Substring(section34Match.Index, Math.Min(3000, dieu3Text.Length - section34Match.Index));
+
+        // Pattern: "nghỉ bù ngày 01/09/2025"
+        var substitutePattern = @"nghỉ\s*bù\s*(?:ngày\s*)?(\d{1,2}/\d{1,2}/\d{4})";
+        var matches = Regex.Matches(section34, substitutePattern, RegexOptions.IgnoreCase);
+
+        foreach (Match match in matches)
+        {
+            if (DateTime.TryParse(match.Groups[1].Value, out var subDate))
+            {
+                substitutes.Add(new Dieu3SubstituteWorkDay
+                {
+                    SubstituteDate = subDate,
+                    Reason = "Nghỉ bù theo quy định Nhà nước",
+                    Year = subDate.Year
+                });
+            }
+        }
+
+        return substitutes;
+    }
+
+    /// <summary>
+    /// Kiểm tra có làm việc vào ngày lễ không từ 3.4
+    /// </summary>
+    private bool CheckDieu3_4_WorkOnHolidays(string dieu3Text)
+    {
+        var section34Match = Regex.Match(dieu3Text, @"3\.4\.?\s+[^\r\n]*(?:Ngày\s*lễ|Tết)", RegexOptions.IgnoreCase);
+        if (!section34Match.Success)
+            return false;
+
+        var section34 = dieu3Text.Substring(section34Match.Index, Math.Min(2000, dieu3Text.Length - section34Match.Index));
+
+        // Kiểm tra "vẫn phải bố trí đủ nhân viên trực 24/24"
+        var workPatterns = new[]
+        {
+            @"vẫn\s+phải\s+bố\s+trí.*?trực\s+24/24",
+            @"Bên\s+A\s+vẫn\s+phải\s+bố\s+trí.*?nhân\s+viên",
+            @"nhân\s+viên.*?vẫn\s+làm\s+việc\s+bình\s+thường"
+        };
+
+        foreach (var pattern in workPatterns)
+        {
+            if (Regex.IsMatch(section34, pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline))
+            {
+                logger.LogInformation("  ✓ Work on public holidays: TRUE");
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private string NormalizeShiftName(string shiftName)
     {
         shiftName = shiftName.Trim().ToLower();
@@ -1865,675 +2375,6 @@ internal class ImportContractFromDocumentHandler(
         return normalized;
     }
 
-     // ================================================================
-      // WORKING CONDITIONS EXTRACTION
-      // ================================================================
-
-      /// <summary>
-      /// Trích xuất điều kiện làm việc từ hợp đồng (ĐIỀU 4, ĐIỀU 5, hoặc các điều khoản khác)
-      /// </summary>
-      private WorkingConditionsInfo ExtractWorkingConditions(string text)
-      {
-          var info = new WorkingConditionsInfo();
-
-          // ================================================================
-          // LÀM BÙ GIỜ (COMPENSATORY TIME OFF)
-          // ================================================================
-
-          // Pattern: "cho phép làm bù" hoặc "được làm bù giờ"
-          if (Regex.IsMatch(text, @"(cho\s*phép|được)\s*(làm\s*bù|bù\s*giờ)", RegexOptions.IgnoreCase))
-          {
-              info.AllowsCompensatoryTimeOff = true;
-
-              // Tỷ lệ: "1:1", "1:1.5", "tỷ lệ 1 ăn 1.5"
-              var ratioPattern = @"(?:tỷ\s*lệ|bù)\s*(?:là\s*)?(?:1\s*[:ăn]\s*([\d\.]+)|(\d+\.?\d*)\s*[:ăn]\s*(\d+\.?\d*))";
-              var ratioMatch = Regex.Match(text, ratioPattern, RegexOptions.IgnoreCase);
-
-              if (ratioMatch.Success)
-              {
-                  if (ratioMatch.Groups[1].Success && decimal.TryParse(ratioMatch.Groups[1].Value, out var ratio1))
-                  {
-                      info.CompensatoryTimeOffRatio = ratio1;
-                  }
-                  else if (ratioMatch.Groups[2].Success && decimal.TryParse(ratioMatch.Groups[2].Value, out var ratio2) &&
-                           ratioMatch.Groups[3].Success && decimal.TryParse(ratioMatch.Groups[3].Value, out var ratio3))
-                  {
-                      info.CompensatoryTimeOffRatio = ratio3 / ratio2;
-                  }
-              }
-              else
-              {
-                  info.CompensatoryTimeOffRatio = 1.0m; // Default 1:1
-              }
-
-              // Số ngày tối đa: "tối đa 2 ngày/tháng"
-              var maxDaysPattern = @"(?:tối\s*đa|không\s*quá)\s*(\d+)\s*ngày.*?tháng";
-              var maxDaysMatch = Regex.Match(text, maxDaysPattern, RegexOptions.IgnoreCase);
-
-              if (maxDaysMatch.Success && int.TryParse(maxDaysMatch.Groups[1].Value, out var maxDays))
-              {
-                  info.MaxCompensatoryDaysPerMonth = maxDays;
-              }
-          }
-
-          // ================================================================
-          // TĂNG CA (OVERTIME)
-          // ================================================================
-
-          // Kiểm tra có cho phép tăng ca không
-          if (Regex.IsMatch(text, @"tăng\s*ca|làm\s*thêm\s*giờ|over\s*time", RegexOptions.IgnoreCase))
-          {
-              info.AllowsOvertime = true;
-
-              // Hệ số tăng ca ngày thường: "1.5 lần", "150%", "hệ số 1.5x"
-              var weekdayPattern = @"(?:ngày\s*thường|ngày\s*làm\s*việc).*?(?:hệ\s*số|lần|tỷ\s*lệ)\s*(?:là\s*)?(\d+\.?\d*)\s*[x%lần]?";
-              var weekdayMatch = Regex.Match(text, weekdayPattern, RegexOptions.IgnoreCase);
-
-              if (weekdayMatch.Success && decimal.TryParse(weekdayMatch.Groups[1].Value, out var weekdayRate))
-              {
-                  info.OvertimeRateWeekday = weekdayRate;
-              }
-              else
-              {
-                  // Default: 1.5x cho ngày thường
-                  info.OvertimeRateWeekday = 1.5m;
-              }
-
-              // Hệ số cuối tuần
-              var weekendPattern = @"(?:cuối\s*tuần|thứ\s*7|chủ\s*nhật).*?(?:hệ\s*số|lần|tỷ\s*lệ)\s*(?:là\s*)?(\d+\.?\d*)\s*[x%lần]?";
-              var weekendMatch = Regex.Match(text, weekendPattern, RegexOptions.IgnoreCase);
-
-              if (weekendMatch.Success && decimal.TryParse(weekendMatch.Groups[1].Value, out var weekendRate))
-              {
-                  info.OvertimeRateWeekend = weekendRate;
-              }
-              else
-              {
-                  info.OvertimeRateWeekend = 2.0m; // Default: 2.0x
-              }
-
-              // Hệ số ngày lễ
-              var holidayPattern = @"(?:ngày\s*lễ|ngày\s*nghỉ).*?(?:hệ\s*số|lần|tỷ\s*lệ)\s*(?:là\s*)?(\d+\.?\d*)\s*[x%lần]?";
-              var holidayMatch = Regex.Match(text, holidayPattern, RegexOptions.IgnoreCase);
-
-              if (holidayMatch.Success && decimal.TryParse(holidayMatch.Groups[1].Value, out var holidayRate))
-              {
-                  info.OvertimeRateHoliday = holidayRate;
-              }
-              else
-              {
-                  info.OvertimeRateHoliday = 3.0m; // Default: 3.0x
-              }
-
-              // Số giờ tối đa mỗi ngày: "tối đa 4 giờ/ngày"
-              var maxHoursPattern = @"(?:tối\s*đa|không\s*quá)\s*(\d+)\s*giờ.*?ngày";
-              var maxHoursMatch = Regex.Match(text, maxHoursPattern, RegexOptions.IgnoreCase);
-
-              if (maxHoursMatch.Success && int.TryParse(maxHoursMatch.Groups[1].Value, out var maxHours))
-              {
-                  info.MaxOvertimeHoursPerDay = maxHours;
-              }
-
-              // Số giờ tối đa mỗi tháng: "tối đa 40 giờ/tháng"
-              var maxMonthPattern = @"(?:tối\s*đa|không\s*quá)\s*(\d+)\s*giờ.*?tháng";
-              var maxMonthMatch = Regex.Match(text, maxMonthPattern, RegexOptions.IgnoreCase);
-
-              if (maxMonthMatch.Success && int.TryParse(maxMonthMatch.Groups[1].Value, out var maxMonth))
-              {
-                  info.MaxOvertimeHoursPerMonth = maxMonth;
-              }
-
-              // Yêu cầu phê duyệt
-              info.RequiresOvertimeApproval = Regex.IsMatch(text,
-                  @"phải\s*(được\s*)?phê\s*duyệt|cần\s*sự\s*đồng\s*ý",
-                  RegexOptions.IgnoreCase);
-          }
-
-          // ================================================================
-          // NGÀY LỄ (PUBLIC HOLIDAYS)
-          // ================================================================
-
-          // Hệ số lương ngày lễ
-          var publicHolidayRatePattern = @"ngày\s*lễ.*?(?:hệ\s*số|lương|tỷ\s*lệ)\s*(?:là\s*)?(\d+\.?\d*)\s*[x%lần]?";
-          var publicHolidayRateMatch = Regex.Match(text, publicHolidayRatePattern, RegexOptions.IgnoreCase);
-
-          if (publicHolidayRateMatch.Success && decimal.TryParse(publicHolidayRateMatch.Groups[1].Value, out var pubHolidayRate))
-          {
-              info.PublicHolidayRate = pubHolidayRate;
-          }
-
-          // Nghỉ bù nếu làm ngày lễ
-          info.AllowsPublicHolidayCompensation = Regex.IsMatch(text,
-              @"(nghỉ\s*bù|được\s*nghỉ\s*thay).*?ngày\s*lễ",
-              RegexOptions.IgnoreCase);
-
-          // ================================================================
-          // NGÀY NGHỈ (LEAVE)
-          // ================================================================
-
-          // Ngày nghỉ phép có lương mỗi tháng: "1 ngày phép/tháng"
-          var paidLeaveMonthPattern = @"(\d+)\s*ngày.*?(?:phép|nghỉ).*?tháng";
-          var paidLeaveMonthMatch = Regex.Match(text, paidLeaveMonthPattern, RegexOptions.IgnoreCase);
-
-          if (paidLeaveMonthMatch.Success && int.TryParse(paidLeaveMonthMatch.Groups[1].Value, out var leaveMonth))
-          {
-              info.PaidLeaveDaysPerMonth = leaveMonth;
-          }
-
-          // Ngày nghỉ phép có lương mỗi năm: "12 ngày phép/năm"
-          var paidLeaveYearPattern = @"(\d+)\s*ngày.*?(?:phép|nghỉ).*?năm";
-          var paidLeaveYearMatch = Regex.Match(text, paidLeaveYearPattern, RegexOptions.IgnoreCase);
-
-          if (paidLeaveYearMatch.Success && int.TryParse(paidLeaveYearMatch.Groups[1].Value, out var leaveYear))
-          {
-              info.PaidLeaveDaysPerYear = leaveYear;
-          }
-
-          // Ngày nghỉ ốm: "30 ngày nghỉ ốm/năm"
-          var sickLeavePattern = @"(\d+)\s*ngày.*?(?:ốm|bệnh).*?năm";
-          var sickLeaveMatch = Regex.Match(text, sickLeavePattern, RegexOptions.IgnoreCase);
-
-          if (sickLeaveMatch.Success && int.TryParse(sickLeaveMatch.Groups[1].Value, out var sickDays))
-          {
-              info.SickLeaveDaysPerYear = sickDays;
-          }
-
-          // Theo lịch khách hàng
-          info.FollowsCustomerSchedule = Regex.IsMatch(text,
-              @"theo\s*lịch.*?khách\s*hàng|nghỉ\s*theo\s*khách",
-              RegexOptions.IgnoreCase);
-
-          // Làm khi khách đóng cửa
-          info.WorkWhenCustomerClosed = !Regex.IsMatch(text,
-              @"không\s*làm\s*việc.*?đóng\s*cửa|nghỉ\s*khi.*?đóng\s*cửa",
-              RegexOptions.IgnoreCase);
-
-          // ================================================================
-          // CUỐI TUẦN (WEEKENDS)
-          // ================================================================
-
-          var weekendRatePattern = @"(?:cuối\s*tuần|saturday|sunday).*?(?:hệ\s*số|lương|tỷ\s*lệ)\s*(?:là\s*)?(\d+\.?\d*)\s*[x%lần]?";
-          var weekendRateMatch = Regex.Match(text, weekendRatePattern, RegexOptions.IgnoreCase);
-
-          if (weekendRateMatch.Success && decimal.TryParse(weekendRateMatch.Groups[1].Value, out var wkndRate))
-          {
-              info.WeekendRate = wkndRate;
-          }
-
-          // Thứ 7
-          var saturdayPattern = @"(?:thứ\s*7|thứ\s*bảy|saturday).*?(?:hệ\s*số|lương|tỷ\s*lệ)\s*(?:là\s*)?(\d+\.?\d*)\s*[x%lần]?";
-          var saturdayMatch = Regex.Match(text, saturdayPattern, RegexOptions.IgnoreCase);
-
-          if (saturdayMatch.Success && decimal.TryParse(saturdayMatch.Groups[1].Value, out var satRate))
-          {
-              info.SaturdayRate = satRate;
-          }
-
-          // Chủ nhật
-          var sundayPattern = @"(?:chủ\s*nhật|sunday).*?(?:hệ\s*số|lương|tỷ\s*lệ)\s*(?:là\s*)?(\d+\.?\d*)\s*[x%lần]?";
-          var sundayMatch = Regex.Match(text, sundayPattern, RegexOptions.IgnoreCase);
-
-          if (sundayMatch.Success && decimal.TryParse(sundayMatch.Groups[1].Value, out var sunRate))
-          {
-              info.SundayRate = sunRate;
-          }
-
-          // T7 là ngày thường
-          info.SaturdayAsRegularWorkday = Regex.IsMatch(text,
-              @"thứ\s*7.*?(?:làm\s*việc\s*bình\s*thường|ngày\s*thường)",
-              RegexOptions.IgnoreCase);
-
-          // ================================================================
-          // CA ĐÊM & TĂNG CA QUA ĐÊM
-          // ================================================================
-
-          // Hệ số ca đêm: "ca đêm hệ số 1.3x" hoặc "22h-6h: 1.5x"
-          var nightShiftPattern = @"(?:ca\s*đêm|ca\s*khuya|night\s*shift).*?(?:hệ\s*số|lương|tỷ\s*lệ)\s*(?:là\s*)?(\d+\.?\d*)\s*[x%lần]?";
-          var nightShiftMatch = Regex.Match(text, nightShiftPattern, RegexOptions.IgnoreCase);
-
-          if (nightShiftMatch.Success && decimal.TryParse(nightShiftMatch.Groups[1].Value, out var nightRate))
-          {
-              info.NightShiftRate = nightRate;
-          }
-          else if (Regex.IsMatch(text, @"ca\s*đêm|22[h:]00|night", RegexOptions.IgnoreCase))
-          {
-              info.NightShiftRate = 1.3m; // Default theo luật lao động VN
-          }
-
-          // Khung giờ ca đêm
-          var nightTimePattern = @"(?:ca\s*đêm|night).*?(\d{1,2})[h:](\d{2})?\s*[-–]\s*(\d{1,2})[h:](\d{2})?";
-          var nightTimeMatch = Regex.Match(text, nightTimePattern, RegexOptions.IgnoreCase);
-
-          if (nightTimeMatch.Success)
-          {
-              var startHour = nightTimeMatch.Groups[1].Value;
-              var startMin = nightTimeMatch.Groups[2].Success ? nightTimeMatch.Groups[2].Value : "00";
-
-              if (TimeSpan.TryParse($"{startHour}:{startMin}", out var nightStart))
-              {
-                  info.NightShiftStartTime = nightStart;
-              }
-          }
-
-          // Phụ cấp ca đêm cố định
-          var nightAllowancePattern = @"(?:phụ\s*cấp\s*ca\s*đêm|ca\s*đêm\s*phụ\s*cấp).*?([\d,\.]+)\s*(?:đồng|vnđ|vnd)";
-          var nightAllowanceMatch = Regex.Match(text, nightAllowancePattern, RegexOptions.IgnoreCase);
-
-          if (nightAllowanceMatch.Success)
-          {
-              var allowanceStr = nightAllowanceMatch.Groups[1].Value.Replace(",", "").Replace(".", "");
-              if (decimal.TryParse(allowanceStr, out var nightAllowance))
-              {
-                  info.NightShiftAllowance = nightAllowance;
-              }
-          }
-
-          // Tăng ca đêm = NightRate × OvertimeRate
-          if (info.NightShiftRate.HasValue)
-          {
-              if (info.OvertimeRateWeekday.HasValue)
-                  info.OvertimeNightWeekdayRate = info.NightShiftRate.Value * info.OvertimeRateWeekday.Value;
-
-              if (info.OvertimeRateWeekend.HasValue)
-                  info.OvertimeNightWeekendRate = info.NightShiftRate.Value * info.OvertimeRateWeekend.Value;
-
-              if (info.OvertimeRateHoliday.HasValue)
-                  info.OvertimeNightHolidayRate = info.NightShiftRate.Value * info.OvertimeRateHoliday.Value;
-          }
-
-          // ================================================================
-          // CA TRỰC LIÊN TỤC
-          // ================================================================
-
-          // Ca trực 24h
-          var continuous24hPattern = @"(?:ca\s*trực|trực)\s*24\s*(?:giờ|h).*?(?:hệ\s*số|lương|tỷ\s*lệ)\s*(?:là\s*)?(\d+\.?\d*)\s*[x%lần]?";
-          var continuous24hMatch = Regex.Match(text, continuous24hPattern, RegexOptions.IgnoreCase);
-
-          if (continuous24hMatch.Success && decimal.TryParse(continuous24hMatch.Groups[1].Value, out var cont24h))
-          {
-              info.ContinuousShift24hRate = cont24h;
-          }
-
-          // Ca trực 48h
-          var continuous48hPattern = @"(?:ca\s*trực|trực)\s*48\s*(?:giờ|h).*?(?:hệ\s*số|lương|tỷ\s*lệ)\s*(?:là\s*)?(\d+\.?\d*)\s*[x%lần]?";
-          var continuous48hMatch = Regex.Match(text, continuous48hPattern, RegexOptions.IgnoreCase);
-
-          if (continuous48hMatch.Success && decimal.TryParse(continuous48hMatch.Groups[1].Value, out var cont48h))
-          {
-              info.ContinuousShift48hRate = cont48h;
-          }
-
-          // Tính giờ ngủ
-          var sleepTimePattern = @"(?:giờ\s*ngủ|thời\s*gian\s*nghỉ).*?(\d+)\s*%";
-          var sleepTimeMatch = Regex.Match(text, sleepTimePattern, RegexOptions.IgnoreCase);
-
-          if (sleepTimeMatch.Success && int.TryParse(sleepTimeMatch.Groups[1].Value, out var sleepPercent))
-          {
-              info.SleepTimeCalculationRatio = sleepPercent / 100m;
-          }
-          else if (Regex.IsMatch(text, @"không\s*tính.*?giờ\s*ngủ", RegexOptions.IgnoreCase))
-          {
-              info.CountSleepTimeInContinuousShift = false;
-          }
-
-          // Nghỉ giữa ca
-          var restBetweenShiftsPattern = @"(?:nghỉ\s*giữa\s*ca|nghỉ\s*ngơi).*?(\d+)\s*giờ";
-          var restBetweenShiftsMatch = Regex.Match(text, restBetweenShiftsPattern, RegexOptions.IgnoreCase);
-
-          if (restBetweenShiftsMatch.Success && decimal.TryParse(restBetweenShiftsMatch.Groups[1].Value, out var restHours))
-          {
-              info.MinimumRestHoursBetweenShifts = restHours;
-          }
-          else
-          {
-              info.MinimumRestHoursBetweenShifts = 11m; // Theo luật lao động VN
-          }
-
-          // Làm 2 ca liên tiếp
-          var consecutivePattern = @"(?:2\s*ca\s*liên\s*tiếp|làm\s*liên\s*tục).*?(?:hệ\s*số|lương|tỷ\s*lệ)\s*(?:là\s*)?(\d+\.?\d*)\s*[x%lần]?";
-          var consecutiveMatch = Regex.Match(text, consecutivePattern, RegexOptions.IgnoreCase);
-
-          if (consecutiveMatch.Success && decimal.TryParse(consecutiveMatch.Groups[1].Value, out var consRate))
-          {
-              info.ConsecutiveShiftRate = consRate;
-          }
-
-          // ================================================================
-          // TẾT & NGÀY LỄ ĐẶC BIỆT
-          // ================================================================
-
-          // Tết Nguyên Đán
-          var tetPattern = @"(?:tết|nguyên\s*đán|lunar\s*new\s*year).*?(?:hệ\s*số|lương|tỷ\s*lệ)\s*(?:là\s*)?(\d+\.?\d*)\s*[x%lần]?";
-          var tetMatch = Regex.Match(text, tetPattern, RegexOptions.IgnoreCase);
-
-          if (tetMatch.Success && decimal.TryParse(tetMatch.Groups[1].Value, out var tetRate))
-          {
-              info.TetHolidayRate = tetRate;
-          }
-          else if (Regex.IsMatch(text, @"tết|nguyên\s*đán", RegexOptions.IgnoreCase))
-          {
-              info.TetHolidayRate = 4.0m; // Default cao nhất
-          }
-
-          // Ca trực xuyên Tết
-          var tetContinuousPattern = @"(?:trực.*?tết|tết.*?trực).*?(?:hệ\s*số|lương|tỷ\s*lệ)\s*(?:là\s*)?(\d+\.?\d*)\s*[x%lần]?";
-          var tetContinuousMatch = Regex.Match(text, tetContinuousPattern, RegexOptions.IgnoreCase);
-
-          if (tetContinuousMatch.Success && decimal.TryParse(tetContinuousMatch.Groups[1].Value, out var tetContRate))
-          {
-              info.TetContinuousShiftRate = tetContRate;
-          }
-
-          // Phụ cấp Tết
-          var tetAllowancePattern = @"(?:thưởng\s*tết|phụ\s*cấp\s*tết).*?([\d,\.]+)\s*(?:đồng|vnđ|triệu)";
-          var tetAllowanceMatch = Regex.Match(text, tetAllowancePattern, RegexOptions.IgnoreCase);
-
-          if (tetAllowanceMatch.Success)
-          {
-              var tetAllowanceStr = tetAllowanceMatch.Groups[1].Value.Replace(",", "").Replace(".", "");
-              if (decimal.TryParse(tetAllowanceStr, out var tetAllowance))
-              {
-                  // Nếu có từ "triệu" thì nhân 1,000,000
-                  if (tetAllowanceMatch.Value.Contains("triệu"))
-                      tetAllowance *= 1_000_000;
-                  else if (tetAllowanceMatch.Value.Contains("k") || tetAllowanceMatch.Value.Contains("K"))
-                      tetAllowance *= 1000;
-
-                  info.TetShiftAllowance = tetAllowance;
-              }
-          }
-
-          // Ngày lễ rơi vào cuối tuần
-          if (Regex.IsMatch(text, @"ngày\s*lễ.*?cuối\s*tuần.*?(cộng\s*dồn|tổng\s*cộng)", RegexOptions.IgnoreCase))
-          {
-              info.HolidayWeekendCalculationMethod = "cumulative";
-          }
-          else if (Regex.IsMatch(text, @"ngày\s*lễ.*?cuối\s*tuần.*?(cao\s*nhất|lớn\s*hơn)", RegexOptions.IgnoreCase))
-          {
-              info.HolidayWeekendCalculationMethod = "max";
-          }
-
-          // ================================================================
-          // CA SỰ KIỆN & KHẨN CẤP
-          // ================================================================
-
-          // Ca sự kiện
-          var eventPattern = @"(?:ca\s*sự\s*kiện|sự\s*kiện\s*đặc\s*biệt).*?(?:hệ\s*số|lương|tỷ\s*lệ)\s*(?:là\s*)?(\d+\.?\d*)\s*[x%lần]?";
-          var eventMatch = Regex.Match(text, eventPattern, RegexOptions.IgnoreCase);
-
-          if (eventMatch.Success && decimal.TryParse(eventMatch.Groups[1].Value, out var eventRate))
-          {
-              info.EventShiftRate = eventRate;
-          }
-
-          // Ca khẩn cấp
-          var emergencyPattern = @"(?:ca\s*khẩn\s*cấp|gọi\s*đột\s*xuất|emergency).*?(?:hệ\s*số|lương|tỷ\s*lệ)\s*(?:là\s*)?(\d+\.?\d*)\s*[x%lần]?";
-          var emergencyMatch = Regex.Match(text, emergencyPattern, RegexOptions.IgnoreCase);
-
-          if (emergencyMatch.Success && decimal.TryParse(emergencyMatch.Groups[1].Value, out var emergencyRate))
-          {
-              info.EmergencyCallRate = emergencyRate;
-          }
-
-          // Ca thay thế
-          var replacementPattern = @"(?:ca\s*thay\s*thế|thay\s*ca).*?(?:hệ\s*số|lương|tỷ\s*lệ)\s*(?:là\s*)?(\d+\.?\d*)\s*[x%lần]?";
-          var replacementMatch = Regex.Match(text, replacementPattern, RegexOptions.IgnoreCase);
-
-          if (replacementMatch.Success && decimal.TryParse(replacementMatch.Groups[1].Value, out var replaceRate))
-          {
-              info.ReplacementShiftRate = replaceRate;
-          }
-
-          // ================================================================
-          // VI PHẠM GIỚI HẠN & CHÍNH SÁCH
-          // ================================================================
-
-          // Vượt giới hạn tăng ca
-          if (Regex.IsMatch(text, @"không\s*cho\s*phép.*?vượt.*?tăng\s*ca", RegexOptions.IgnoreCase))
-          {
-              info.OvertimeLimitViolationPolicy = "not_allowed";
-          }
-          else if (Regex.IsMatch(text, @"vượt.*?tăng\s*ca.*?(phê\s*duyệt|approval)", RegexOptions.IgnoreCase))
-          {
-              info.OvertimeLimitViolationPolicy = "requires_approval";
-          }
-          else if (Regex.IsMatch(text, @"vượt.*?tăng\s*ca.*?(phạt|bồi\s*thường)", RegexOptions.IgnoreCase))
-          {
-              info.OvertimeLimitViolationPolicy = "penalty";
-          }
-
-          // Hệ số bồi thường vượt giới hạn
-          var violationRatePattern = @"(?:vượt.*?tăng\s*ca|vượt\s*giờ).*?(?:hệ\s*số|tỷ\s*lệ)\s*(?:là\s*)?(\d+\.?\d*)\s*[x%lần]?";
-          var violationRateMatch = Regex.Match(text, violationRatePattern, RegexOptions.IgnoreCase);
-
-          if (violationRateMatch.Success && decimal.TryParse(violationRateMatch.Groups[1].Value, out var violationRate))
-          {
-              info.OvertimeLimitViolationRate = violationRate;
-          }
-
-          // Tăng ca không phê duyệt
-          if (Regex.IsMatch(text, @"không\s*phê\s*duyệt.*?(từ\s*chối|không\s*tính)", RegexOptions.IgnoreCase))
-          {
-              info.UnapprovedOvertimePolicy = "reject";
-          }
-          else if (Regex.IsMatch(text, @"không\s*phê\s*duyệt.*?phạt", RegexOptions.IgnoreCase))
-          {
-              info.UnapprovedOvertimePolicy = "accept_with_penalty";
-          }
-
-          // ================================================================
-          // PHỤ CẤP
-          // ================================================================
-
-          // Phụ cấp ăn ca
-          var mealAllowancePattern = @"(?:phụ\s*cấp\s*ăn|ăn\s*ca|meal).*?([\d,\.]+)\s*(?:đồng|vnđ|k)";
-          var mealAllowanceMatch = Regex.Match(text, mealAllowancePattern, RegexOptions.IgnoreCase);
-
-          if (mealAllowanceMatch.Success)
-          {
-              var mealStr = mealAllowanceMatch.Groups[1].Value.Replace(",", "").Replace(".", "");
-              if (decimal.TryParse(mealStr, out var mealAllowance))
-              {
-                  if (mealAllowanceMatch.Value.Contains("k") || mealAllowanceMatch.Value.Contains("K"))
-                      mealAllowance *= 1000;
-
-                  info.MealAllowancePerShift = mealAllowance;
-              }
-          }
-
-          // Phụ cấp đi lại
-          var transportPattern = @"(?:phụ\s*cấp\s*đi\s*lại|xăng\s*xe|transport).*?([\d,\.]+)\s*(?:đồng|vnđ|k)";
-          var transportMatch = Regex.Match(text, transportPattern, RegexOptions.IgnoreCase);
-
-          if (transportMatch.Success)
-          {
-              var transportStr = transportMatch.Groups[1].Value.Replace(",", "").Replace(".", "");
-              if (decimal.TryParse(transportStr, out var transportAllowance))
-              {
-                  if (transportMatch.Value.Contains("k") || transportMatch.Value.Contains("K"))
-                      transportAllowance *= 1000;
-
-                  info.TransportAllowancePerShift = transportAllowance;
-              }
-          }
-
-          // Phụ cấp điện thoại
-          var phonePattern = @"(?:phụ\s*cấp\s*điện\s*thoại|phone).*?([\d,\.]+)\s*(?:đồng|vnđ|k)";
-          var phoneMatch = Regex.Match(text, phonePattern, RegexOptions.IgnoreCase);
-
-          if (phoneMatch.Success)
-          {
-              var phoneStr = phoneMatch.Groups[1].Value.Replace(",", "").Replace(".", "");
-              if (decimal.TryParse(phoneStr, out var phoneAllowance))
-              {
-                  if (phoneMatch.Value.Contains("k") || phoneMatch.Value.Contains("K"))
-                      phoneAllowance *= 1000;
-
-                  info.PhoneAllowancePerMonth = phoneAllowance;
-              }
-          }
-
-          // Phụ cấp trách nhiệm
-          var supervisorPattern = @"(?:phụ\s*cấp\s*trách\s*nhiệm|trưởng\s*ca).*?([\d,\.]+)\s*(?:đồng|vnđ|k|triệu)";
-          var supervisorMatch = Regex.Match(text, supervisorPattern, RegexOptions.IgnoreCase);
-
-          if (supervisorMatch.Success)
-          {
-              var supervisorStr = supervisorMatch.Groups[1].Value.Replace(",", "").Replace(".", "");
-              if (decimal.TryParse(supervisorStr, out var supervisorAllowance))
-              {
-                  if (supervisorMatch.Value.Contains("triệu"))
-                      supervisorAllowance *= 1_000_000;
-                  else if (supervisorMatch.Value.Contains("k") || supervisorMatch.Value.Contains("K"))
-                      supervisorAllowance *= 1000;
-
-                  info.SupervisorAllowance = supervisorAllowance;
-              }
-          }
-
-          // ================================================================
-          // ĐIỀU KIỆN ĐẶC BIỆT (SPECIAL CONDITIONS)
-          // ================================================================
-
-          // Tìm ĐIỀU 4, ĐIỀU 5 cho các điều kiện đặc biệt
-          var dieu4Pattern = @"ĐIỀU\s*[4４]\s*[:：]?([\s\S]{0,1000})(?:ĐIỀU\s*[5５]|$)";
-          var dieu4Match = Regex.Match(text, dieu4Pattern, RegexOptions.IgnoreCase);
-
-          if (dieu4Match.Success)
-          {
-              var dieu4Text = dieu4Match.Groups[1].Value;
-
-              // Yêu cầu đặc biệt
-              if (Regex.IsMatch(dieu4Text, @"yêu\s*cầu|điều\s*kiện|quy\s*định", RegexOptions.IgnoreCase))
-              {
-                  info.SpecialRequirements = dieu4Text.Trim().Substring(0, Math.Min(500, dieu4Text.Length));
-              }
-          }
-
-          // Tìm phạt/bồi thường
-          if (Regex.IsMatch(text, @"(phạt|bồi\s*thường|vi\s*phạm)", RegexOptions.IgnoreCase))
-          {
-              var penaltyPattern = @"(ĐIỀU.*?(?:phạt|bồi\s*thường|vi\s*phạm)[\s\S]{0,500})";
-              var penaltyMatch = Regex.Match(text, penaltyPattern, RegexOptions.IgnoreCase);
-
-              if (penaltyMatch.Success)
-              {
-                  info.PenaltyTerms = penaltyMatch.Groups[1].Value.Trim();
-              }
-          }
-
-          // Tìm thưởng
-          if (Regex.IsMatch(text, @"(thưởng|khen\s*thưởng|ưu\s*đãi)", RegexOptions.IgnoreCase))
-          {
-              var bonusPattern = @"(ĐIỀU.*?(?:thưởng|khen\s*thưởng|ưu\s*đãi)[\s\S]{0,500})";
-              var bonusMatch = Regex.Match(text, bonusPattern, RegexOptions.IgnoreCase);
-
-              if (bonusMatch.Success)
-              {
-                  info.BonusTerms = bonusMatch.Groups[1].Value.Trim();
-              }
-          }
-
-          return info;
-      }
-
-      /// <summary>
-      /// DTO cho working conditions đã extract
-      /// </summary>
-      private record WorkingConditionsInfo
-      {
-          // Làm bù giờ
-          public bool AllowsCompensatoryTimeOff { get; set; } = false;
-          public decimal? CompensatoryTimeOffRatio { get; set; }
-          public int? MaxCompensatoryDaysPerMonth { get; set; }
-          public string? CompensatoryTimeOffNotes { get; set; }
-
-          // Tăng ca
-          public bool AllowsOvertime { get; set; } = true;
-          public decimal? OvertimeRateWeekday { get; set; }
-          public decimal? OvertimeRateWeekend { get; set; }
-          public decimal? OvertimeRateHoliday { get; set; }
-          public int? MaxOvertimeHoursPerDay { get; set; }
-          public int? MaxOvertimeHoursPerMonth { get; set; }
-          public bool RequiresOvertimeApproval { get; set; } = true;
-          public string? OvertimeNotes { get; set; }
-
-          // Ca đêm
-          public decimal? NightShiftRate { get; set; }
-          public TimeSpan? NightShiftStartTime { get; set; }
-          public decimal? NightShiftEndTime { get; set; }
-          public decimal? OvertimeNightWeekdayRate { get; set; }
-          public decimal? OvertimeNightWeekendRate { get; set; }
-          public decimal? OvertimeNightHolidayRate { get; set; }
-          public decimal? NightShiftAllowance { get; set; }
-
-          // Ca trực liên tục
-          public decimal? ContinuousShift24hRate { get; set; }
-          public decimal? ContinuousShift48hRate { get; set; }
-          public bool CountSleepTimeInContinuousShift { get; set; } = true;
-          public decimal? SleepTimeCalculationRatio { get; set; }
-          public decimal? MinimumRestHoursBetweenShifts { get; set; }
-          public decimal? InsufficientRestCompensationRate { get; set; }
-          public decimal? ConsecutiveShiftRate { get; set; }
-
-          // Tết & ngày lễ đặc biệt
-          public decimal? TetHolidayRate { get; set; }
-          public string? TetHolidayDates { get; set; }
-          public decimal? TetContinuousShiftRate { get; set; }
-          public decimal? TetShiftAllowance { get; set; }
-          public string? HolidayWeekendCalculationMethod { get; set; }
-          public string? LocalHolidaysList { get; set; }
-          public decimal? LocalHolidayRate { get; set; }
-
-          // Ngày lễ
-          public decimal? PublicHolidayRate { get; set; }
-          public bool AllowsPublicHolidayCompensation { get; set; } = false;
-          public string? PublicHolidaysList { get; set; }
-          public string? PublicHolidayNotes { get; set; }
-
-          // Ngày nghỉ
-          public int? PaidLeaveDaysPerMonth { get; set; }
-          public int? PaidLeaveDaysPerYear { get; set; }
-          public int? SickLeaveDaysPerYear { get; set; }
-          public bool FollowsCustomerSchedule { get; set; } = true;
-          public bool WorkWhenCustomerClosed { get; set; } = true;
-          public string? LeaveNotes { get; set; }
-
-          // Cuối tuần
-          public decimal? WeekendRate { get; set; }
-          public decimal? SaturdayRate { get; set; }
-          public decimal? SundayRate { get; set; }
-          public bool SaturdayAsRegularWorkday { get; set; } = false;
-          public string? WeekendNotes { get; set; }
-
-          // Ca sự kiện & khẩn cấp
-          public decimal? EventShiftRate { get; set; }
-          public decimal? EmergencyCallRate { get; set; }
-          public decimal? ReplacementShiftRate { get; set; }
-          public decimal? EmergencyCallAllowance { get; set; }
-
-          // Vi phạm giới hạn
-          public string? OvertimeLimitViolationPolicy { get; set; }
-          public decimal? OvertimeLimitViolationRate { get; set; }
-          public string? UnapprovedOvertimePolicy { get; set; }
-          public decimal? UnapprovedOvertimePenaltyRate { get; set; }
-
-          // Phụ cấp
-          public decimal? MealAllowancePerShift { get; set; }
-          public decimal? TransportAllowancePerShift { get; set; }
-          public decimal? PhoneAllowancePerMonth { get; set; }
-          public decimal? UniformAllowance { get; set; }
-          public decimal? SupervisorAllowance { get; set; }
-          public decimal? HazardAllowance { get; set; }
-          public string? AllowanceNotes { get; set; }
-
-          // Điều kiện đặc biệt
-          public string? SpecialRequirements { get; set; }
-          public string? ScheduleExceptions { get; set; }
-          public string? PenaltyTerms { get; set; }
-          public string? BonusTerms { get; set; }
-      }
-      
     /// <summary>
     /// Model cho địa chỉ Việt Nam
     /// </summary>
@@ -2544,5 +2385,53 @@ internal class ImportContractFromDocumentHandler(
         public string? Ward { get; set; }
         public string District { get; set; } = "";
         public string City { get; set; } = "Ho Chi Minh City";
+    }
+
+    // ============================================================================
+    // HELPER CLASSES CHO ĐIỀU 3
+    // ============================================================================
+
+    /// <summary>
+    /// Thông tin đã parse từ ĐIỀU 3
+    /// </summary>
+    private class Dieu3ParsedInfo
+    {
+        public List<Dieu3ShiftSchedule> ShiftSchedules { get; set; } = new();
+        public bool AppliesSaturday { get; set; } = false;
+        public bool AppliesSunday { get; set; } = false;
+        public bool AppliesOnWeekends { get; set; } = false;
+        public List<Dieu3PublicHoliday> PublicHolidays { get; set; } = new();
+        public List<Dieu3SubstituteWorkDay> SubstituteWorkDays { get; set; } = new();
+        public bool WorkOnPublicHolidays { get; set; } = false;
+    }
+
+    private class Dieu3ShiftSchedule
+    {
+        public string ShiftName { get; set; } = string.Empty;
+        public TimeSpan StartTime { get; set; }
+        public TimeSpan EndTime { get; set; }
+        public bool CrossesMidnight { get; set; }
+    }
+
+    private class Dieu3PublicHoliday
+    {
+        public DateTime HolidayDate { get; set; }
+        public string HolidayName { get; set; } = string.Empty;
+        public string? HolidayNameEn { get; set; }
+        public string HolidayCategory { get; set; } = "national";
+        public bool IsTetPeriod { get; set; } = false;
+        public bool IsTetHoliday { get; set; } = false;
+        public int? TetDayNumber { get; set; }
+        public DateTime? HolidayStartDate { get; set; }
+        public DateTime? HolidayEndDate { get; set; }
+        public int? TotalHolidayDays { get; set; }
+        public int Year { get; set; }
+    }
+
+    private class Dieu3SubstituteWorkDay
+    {
+        public DateTime SubstituteDate { get; set; }
+        public string? Reason { get; set; }
+        public int Year { get; set; }
     }
 }

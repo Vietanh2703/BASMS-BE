@@ -146,7 +146,7 @@ public record CustomerLocationDetailsDto
 public record ContractShiftScheduleDto
 {
     public Guid Id { get; init; }
-    public Guid? ContractLocationId { get; init; }
+    public Guid? LocationId { get; init; }
     public string ScheduleName { get; init; } = string.Empty;
     public string ScheduleType { get; init; } = string.Empty;
 
@@ -368,12 +368,6 @@ internal class GetContractByIdHandler(
                 "SELECT * FROM contract_periods WHERE ContractId = @ContractId ORDER BY PeriodNumber DESC",
                 new { ContractId = contract.Id });
 
-            // ================================================================
-            // 7. LẤY WORKING CONDITIONS
-            // ================================================================
-            var workingConditions = await connection.QueryFirstOrDefaultAsync<Models.ContractWorkingConditions>(
-                "SELECT * FROM contract_working_conditions WHERE ContractId = @ContractId AND IsActive = 1",
-                new { ContractId = contract.Id });
 
             // ================================================================
             // 8. MAP TO DTOS
@@ -441,7 +435,7 @@ internal class GetContractByIdHandler(
                     ShiftSchedules = shiftSchedules.Select(s => new ContractShiftScheduleDto
                     {
                         Id = s.Id,
-                        ContractLocationId = s.ContractLocationId,
+                        LocationId = s.LocationId,
                         ScheduleName = s.ScheduleName,
                         ScheduleType = s.ScheduleType,
                         ShiftStartTime = s.ShiftStartTime,
@@ -483,61 +477,6 @@ internal class GetContractByIdHandler(
                         Notes = p.Notes,
                         CreatedAt = p.CreatedAt
                     }).ToList(),
-
-                    WorkingConditions = workingConditions != null ? new ContractWorkingConditionsDto
-                    {
-                        // Giờ làm việc chuẩn
-                        StandardHoursPerDay = workingConditions.StandardHoursPerDay,
-                        StandardHoursPerWeek = workingConditions.StandardHoursPerWeek,
-                        StandardHoursPerMonth = workingConditions.StandardHoursPerMonth,
-
-                        // Giới hạn tăng ca
-                        MaxOvertimeHoursPerDay = workingConditions.MaxOvertimeHoursPerDay,
-                        MaxOvertimeHoursPerMonth = workingConditions.MaxOvertimeHoursPerMonth,
-                        MaxOvertimeHoursPerYear = workingConditions.MaxOvertimeHoursPerYear,
-                        AllowOvertimeOnWeekends = workingConditions.AllowOvertimeOnWeekends,
-                        AllowOvertimeOnHolidays = workingConditions.AllowOvertimeOnHolidays,
-                        RequireOvertimeApproval = workingConditions.RequireOvertimeApproval,
-
-                        // Ca đêm
-                        NightShiftStartTime = workingConditions.NightShiftStartTime,
-                        NightShiftEndTime = workingConditions.NightShiftEndTime,
-                        MinimumNightShiftHours = workingConditions.MinimumNightShiftHours,
-
-                        // Ca trực liên tục
-                        AllowContinuous24hShift = workingConditions.AllowContinuous24hShift,
-                        AllowContinuous48hShift = workingConditions.AllowContinuous48hShift,
-                        CountSleepTimeInContinuousShift = workingConditions.CountSleepTimeInContinuousShift,
-                        SleepTimeCalculationRatio = workingConditions.SleepTimeCalculationRatio,
-                        MinimumRestHoursBetweenShifts = workingConditions.MinimumRestHoursBetweenShifts,
-
-                        // Ngày nghỉ & ngày lễ
-                        AnnualLeaveDays = workingConditions.AnnualLeaveDays,
-                        TetHolidayDates = workingConditions.TetHolidayDates,
-                        LocalHolidaysList = workingConditions.LocalHolidaysList,
-                        HolidayWeekendCalculationMethod = workingConditions.HolidayWeekendCalculationMethod,
-                        SaturdayAsRegularWorkday = workingConditions.SaturdayAsRegularWorkday,
-
-                        // Chính sách vi phạm
-                        OvertimeLimitViolationPolicy = workingConditions.OvertimeLimitViolationPolicy,
-                        UnapprovedOvertimePolicy = workingConditions.UnapprovedOvertimePolicy,
-                        InsufficientRestPolicy = workingConditions.InsufficientRestPolicy,
-
-                        // Ca đặc biệt
-                        AllowEventShift = workingConditions.AllowEventShift,
-                        AllowEmergencyCall = workingConditions.AllowEmergencyCall,
-                        AllowReplacementShift = workingConditions.AllowReplacementShift,
-                        MinimumEmergencyNoticeMinutes = workingConditions.MinimumEmergencyNoticeMinutes,
-
-                        // Ghi chú
-                        GeneralNotes = workingConditions.GeneralNotes,
-                        SpecialTerms = workingConditions.SpecialTerms,
-
-                        // Thời gian
-                        IsActive = workingConditions.IsActive,
-                        EffectiveFrom = workingConditions.EffectiveFrom,
-                        EffectiveTo = workingConditions.EffectiveTo
-                    } : null
                 }
             };
 

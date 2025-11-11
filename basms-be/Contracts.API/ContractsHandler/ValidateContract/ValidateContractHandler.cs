@@ -42,6 +42,7 @@ public record ValidationSummary
     public SectionComparison ContractInfo { get; init; } = new();
     public SectionComparison Locations { get; init; } = new();
     public SectionComparison ShiftSchedules { get; init; } = new();
+    public SectionComparison PublicHolidays { get; init; } = new();
     public SectionComparison WorkingConditions { get; init; } = new();
 
     // Danh sách tất cả differences
@@ -135,9 +136,12 @@ internal class ValidateContractHandler(
                 "SELECT * FROM contract_shift_schedules WHERE ContractId = @ContractId AND IsDeleted = 0",
                 new { ContractId = contract.Id })).ToList();
 
-            var workingConditions = await connection.QueryFirstOrDefaultAsync<Models.ContractWorkingConditions>(
-                "SELECT * FROM contract_working_conditions WHERE ContractId = @ContractId AND IsActive = 1",
-                new { ContractId = contract.Id });
+            // Lấy public holidays trong khoảng thời gian hợp đồng
+            var publicHolidays = (await connection.QueryAsync<Models.PublicHoliday>(
+                @"SELECT * FROM public_holidays
+                  WHERE HolidayDate >= @StartDate AND HolidayDate <= @EndDate
+                  ORDER BY HolidayDate",
+                new { StartDate = contract.StartDate, EndDate = contract.EndDate })).ToList();
 
             // ================================================================
             // 2. TRÍCH XUẤT TEXT TỪ DOCUMENT
@@ -184,7 +188,7 @@ internal class ValidateContractHandler(
             var contractInfoComparison = CompareContractInfo(contract, customer, extracted, differences, ref totalFields, ref matchedFields);
             var locationsComparison = CompareLocations(contractLocations, extracted, differences, ref totalFields, ref matchedFields);
             var shiftsComparison = CompareShiftSchedules(shiftSchedules, extracted, differences, ref totalFields, ref matchedFields);
-            var conditionsComparison = CompareWorkingConditions(workingConditions, extracted, differences, ref totalFields, ref matchedFields);
+            var holidaysComparison = ComparePublicHolidays(publicHolidays, extracted, differences, ref totalFields, ref matchedFields);
 
             // Tính % khớp tổng thể
             var matchPercentage = totalFields > 0 ? Math.Round((decimal)matchedFields / totalFields * 100, 2) : 0;
@@ -200,7 +204,7 @@ internal class ValidateContractHandler(
                 ContractInfo = contractInfoComparison,
                 Locations = locationsComparison,
                 ShiftSchedules = shiftsComparison,
-                WorkingConditions = conditionsComparison,
+                PublicHolidays = holidaysComparison,
                 Differences = differences.OrderByDescending(d => d.Severity)
                                        .ThenBy(d => d.Category)
                                        .ThenBy(d => d.Field)
@@ -282,130 +286,402 @@ internal class ValidateContractHandler(
     {
         var extracted = new ExtractedInfo();
 
-        // Contract Number
-        var contractNumberMatch = Regex.Match(text,
-            @"(?:Số\s*hợp\s*đồng|Hợp\s*đồng\s*số)[\s:：]*([A-Z0-9\-\/]+)",
-            RegexOptions.IgnoreCase);
-        if (contractNumberMatch.Success)
-            extracted.ContractNumber = contractNumberMatch.Groups[1].Value.Trim();
+        // ================================================================
+        // SỬ DỤNG ĐÚNG LOGIC TỪ ImportContractFromDocumentHandler
+        // ================================================================
 
-        // Start Date
-        var startDateMatch = Regex.Match(text,
-            @"(?:Ngày\s*bắt\s*đầu|hiệu\s*lực\s*từ\s*ngày)[\s:：]*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})",
-            RegexOptions.IgnoreCase);
-        if (startDateMatch.Success && DateTime.TryParse(startDateMatch.Groups[1].Value, out var startDate))
-            extracted.StartDate = startDate;
+        // 1. Contract Number - Sử dụng logic từ ExtractContractNumber
+        extracted.ContractNumber = ExtractContractNumber(text);
+        logger.LogInformation("📋 Extracted Contract Number: {Number}", extracted.ContractNumber ?? "N/A");
 
-        // End Date
-        var endDateMatch = Regex.Match(text,
-            @"(?:Ngày\s*kết\s*thúc|đến\s*ngày)[\s:：]*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})",
-            RegexOptions.IgnoreCase);
-        if (endDateMatch.Success && DateTime.TryParse(endDateMatch.Groups[1].Value, out var endDate))
-            extracted.EndDate = endDate;
+        // 2. Start Date & End Date - Sử dụng logic MỚI từ ExtractDates
+        var (startDate, endDate) = ExtractDates(text);
+        extracted.StartDate = startDate;
+        extracted.EndDate = endDate;
+        logger.LogInformation("📅 Extracted Dates: {Start} to {End}",
+            startDate?.ToString("dd/MM/yyyy") ?? "N/A",
+            endDate?.ToString("dd/MM/yyyy") ?? "N/A");
 
-        // Customer Name
-        var customerMatch = Regex.Match(text,
-            @"(?:Bên\s*A|Khách\s*hàng|Customer)[\s:：]+([^\n]+?)(?:Địa\s*chỉ|,|\n)",
-            RegexOptions.IgnoreCase);
-        if (customerMatch.Success)
-            extracted.CustomerName = customerMatch.Groups[1].Value.Trim();
+        // 3. Customer Name - Sử dụng logic từ ExtractCustomerName
+        extracted.CustomerName = ExtractCustomerName(text);
+        logger.LogInformation("🏢 Extracted Customer Name: {Name}", extracted.CustomerName ?? "N/A");
 
-        // Extract Locations
-        extracted.Locations = ExtractLocations(text);
+        // 4. Extract Locations từ ĐIỀU 1
+        extracted.Locations = ExtractLocationsFromDieu1(text);
+        logger.LogInformation("📍 Extracted {Count} locations", extracted.Locations.Count);
 
-        // Extract Shifts
-        extracted.Shifts = ExtractShifts(text);
+        // 5. Extract Shifts từ ĐIỀU 3
+        extracted.Shifts = ExtractShiftsFromDieu3(text);
+        logger.LogInformation("⏰ Extracted {Count} shifts", extracted.Shifts.Count);
 
-        // Extract Working Conditions
-        extracted.WorkingConditions = ExtractWorkingConditions(text);
+        // 6. Extract Public Holidays từ ĐIỀU 3.4
+        extracted.Holidays = ExtractPublicHolidaysFromDieu3(text, startDate, endDate);
+        logger.LogInformation("🎉 Extracted {Count} holidays", extracted.Holidays.Count);
 
         return extracted;
     }
 
-    private List<LocationInfo> ExtractLocations(string text)
+    // ================================================================
+    // LOGIC ĐÚNG TỪ ImportContractFromDocumentHandler
+    // ================================================================
+
+    private string? ExtractContractNumber(string text)
+    {
+        // Pattern 1: "Số: 001/2025/HĐDV-BV/HCM/NVHSV" - Hỗ trợ tiếng Việt và Unicode
+        // Capture tất cả ký tự không phải whitespace sau "Số:"
+        var pattern1 = @"Số[\s:：]+([^\s\r\n]+(?:\s*/\s*[^\s\r\n]+)*)";
+        var match1 = Regex.Match(text, pattern1, RegexOptions.IgnoreCase);
+        if (match1.Success && match1.Groups[1].Value.Contains('/'))
+        {
+            var contractNum = match1.Groups[1].Value.Trim();
+            // Clean up: remove trailing punctuation nếu có
+            contractNum = Regex.Replace(contractNum, @"[,.\s]+$", "");
+            return contractNum;
+        }
+
+        // Pattern 2: "Hợp đồng số: ..." với support Unicode
+        var pattern2 = @"Hợp\s*đồng\s*(?:số|number)[\s:：]+([^\s\r\n]+)";
+        var match2 = Regex.Match(text, pattern2, RegexOptions.IgnoreCase);
+        if (match2.Success)
+        {
+            var contractNum = match2.Groups[1].Value.Trim();
+            contractNum = Regex.Replace(contractNum, @"[,.\s]+$", "");
+            return contractNum;
+        }
+
+        return null;
+    }
+
+    private (DateTime? startDate, DateTime? endDate) ExtractDates(string text)
+    {
+        // Tìm ĐIỀU 2 section
+        var dieu2Match = Regex.Match(text, @"ĐIỀU\s*2[:\.\s]+(.*?)(?=ĐIỀU\s*3|$)",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+        string searchText = dieu2Match.Success ? dieu2Match.Value : text;
+
+        if (dieu2Match.Success)
+        {
+            logger.LogInformation("📋 Found ĐIỀU 2 section ({Length} chars)", searchText.Length);
+        }
+
+        // Tìm TẤT CẢ các dates trong section
+        var allDates = new List<DateTime>();
+        var datePattern = @"\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\b";
+        var dateMatches = Regex.Matches(searchText, datePattern);
+
+        foreach (Match match in dateMatches)
+        {
+            var dateStr = match.Value;
+            if (DateTime.TryParseExact(dateStr, new[] { "dd/MM/yyyy", "d/M/yyyy", "dd-MM-yyyy", "d-M-yyyy" },
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var date))
+            {
+                allDates.Add(date);
+            }
+        }
+
+        DateTime? startDate = null, endDate = null;
+
+        if (allDates.Count >= 2)
+        {
+            allDates.Sort();
+            startDate = allDates.First();
+            endDate = allDates.Last();
+        }
+        else if (allDates.Count == 1)
+        {
+            startDate = allDates[0];
+        }
+
+        return (startDate, endDate);
+    }
+
+    private string? ExtractCustomerName(string text)
+    {
+        // Tìm trong ĐIỀU 1 section - Bên A (Customer)
+        var dieu1Match = Regex.Match(text, @"ĐIỀU\s*1[:\.\s]+(.*?)(?=ĐIỀU\s*2|$)",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+        string searchText = dieu1Match.Success ? dieu1Match.Value : text;
+
+        // Pattern: Tìm sau "Bên A" hoặc "BÊN A" với tên viết hoa
+        var patterns = new[]
+        {
+            @"Bên\s+A[\s:：\-–]+([A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ\s\.]+?)(?=\n|Địa\s*chỉ|Mã\s*số|Đại\s*diện|Điện\s*thoại|$)",
+            @"BÊN\s+A[\s:：\-–]+([A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ\s\.]+?)(?=\n|Địa\s*chỉ|Mã\s*số|Đại\s*diện|Điện\s*thoại|$)"
+        };
+
+        foreach (var pattern in patterns)
+        {
+            var match = Regex.Match(searchText, pattern, RegexOptions.Multiline);
+            if (match.Success)
+            {
+                var name = match.Groups[1].Value.Trim();
+                // Clean up: remove ":" và extra spaces
+                name = Regex.Replace(name, @"\s{2,}", " ");
+                name = name.TrimEnd(':').Trim();
+                return name;
+            }
+        }
+
+        return null;
+    }
+
+    private List<LocationInfo> ExtractLocationsFromDieu1(string text)
     {
         var locations = new List<LocationInfo>();
 
-        var locationPattern = @"(?:Địa\s*điểm|Chi\s*nhánh)\s*\d*[\s:：]+([^\n]+?)(?:-|,)?\s*(?:Số\s*(?:lượng\s*)?bảo\s*vệ|guards?)[\s:：]*(\d+)";
-        var matches = Regex.Matches(text, locationPattern, RegexOptions.IgnoreCase);
+        // Tìm ĐIỀU 1 section
+        var dieu1Match = Regex.Match(text, @"ĐIỀU\s*1[:\.\s]+(.*?)(?=ĐIỀU\s*2|$)",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline);
 
-        foreach (Match match in matches)
+        if (!dieu1Match.Success)
+        {
+            logger.LogWarning("⚠ ĐIỀU 1 not found for location extraction");
+            return locations;
+        }
+
+        var dieu1Text = dieu1Match.Value;
+        logger.LogInformation("📋 ĐIỀU 1 section length: {Length} chars", dieu1Text.Length);
+
+        // Tìm địa điểm và số lượng bảo vệ RIÊNG BIỆT (vì có thể không cùng 1 dòng)
+
+        // 1. Tìm địa điểm
+        var locationPattern = @"Địa\s*điểm[:\s]+([^\n]+?)(?=\n|$)";
+        var locationMatch = Regex.Match(dieu1Text, locationPattern, RegexOptions.IgnoreCase);
+
+        string locationName = "";
+        if (locationMatch.Success)
+        {
+            locationName = locationMatch.Groups[1].Value.Trim();
+            // Clean up: remove trailing dashes, commas
+            locationName = Regex.Replace(locationName, @"[\-,\s]+$", "").Trim();
+            logger.LogInformation("  ✓ Found location: {Location}", locationName);
+        }
+
+        // 2. Tìm số lượng bảo vệ (có thể ở dòng khác)
+        var guardsPatterns = new[]
+        {
+            @"Số\s*lượng\s*(?:nhân\s*viên\s*)?bảo\s*vệ[:\s]*(\d+)",
+            @"(?:Số\s*lượng|số\s*lượng)[:\s]*(\d+)\s*(?:nhân\s*viên\s*)?bảo\s*vệ",
+            @"(\d+)\s*(?:nhân\s*viên\s*)?bảo\s*vệ",
+            @"bảo\s*vệ[:\s]*(\d+)"
+        };
+
+        int guardsCount = 0;
+        foreach (var guardsPattern in guardsPatterns)
+        {
+            var guardsMatch = Regex.Match(dieu1Text, guardsPattern, RegexOptions.IgnoreCase);
+            if (guardsMatch.Success && int.TryParse(guardsMatch.Groups[1].Value, out var guards))
+            {
+                guardsCount = guards;
+                logger.LogInformation("  ✓ Found guards count: {Count}", guardsCount);
+                break;
+            }
+        }
+
+        if (guardsCount == 0)
+        {
+            logger.LogWarning("  ⚠ Guards count not found or = 0");
+        }
+
+        // 3. Thêm location nếu tìm thấy
+        if (!string.IsNullOrWhiteSpace(locationName))
         {
             locations.Add(new LocationInfo
             {
-                LocationName = match.Groups[1].Value.Trim(),
-                GuardsRequired = int.Parse(match.Groups[2].Value)
+                LocationName = locationName,
+                GuardsRequired = guardsCount
             });
         }
 
         return locations;
     }
 
-    private List<ShiftInfo> ExtractShifts(string text)
+    private List<ShiftInfo> ExtractShiftsFromDieu3(string text)
     {
         var shifts = new List<ShiftInfo>();
 
-        var shiftPattern = @"(?:Ca\s*(?:sáng|chiều|tối|đêm|[1-3]))[\s:：]*(\d{1,2})h?[-–](\d{1,2})h?(?:.*?(\d+)\s*(?:bảo\s*vệ|guards?))?";
-        var matches = Regex.Matches(text, shiftPattern, RegexOptions.IgnoreCase);
+        // Tìm ĐIỀU 3 section
+        var dieu3Match = Regex.Match(text, @"ĐIỀU\s*3[:\.\s]+(.*?)(?=ĐIỀU\s*4|$)",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+        if (!dieu3Match.Success)
+        {
+            logger.LogWarning("⚠ ĐIỀU 3 not found for shift extraction");
+            return shifts;
+        }
+
+        var dieu3Text = dieu3Match.Value;
+
+        // Pattern để tìm shifts trong ĐIỀU 3.1
+        // Ca sáng: 06h00-14h00 hoặc Ca sáng: 06:00-14:00
+        var shiftPattern = @"Ca\s+(sáng|chiều|tối|đêm|[1-3])[:\s]*(\d{1,2})[:h](\d{2})\s*[-–]\s*(\d{1,2})[:h](\d{2})";
+        var matches = Regex.Matches(dieu3Text, shiftPattern, RegexOptions.IgnoreCase);
 
         foreach (Match match in matches)
         {
-            var shift = new ShiftInfo
+            var shiftType = match.Groups[1].Value;
+            var startHour = int.Parse(match.Groups[2].Value);
+            var startMin = int.Parse(match.Groups[3].Value);
+            var endHour = int.Parse(match.Groups[4].Value);
+            var endMin = int.Parse(match.Groups[5].Value);
+
+            shifts.Add(new ShiftInfo
             {
-                ShiftName = match.Value.Split(':')[0].Trim(),
-                StartHour = int.Parse(match.Groups[1].Value),
-                EndHour = int.Parse(match.Groups[2].Value)
-            };
-
-            if (match.Groups[3].Success && int.TryParse(match.Groups[3].Value, out var guards))
-                shift.GuardsPerShift = guards;
-
-            shifts.Add(shift);
+                ShiftName = $"Ca {shiftType}",
+                StartHour = startHour,
+                EndHour = endHour,
+                StartTime = new TimeSpan(startHour, startMin, 0),
+                EndTime = new TimeSpan(endHour, endMin, 0)
+            });
         }
 
         return shifts;
     }
 
-    private WorkingConditionsInfo ExtractWorkingConditions(string text)
+    private List<HolidayInfo> ExtractPublicHolidaysFromDieu3(string text, DateTime? startDate, DateTime? endDate)
     {
-        var wc = new WorkingConditionsInfo();
+        var holidays = new List<HolidayInfo>();
 
-        // Max overtime hours per day
-        var maxOvertimeDayMatch = Regex.Match(text, @"(?:tăng\s*ca\s*tối\s*đa|max.*overtime).*?(\d+)\s*(?:giờ|h|hours?)", RegexOptions.IgnoreCase);
-        if (maxOvertimeDayMatch.Success && decimal.TryParse(maxOvertimeDayMatch.Groups[1].Value, out var maxOvertimeDay))
-            wc.MaxOvertimeHoursPerDay = maxOvertimeDay;
+        // Tìm ĐIỀU 3 section
+        var dieu3Match = Regex.Match(text, @"ĐIỀU\s*3[:\.\s]+(.*?)(?=ĐIỀU\s*4|$)",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline);
 
-        // Max overtime hours per month
-        var maxOvertimeMonthMatch = Regex.Match(text, @"(?:tăng\s*ca.*?tháng|overtime.*?month).*?(\d+)\s*(?:giờ|h|hours?)", RegexOptions.IgnoreCase);
-        if (maxOvertimeMonthMatch.Success && decimal.TryParse(maxOvertimeMonthMatch.Groups[1].Value, out var maxOvertimeMonth))
-            wc.MaxOvertimeHoursPerMonth = maxOvertimeMonth;
-
-        // Night shift time
-        var nightTimeMatch = Regex.Match(text, @"(?:ca\s*đêm|night\s*shift).*?(\d{1,2})[h:]?00?\s*[-–]\s*(\d{1,2})[h:]?00?", RegexOptions.IgnoreCase);
-        if (nightTimeMatch.Success)
+        if (!dieu3Match.Success)
         {
-            if (int.TryParse(nightTimeMatch.Groups[1].Value, out var startHour))
-                wc.NightShiftStartTime = new TimeSpan(startHour, 0, 0);
-            if (int.TryParse(nightTimeMatch.Groups[2].Value, out var endHour))
-                wc.NightShiftEndTime = new TimeSpan(endHour, 0, 0);
+            logger.LogWarning("⚠ ĐIỀU 3 not found for holiday extraction");
+            return holidays;
         }
 
-        // Standard hours per day
-        var standardHoursMatch = Regex.Match(text, @"(?:làm\s*việc|working).*?(\d+)\s*(?:giờ|h|hours?)\s*(?:\/|per\s*)?(?:ngày|day)", RegexOptions.IgnoreCase);
-        if (standardHoursMatch.Success && decimal.TryParse(standardHoursMatch.Groups[1].Value, out var standardHours))
-            wc.StandardHoursPerDay = standardHours;
+        var dieu3Text = dieu3Match.Value;
 
-        // Annual leave days
-        var annualLeaveMatch = Regex.Match(text, @"(?:nghỉ\s*phép|annual\s*leave).*?(\d+)\s*(?:ngày|days?)", RegexOptions.IgnoreCase);
-        if (annualLeaveMatch.Success && int.TryParse(annualLeaveMatch.Groups[1].Value, out var annualLeave))
-            wc.AnnualLeaveDays = annualLeave;
+        // Tìm section 3.4 về ngày lễ
+        var section34Match = Regex.Match(dieu3Text, @"3\.4\.?\s+[^\r\n]*(?:Ngày\s*lễ|Tết)", RegexOptions.IgnoreCase);
+        if (!section34Match.Success)
+        {
+            logger.LogWarning("⚠ Section 3.4 (holidays) not found");
+            return holidays;
+        }
 
-        // Minimum rest hours between shifts
-        var restHoursMatch = Regex.Match(text, @"(?:nghỉ.*?giữa.*?ca|rest.*?between.*?shift).*?(\d+)\s*(?:giờ|h|hours?)", RegexOptions.IgnoreCase);
-        if (restHoursMatch.Success && decimal.TryParse(restHoursMatch.Groups[1].Value, out var restHours))
-            wc.MinimumRestHoursBetweenShifts = restHours;
+        var section34Start = section34Match.Index;
+        var section34 = dieu3Text.Substring(section34Start, Math.Min(3000, dieu3Text.Length - section34Start));
 
-        return wc;
+        // 1. Tết Nguyên Đán - ĐÚNG logic từ ImportContractFromDocumentHandler
+        var tetPatterns = new[]
+        {
+            @"Tết\s+Nguy[eê]n\s+[ĐđDd][áaA]n\s+(\d{4})[:\s,]*.*?(\d{1,2}/\d{1,2}/\d{4}).*?(?:đến|[-–])\s*(?:hết\s+)?.*?(\d{1,2}/\d{1,2}/\d{4})",
+            @"Tết\s+Nguy[eê]n\s+[ĐđDd][áaA]n[:\s,]*.*?(\d{1,2}/01/\d{4}|\d{1,2}/02/\d{4}).*?(?:đến|[-–])\s*(?:hết\s+)?.*?(\d{1,2}/01/\d{4}|\d{1,2}/02/\d{4})",
+            @"Tết\s+(?:âm\s+lịch|Nguy[eê]n\s+[ĐđDd][áaA]n)[:\s,]*.*?(\d{1,2}/\d{1,2}/\d{4}).*?(?:đến|[-–]).*?(\d{1,2}/\d{1,2}/\d{4})"
+        };
+
+        foreach (var tetPattern in tetPatterns)
+        {
+            var tetMatch = Regex.Match(section34, tetPattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (tetMatch.Success)
+            {
+                List<DateTime> tetDates = new List<DateTime>();
+                for (int i = 1; i < tetMatch.Groups.Count; i++)
+                {
+                    if (!string.IsNullOrEmpty(tetMatch.Groups[i].Value) &&
+                        DateTime.TryParse(tetMatch.Groups[i].Value, out var date))
+                    {
+                        tetDates.Add(date);
+                    }
+                }
+
+                if (tetDates.Count >= 2)
+                {
+                    tetDates.Sort();
+                    var tetStart = tetDates.First();
+                    var tetEnd = tetDates.Last();
+                    var totalDays = (tetEnd - tetStart).Days + 1;
+
+                    int dayNumber = 1;
+                    for (var date = tetStart.Date; date <= tetEnd.Date; date = date.AddDays(1))
+                    {
+                        holidays.Add(new HolidayInfo
+                        {
+                            HolidayDate = date,
+                            HolidayName = dayNumber == 1 ? "Tết Nguyên Đán" : $"Tết Nguyên Đán (Ngày {dayNumber})",
+                            IsTetPeriod = true,
+                            IsTetHoliday = true,
+                            TetDayNumber = dayNumber,
+                            HolidayStartDate = tetStart,
+                            HolidayEndDate = tetEnd,
+                            TotalHolidayDays = totalDays
+                        });
+                        dayNumber++;
+                    }
+                    logger.LogInformation("  ✓ Extracted Tết: {Days} days ({Start} - {End})",
+                        dayNumber - 1, tetStart.ToString("dd/MM/yyyy"), tetEnd.ToString("dd/MM/yyyy"));
+                    break;
+                }
+            }
+        }
+
+        // 2. Giỗ Tổ Hùng Vương
+        var hungVuongPattern = @"Giỗ\s+Tổ\s+Hùng\s+Vương.*?(\d{1,2}/\d{1,2}/\d{4})";
+        var hungVuongMatch = Regex.Match(section34, hungVuongPattern, RegexOptions.IgnoreCase);
+        if (hungVuongMatch.Success && DateTime.TryParse(hungVuongMatch.Groups[1].Value, out var hungVuongDate))
+        {
+            holidays.Add(new HolidayInfo
+            {
+                HolidayDate = hungVuongDate,
+                HolidayName = "Giỗ Tổ Hùng Vương"
+            });
+        }
+
+        // 3. Ngày 30/4 (Giải phóng miền Nam)
+        var liberationPattern = @"(?:30/4|Giải\s*phóng).*?(\d{1,2}/04/\d{4})";
+        var liberationMatch = Regex.Match(section34, liberationPattern, RegexOptions.IgnoreCase);
+        if (liberationMatch.Success && DateTime.TryParse(liberationMatch.Groups[1].Value, out var day304))
+        {
+            holidays.Add(new HolidayInfo
+            {
+                HolidayDate = day304,
+                HolidayName = "Ngày Giải phóng miền Nam"
+            });
+        }
+
+        // 4. Ngày 1/5 (Lao động)
+        var laborPattern = @"(?:01/5|1/5|Lao\s*động).*?(\d{1,2}/05/\d{4})";
+        var laborMatch = Regex.Match(section34, laborPattern, RegexOptions.IgnoreCase);
+        if (laborMatch.Success && DateTime.TryParse(laborMatch.Groups[1].Value, out var day015))
+        {
+            holidays.Add(new HolidayInfo
+            {
+                HolidayDate = day015,
+                HolidayName = "Ngày Quốc tế Lao động"
+            });
+        }
+
+        // 5. Quốc khánh 2/9
+        var nationalDayPattern = @"Quốc\s*khánh.*?(\d{1,2}/09/\d{4})";
+        var nationalDayMatch = Regex.Match(section34, nationalDayPattern, RegexOptions.IgnoreCase);
+        if (nationalDayMatch.Success && DateTime.TryParse(nationalDayMatch.Groups[1].Value, out var nationalDay))
+        {
+            holidays.Add(new HolidayInfo
+            {
+                HolidayDate = nationalDay,
+                HolidayName = "Ngày Quốc khánh"
+            });
+        }
+
+        // 6. Tết Dương lịch (1/1)
+        var newYearPattern = @"Tết\s+Dương\s+lịch.*?(\d{1,2}/01/\d{4})";
+        var newYearMatch = Regex.Match(section34, newYearPattern, RegexOptions.IgnoreCase);
+        if (newYearMatch.Success && DateTime.TryParse(newYearMatch.Groups[1].Value, out var newYearDay))
+        {
+            holidays.Add(new HolidayInfo
+            {
+                HolidayDate = newYearDay,
+                HolidayName = "Tết Dương lịch"
+            });
+        }
+
+        return holidays;
     }
 
     // ================================================================
@@ -660,12 +936,24 @@ internal class ValidateContractHandler(
 
         foreach (var dbShift in shiftSchedules)
         {
-            var dbStartHour = dbShift.ShiftStartTime.Hours;
-            var dbEndHour = dbShift.ShiftEndTime.Hours;
-
-            // Find matching shift in document
+            // Find matching shift in document using TimeSpan if available, fallback to hours
             var docShift = extracted.Shifts.FirstOrDefault(s =>
-                Math.Abs(s.StartHour - dbStartHour) <= 1 && Math.Abs(s.EndHour - dbEndHour) <= 1);
+            {
+                if (s.StartTime.HasValue && s.EndTime.HasValue)
+                {
+                    // Compare using TimeSpan (exact match with tolerance)
+                    var startDiff = Math.Abs((s.StartTime.Value - dbShift.ShiftStartTime).TotalMinutes);
+                    var endDiff = Math.Abs((s.EndTime.Value - dbShift.ShiftEndTime).TotalMinutes);
+                    return startDiff <= 30 && endDiff <= 30; // 30 minutes tolerance
+                }
+                else
+                {
+                    // Fallback to hours comparison
+                    var dbStartHour = dbShift.ShiftStartTime.Hours;
+                    var dbEndHour = dbShift.ShiftEndTime.Hours;
+                    return Math.Abs(s.StartHour - dbStartHour) <= 1 && Math.Abs(s.EndHour - dbEndHour) <= 1;
+                }
+            });
 
             totalFields++;
 
@@ -693,11 +981,15 @@ internal class ValidateContractHandler(
             }
             else
             {
+                var docTimeStr = docShift.StartTime.HasValue && docShift.EndTime.HasValue
+                    ? $"{docShift.StartTime:hh\\:mm}-{docShift.EndTime:hh\\:mm}"
+                    : $"{docShift.StartHour:00}:00-{docShift.EndHour:00}:00";
+
                 fields.Add(new FieldComparison
                 {
                     FieldName = $"Shift: {dbShift.ScheduleName}",
                     DatabaseValue = $"{dbShift.ShiftStartTime:hh\\:mm}-{dbShift.ShiftEndTime:hh\\:mm}",
-                    DocumentValue = $"{docShift.StartHour:00}:00-{docShift.EndHour:00}:00",
+                    DocumentValue = docTimeStr,
                     IsMatch = true,
                     Difference = null
                 });
@@ -719,8 +1011,8 @@ internal class ValidateContractHandler(
         };
     }
 
-    private SectionComparison CompareWorkingConditions(
-        Models.ContractWorkingConditions? workingConditions,
+    private SectionComparison ComparePublicHolidays(
+        List<Models.PublicHoliday> dbHolidays,
         ExtractedInfo extracted,
         List<ValidationDifference> differences,
         ref int totalFields,
@@ -728,187 +1020,93 @@ internal class ValidateContractHandler(
     {
         var fields = new List<FieldComparison>();
 
-        if (workingConditions == null)
+        // So sánh các holidays quan trọng
+        foreach (var dbHoliday in dbHolidays)
         {
-            return new SectionComparison
+            // Bỏ qua Tết Dương lịch nếu không phải IsTetHoliday
+            if (dbHoliday.HolidayName.Contains("Tết Dương lịch") && !dbHoliday.IsTetHoliday)
+                continue;
+
+            // Tìm holiday tương ứng trong document (match by date hoặc name)
+            var docHoliday = extracted.Holidays.FirstOrDefault(h =>
+                h.HolidayDate.Date == dbHoliday.HolidayDate.Date ||
+                (h.HolidayName.Contains("Tết") && dbHoliday.HolidayName.Contains("Tết") && dbHoliday.IsTetHoliday) ||
+                h.HolidayName.Equals(dbHoliday.HolidayName, StringComparison.OrdinalIgnoreCase));
+
+            totalFields++;
+
+            if (docHoliday == null)
             {
-                SectionName = "Working Conditions",
-                MatchPercentage = 0,
-                TotalFields = 0,
-                MatchedFields = 0,
-                Fields = fields
-            };
+                fields.Add(new FieldComparison
+                {
+                    FieldName = $"Holiday: {dbHoliday.HolidayName}",
+                    DatabaseValue = dbHoliday.HolidayDate.ToString("dd/MM/yyyy"),
+                    DocumentValue = null,
+                    IsMatch = false,
+                    Difference = "Missing in document"
+                });
+
+                differences.Add(new ValidationDifference
+                {
+                    Category = "Public Holidays",
+                    Field = dbHoliday.HolidayName,
+                    Type = "missing",
+                    DatabaseValue = dbHoliday.HolidayDate.ToString("dd/MM/yyyy"),
+                    DocumentValue = null,
+                    Description = $"Holiday '{dbHoliday.HolidayName}' ({dbHoliday.HolidayDate:dd/MM/yyyy}) found in DB but not in document",
+                    Severity = dbHoliday.IsTetHoliday ? "high" : "medium"
+                });
+            }
+            else
+            {
+                // Check if dates match
+                var datesMatch = docHoliday.HolidayDate.Date == dbHoliday.HolidayDate.Date;
+
+                fields.Add(new FieldComparison
+                {
+                    FieldName = $"Holiday: {dbHoliday.HolidayName}",
+                    DatabaseValue = dbHoliday.HolidayDate.ToString("dd/MM/yyyy"),
+                    DocumentValue = docHoliday.HolidayDate.ToString("dd/MM/yyyy"),
+                    IsMatch = datesMatch,
+                    Difference = datesMatch ? null : $"DB: {dbHoliday.HolidayDate:dd/MM/yyyy}, Doc: {docHoliday.HolidayDate:dd/MM/yyyy}"
+                });
+
+                if (datesMatch)
+                    matchedFields++;
+                else
+                    differences.Add(new ValidationDifference
+                    {
+                        Category = "Public Holidays",
+                        Field = dbHoliday.HolidayName,
+                        Type = "mismatch",
+                        DatabaseValue = dbHoliday.HolidayDate.ToString("dd/MM/yyyy"),
+                        DocumentValue = docHoliday.HolidayDate.ToString("dd/MM/yyyy"),
+                        Description = $"Holiday date mismatch for '{dbHoliday.HolidayName}': DB={dbHoliday.HolidayDate:dd/MM/yyyy} vs Doc={docHoliday.HolidayDate:dd/MM/yyyy}",
+                        Severity = "medium"
+                    });
+            }
         }
 
-        var wc = workingConditions;
-        var docWc = extracted.WorkingConditions;
-
-        // Max Overtime Hours Per Day
-        if (wc.MaxOvertimeHoursPerDay.HasValue && docWc.MaxOvertimeHoursPerDay.HasValue)
+        // Check for extra holidays in document (not in DB)
+        foreach (var docHoliday in extracted.Holidays)
         {
-            totalFields++;
-            var match = wc.MaxOvertimeHoursPerDay.Value == docWc.MaxOvertimeHoursPerDay.Value;
+            var existsInDb = dbHolidays.Any(h =>
+                h.HolidayDate.Date == docHoliday.HolidayDate.Date ||
+                h.HolidayName.Equals(docHoliday.HolidayName, StringComparison.OrdinalIgnoreCase));
 
-            fields.Add(new FieldComparison
+            if (!existsInDb)
             {
-                FieldName = "Max Overtime Hours Per Day",
-                DatabaseValue = $"{wc.MaxOvertimeHoursPerDay}h",
-                DocumentValue = $"{docWc.MaxOvertimeHoursPerDay}h",
-                IsMatch = match,
-                Difference = match ? null : $"DB: {wc.MaxOvertimeHoursPerDay}h, Doc: {docWc.MaxOvertimeHoursPerDay}h"
-            });
-
-            if (match) matchedFields++;
-            else differences.Add(new ValidationDifference
-            {
-                Category = "Working Conditions",
-                Field = "Max Overtime Hours Per Day",
-                Type = "mismatch",
-                DatabaseValue = $"{wc.MaxOvertimeHoursPerDay}h",
-                DocumentValue = $"{docWc.MaxOvertimeHoursPerDay}h",
-                Description = $"Max overtime hours per day mismatch: DB={wc.MaxOvertimeHoursPerDay}h vs Doc={docWc.MaxOvertimeHoursPerDay}h",
-                Severity = "medium"
-            });
-        }
-
-        // Max Overtime Hours Per Month
-        if (wc.MaxOvertimeHoursPerMonth.HasValue && docWc.MaxOvertimeHoursPerMonth.HasValue)
-        {
-            totalFields++;
-            var match = wc.MaxOvertimeHoursPerMonth.Value == docWc.MaxOvertimeHoursPerMonth.Value;
-
-            fields.Add(new FieldComparison
-            {
-                FieldName = "Max Overtime Hours Per Month",
-                DatabaseValue = $"{wc.MaxOvertimeHoursPerMonth}h",
-                DocumentValue = $"{docWc.MaxOvertimeHoursPerMonth}h",
-                IsMatch = match,
-                Difference = match ? null : $"DB: {wc.MaxOvertimeHoursPerMonth}h, Doc: {docWc.MaxOvertimeHoursPerMonth}h"
-            });
-
-            if (match) matchedFields++;
-            else differences.Add(new ValidationDifference
-            {
-                Category = "Working Conditions",
-                Field = "Max Overtime Hours Per Month",
-                Type = "mismatch",
-                DatabaseValue = $"{wc.MaxOvertimeHoursPerMonth}h",
-                DocumentValue = $"{docWc.MaxOvertimeHoursPerMonth}h",
-                Description = $"Max overtime hours per month mismatch: DB={wc.MaxOvertimeHoursPerMonth}h vs Doc={docWc.MaxOvertimeHoursPerMonth}h",
-                Severity = "medium"
-            });
-        }
-
-        // Night Shift Start Time
-        if (wc.NightShiftStartTime.HasValue && docWc.NightShiftStartTime.HasValue)
-        {
-            totalFields++;
-            var match = wc.NightShiftStartTime.Value == docWc.NightShiftStartTime.Value;
-
-            fields.Add(new FieldComparison
-            {
-                FieldName = "Night Shift Start Time",
-                DatabaseValue = wc.NightShiftStartTime.Value.ToString(@"hh\:mm"),
-                DocumentValue = docWc.NightShiftStartTime.Value.ToString(@"hh\:mm"),
-                IsMatch = match,
-                Difference = match ? null : $"DB: {wc.NightShiftStartTime:hh\\:mm}, Doc: {docWc.NightShiftStartTime:hh\\:mm}"
-            });
-
-            if (match) matchedFields++;
-            else differences.Add(new ValidationDifference
-            {
-                Category = "Working Conditions",
-                Field = "Night Shift Start Time",
-                Type = "mismatch",
-                DatabaseValue = wc.NightShiftStartTime.Value.ToString(@"hh\:mm"),
-                DocumentValue = docWc.NightShiftStartTime.Value.ToString(@"hh\:mm"),
-                Description = $"Night shift start time mismatch: DB={wc.NightShiftStartTime:hh\\:mm} vs Doc={docWc.NightShiftStartTime:hh\\:mm}",
-                Severity = "medium"
-            });
-        }
-
-        // Standard Hours Per Day
-        if (wc.StandardHoursPerDay.HasValue && docWc.StandardHoursPerDay.HasValue)
-        {
-            totalFields++;
-            var match = wc.StandardHoursPerDay.Value == docWc.StandardHoursPerDay.Value;
-
-            fields.Add(new FieldComparison
-            {
-                FieldName = "Standard Hours Per Day",
-                DatabaseValue = $"{wc.StandardHoursPerDay}h",
-                DocumentValue = $"{docWc.StandardHoursPerDay}h",
-                IsMatch = match,
-                Difference = match ? null : $"DB: {wc.StandardHoursPerDay}h, Doc: {docWc.StandardHoursPerDay}h"
-            });
-
-            if (match) matchedFields++;
-            else differences.Add(new ValidationDifference
-            {
-                Category = "Working Conditions",
-                Field = "Standard Hours Per Day",
-                Type = "mismatch",
-                DatabaseValue = $"{wc.StandardHoursPerDay}h",
-                DocumentValue = $"{docWc.StandardHoursPerDay}h",
-                Description = $"Standard hours per day mismatch: DB={wc.StandardHoursPerDay}h vs Doc={docWc.StandardHoursPerDay}h",
-                Severity = "medium"
-            });
-        }
-
-        // Annual Leave Days
-        if (wc.AnnualLeaveDays.HasValue && docWc.AnnualLeaveDays.HasValue)
-        {
-            totalFields++;
-            var match = wc.AnnualLeaveDays.Value == docWc.AnnualLeaveDays.Value;
-
-            fields.Add(new FieldComparison
-            {
-                FieldName = "Annual Leave Days",
-                DatabaseValue = $"{wc.AnnualLeaveDays} days",
-                DocumentValue = $"{docWc.AnnualLeaveDays} days",
-                IsMatch = match,
-                Difference = match ? null : $"DB: {wc.AnnualLeaveDays} days, Doc: {docWc.AnnualLeaveDays} days"
-            });
-
-            if (match) matchedFields++;
-            else differences.Add(new ValidationDifference
-            {
-                Category = "Working Conditions",
-                Field = "Annual Leave Days",
-                Type = "mismatch",
-                DatabaseValue = $"{wc.AnnualLeaveDays} days",
-                DocumentValue = $"{docWc.AnnualLeaveDays} days",
-                Description = $"Annual leave days mismatch: DB={wc.AnnualLeaveDays} vs Doc={docWc.AnnualLeaveDays}",
-                Severity = "low"
-            });
-        }
-
-        // Minimum Rest Hours Between Shifts
-        if (wc.MinimumRestHoursBetweenShifts.HasValue && docWc.MinimumRestHoursBetweenShifts.HasValue)
-        {
-            totalFields++;
-            var match = wc.MinimumRestHoursBetweenShifts.Value == docWc.MinimumRestHoursBetweenShifts.Value;
-
-            fields.Add(new FieldComparison
-            {
-                FieldName = "Minimum Rest Hours Between Shifts",
-                DatabaseValue = $"{wc.MinimumRestHoursBetweenShifts}h",
-                DocumentValue = $"{docWc.MinimumRestHoursBetweenShifts}h",
-                IsMatch = match,
-                Difference = match ? null : $"DB: {wc.MinimumRestHoursBetweenShifts}h, Doc: {docWc.MinimumRestHoursBetweenShifts}h"
-            });
-
-            if (match) matchedFields++;
-            else differences.Add(new ValidationDifference
-            {
-                Category = "Working Conditions",
-                Field = "Minimum Rest Hours Between Shifts",
-                Type = "mismatch",
-                DatabaseValue = $"{wc.MinimumRestHoursBetweenShifts}h",
-                DocumentValue = $"{docWc.MinimumRestHoursBetweenShifts}h",
-                Description = $"Minimum rest hours mismatch: DB={wc.MinimumRestHoursBetweenShifts}h vs Doc={docWc.MinimumRestHoursBetweenShifts}h",
-                Severity = "high"
-            });
+                differences.Add(new ValidationDifference
+                {
+                    Category = "Public Holidays",
+                    Field = docHoliday.HolidayName,
+                    Type = "extra",
+                    DatabaseValue = null,
+                    DocumentValue = docHoliday.HolidayDate.ToString("dd/MM/yyyy"),
+                    Description = $"Holiday '{docHoliday.HolidayName}' ({docHoliday.HolidayDate:dd/MM/yyyy}) found in document but not in DB",
+                    Severity = "low"
+                });
+            }
         }
 
         var sectionMatchedFields = fields.Count(f => f.IsMatch);
@@ -916,7 +1114,7 @@ internal class ValidateContractHandler(
 
         return new SectionComparison
         {
-            SectionName = "Working Conditions",
+            SectionName = "Public Holidays",
             MatchPercentage = sectionTotalFields > 0 ? Math.Round((decimal)sectionMatchedFields / sectionTotalFields * 100, 2) : 0,
             TotalFields = sectionTotalFields,
             MatchedFields = sectionMatchedFields,
@@ -936,7 +1134,7 @@ internal class ValidateContractHandler(
         public string? CustomerName { get; set; }
         public List<LocationInfo> Locations { get; set; } = new();
         public List<ShiftInfo> Shifts { get; set; } = new();
-        public WorkingConditionsInfo WorkingConditions { get; set; } = new();
+        public List<HolidayInfo> Holidays { get; set; } = new();
     }
 
     private class LocationInfo
@@ -951,16 +1149,20 @@ internal class ValidateContractHandler(
         public int StartHour { get; set; }
         public int EndHour { get; set; }
         public int? GuardsPerShift { get; set; }
+        public TimeSpan? StartTime { get; set; }
+        public TimeSpan? EndTime { get; set; }
     }
 
-    private class WorkingConditionsInfo
+    private class HolidayInfo
     {
-        public decimal? MaxOvertimeHoursPerDay { get; set; }
-        public decimal? MaxOvertimeHoursPerMonth { get; set; }
-        public TimeSpan? NightShiftStartTime { get; set; }
-        public TimeSpan? NightShiftEndTime { get; set; }
-        public decimal? StandardHoursPerDay { get; set; }
-        public int? AnnualLeaveDays { get; set; }
-        public decimal? MinimumRestHoursBetweenShifts { get; set; }
+        public DateTime HolidayDate { get; set; }
+        public string HolidayName { get; set; } = string.Empty;
+        public bool IsTetPeriod { get; set; } = false;
+        public bool IsTetHoliday { get; set; } = false;
+        public int? TetDayNumber { get; set; }
+        public DateTime? HolidayStartDate { get; set; }
+        public DateTime? HolidayEndDate { get; set; }
+        public int? TotalHolidayDays { get; set; }
     }
+
 }
