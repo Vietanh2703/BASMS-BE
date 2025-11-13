@@ -69,7 +69,20 @@ builder.Services.AddMassTransit(x =>
     });
 });
 
-
+// Cấu hình CORS cho frontend
+var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>();
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend",
+        policy =>
+        {
+            // Thay đổi địa chỉ cấu hình frontend để backend kết nối được tới frontend
+            policy.WithOrigins(allowedOrigins)
+                .AllowAnyMethod()
+                .AllowAnyHeader()
+                .AllowCredentials();
+        });
+});
 var app = builder.Build();
 
 // Initialize database tables
@@ -83,10 +96,8 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-// Map Carter endpoints
 app.MapCarter();
-Console.WriteLine("✓ Carter endpoints mapped");
-
+app.UseCors("AllowFrontend");
 app.MapGet("/", () => "Shifts API - Shift & Team Management Service");
 
 app.Run();

@@ -11,7 +11,7 @@ public class UpdatePasswordEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        app.MapPost("/users/password/update", async ([FromBody] UpdatePasswordRequest request, ISender sender) =>
+        app.MapPost("/api/users/password/update", async ([FromBody] UpdatePasswordRequest request, ISender sender) =>
         {
             var command = new UpdatePasswordCommand(
                 Email: request.Email,

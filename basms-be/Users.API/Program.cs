@@ -114,6 +114,20 @@ builder.Services.AddAuthorization();
 // Cho phép truy cập HttpContext (JWT claims) trong handlers
 builder.Services.AddHttpContextAccessor();
 
+// Cấu hình CORS cho frontend
+var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>();
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend",
+        policy =>
+        {
+            // Thay đổi địa chỉ cấu hình frontend để backend kết nối được tới frontend
+            policy.WithOrigins(allowedOrigins)
+                .AllowAnyMethod()
+                .AllowAnyHeader()
+                .AllowCredentials();
+        });
+});
 var app = builder.Build();
 
 // Thêm Authentication middleware
@@ -126,6 +140,5 @@ app.UseAuthorization();
 
 // Map tất cả Carter endpoints
 app.MapCarter();
-
-// Chạy ứng dụng
+app.UseCors("AllowFrontend");
 app.Run();

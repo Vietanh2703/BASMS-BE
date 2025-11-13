@@ -17,7 +17,7 @@ public class UpdateUserEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        app.MapPut("/users/{id:guid}", async (Guid id, [FromBody] UpdateUserRequest request, ISender sender) =>
+        app.MapPut("/api/users/{id:guid}", async (Guid id, [FromBody] UpdateUserRequest request, ISender sender) =>
         {
             var command = new UpdateUserCommand(
                 Id: id,

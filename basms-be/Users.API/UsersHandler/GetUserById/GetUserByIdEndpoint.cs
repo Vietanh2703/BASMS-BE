@@ -7,7 +7,7 @@ public class GetUserByIdEndpoint : ICarterModule
     public void AddRoutes(IEndpointRouteBuilder app)
     {
         // Route: GET /users/{id}
-        app.MapGet("/users/{id:guid}", async (Guid id, ISender sender) =>
+        app.MapGet("/api/users/{id:guid}", async (Guid id, ISender sender) =>
         {
             // Bước 1: Tạo query với ID user cần lấy
             var query = new GetUserByIdQuery(id);

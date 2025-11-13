@@ -29,7 +29,7 @@ public class LoginUserEndpoint : ICarterModule
     public void AddRoutes(IEndpointRouteBuilder app)
     {
         // Email/Password Login
-        app.MapPost("/users/login", async (LoginUserRequest request, ISender sender) =>
+        app.MapPost("/api/users/login", async (LoginUserRequest request, ISender sender) =>
         {
             var command = new LoginUserCommand(
                 Email: request.Email,

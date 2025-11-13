@@ -13,7 +13,7 @@ public class ConfirmPasswordChangeEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        app.MapPost("/users/password/confirm", async ([FromBody] ConfirmPasswordChangeRequest request, ISender sender) =>
+        app.MapPost("/api/users/password/confirm", async ([FromBody] ConfirmPasswordChangeRequest request, ISender sender) =>
         {
             var command = new ConfirmPasswordChangeCommand(
                 Email: request.Email,

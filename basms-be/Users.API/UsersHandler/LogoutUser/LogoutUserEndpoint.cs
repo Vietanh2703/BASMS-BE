@@ -6,7 +6,7 @@ public class LogoutUserEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        app.MapPost("/users/logout", [Authorize] async (ISender sender) =>
+        app.MapPost("/api/users/logout", [Authorize] async (ISender sender) =>
         {
             try
             {
