@@ -463,10 +463,26 @@ internal class ValidateContractHandler(
         // 2. Tìm số lượng bảo vệ (có thể ở dòng khác)
         var guardsPatterns = new[]
         {
-            @"Số\s*lượng\s*(?:nhân\s*viên\s*)?bảo\s*vệ[:\s]*(\d+)",
-            @"(?:Số\s*lượng|số\s*lượng)[:\s]*(\d+)\s*(?:nhân\s*viên\s*)?bảo\s*vệ",
-            @"(\d+)\s*(?:nhân\s*viên\s*)?bảo\s*vệ",
-            @"bảo\s*vệ[:\s]*(\d+)"
+            // "Số lượng: 05 (năm) nhân viên bảo vệ" - THÊM PATTERN MỚI
+            @"Số\s*lượng\s*[:\s]*(\d+)\s*\([^\)]+\)\s*(?:nhân\s*viên\s*)?\s*bảo\s*vệ",
+    
+            // "Số lượng bảo vệ: 5"
+            @"Số\s*lượng\s*(?:nhân\s*viên\s*)?\s*bảo\s*vệ\s*[:\s]*(\d+)",
+    
+            // "Số lượng: 5 bảo vệ" (không có từ trong ngoặc)
+            @"Số\s*lượng\s*[:\s]*(\d+)\s*(?:nhân\s*viên\s*)?\s*bảo\s*vệ",
+    
+            // "5 bảo vệ"
+            @"(\d+)\s*(?:nhân\s*viên\s*)?\s*bảo\s*vệ",
+    
+            // "bảo vệ: 5"
+            @"bảo\s*vệ\s*[:\s]*(\d+)",
+    
+            // "Guards: 5" or "Guards Required: 5"
+            @"(?:Guards|Guard)\s*(?:Required)?\s*[:\s]*(\d+)",
+    
+            // "5 guards" or "5 guard"
+            @"(\d+)\s*(?:guards?|Guards?)"
         };
 
         int guardsCount = 0;
@@ -476,14 +492,15 @@ internal class ValidateContractHandler(
             if (guardsMatch.Success && int.TryParse(guardsMatch.Groups[1].Value, out var guards))
             {
                 guardsCount = guards;
-                logger.LogInformation("  ✓ Found guards count: {Count}", guardsCount);
+                logger.LogInformation("  ✓ Found guards count: {Count} using pattern: {Pattern}", guardsCount, guardsPattern);
                 break;
             }
         }
 
         if (guardsCount == 0)
         {
-            logger.LogWarning("  ⚠ Guards count not found or = 0");
+            logger.LogWarning("  ⚠ Guards count not found or = 0. ĐIỀU 1 text sample:\n{Sample}",
+                dieu1Text.Length > 500 ? dieu1Text.Substring(0, 500) : dieu1Text);
         }
 
         // 3. Thêm location nếu tìm thấy
@@ -576,16 +593,25 @@ internal class ValidateContractHandler(
             @"Tết\s+(?:âm\s+lịch|Nguy[eê]n\s+[ĐđDd][áaA]n)[:\s,]*.*?(\d{1,2}/\d{1,2}/\d{4}).*?(?:đến|[-–]).*?(\d{1,2}/\d{1,2}/\d{4})"
         };
 
+        bool tetFound = false;
         foreach (var tetPattern in tetPatterns)
         {
+            if (tetFound) break;
+
             var tetMatch = Regex.Match(section34, tetPattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
             if (tetMatch.Success)
             {
+                // Extract dates from matched groups
+                // Skip year-only groups (e.g., "2025") - only parse full date format "dd/MM/yyyy"
                 List<DateTime> tetDates = new List<DateTime>();
                 for (int i = 1; i < tetMatch.Groups.Count; i++)
                 {
-                    if (!string.IsNullOrEmpty(tetMatch.Groups[i].Value) &&
-                        DateTime.TryParse(tetMatch.Groups[i].Value, out var date))
+                    var groupValue = tetMatch.Groups[i].Value.Trim();
+
+                    // Only process if it contains "/" (date format), skip year-only values
+                    if (!string.IsNullOrEmpty(groupValue) &&
+                        groupValue.Contains("/") &&
+                        DateTime.TryParse(groupValue, out var date))
                     {
                         tetDates.Add(date);
                     }
@@ -616,6 +642,7 @@ internal class ValidateContractHandler(
                     }
                     logger.LogInformation("  ✓ Extracted Tết: {Days} days ({Start} - {End})",
                         dayNumber - 1, tetStart.ToString("dd/MM/yyyy"), tetEnd.ToString("dd/MM/yyyy"));
+                    tetFound = true;
                     break;
                 }
             }
@@ -636,7 +663,12 @@ internal class ValidateContractHandler(
         // 3. Ngày 30/4 (Giải phóng miền Nam)
         var liberationPattern = @"(?:30/4|Giải\s*phóng).*?(\d{1,2}/04/\d{4})";
         var liberationMatch = Regex.Match(section34, liberationPattern, RegexOptions.IgnoreCase);
-        if (liberationMatch.Success && DateTime.TryParse(liberationMatch.Groups[1].Value, out var day304))
+        if (liberationMatch.Success && DateTime.TryParseExact(
+                liberationMatch.Groups[1].Value,
+                new[] { "d/M/yyyy", "dd/MM/yyyy", "d/MM/yyyy", "dd/M/yyyy" },
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None,
+                out var day304))
         {
             holidays.Add(new HolidayInfo
             {
@@ -648,7 +680,12 @@ internal class ValidateContractHandler(
         // 4. Ngày 1/5 (Lao động)
         var laborPattern = @"(?:01/5|1/5|Lao\s*động).*?(\d{1,2}/05/\d{4})";
         var laborMatch = Regex.Match(section34, laborPattern, RegexOptions.IgnoreCase);
-        if (laborMatch.Success && DateTime.TryParse(laborMatch.Groups[1].Value, out var day015))
+        if (laborMatch.Success && DateTime.TryParseExact(
+                laborMatch.Groups[1].Value,
+                new[] { "d/M/yyyy", "dd/MM/yyyy", "d/MM/yyyy", "dd/M/yyyy" },
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None,
+                out var day015))
         {
             holidays.Add(new HolidayInfo
             {
@@ -837,6 +874,7 @@ internal class ValidateContractHandler(
                 l.LocationName.Contains(dbLocationName, StringComparison.OrdinalIgnoreCase) ||
                 dbLocationName.Contains(l.LocationName, StringComparison.OrdinalIgnoreCase));
 
+            // 1. CHECK LOCATION NAME (separate field)
             totalFields++;
 
             if (docLocation == null)
@@ -844,8 +882,8 @@ internal class ValidateContractHandler(
                 // Location missing in document
                 fields.Add(new FieldComparison
                 {
-                    FieldName = $"Location: {dbLocationName}",
-                    DatabaseValue = $"{dbLocationName} ({dbGuards} guards)",
+                    FieldName = $"Location Name: {dbLocationName}",
+                    DatabaseValue = dbLocationName,
                     DocumentValue = null,
                     IsMatch = false,
                     Difference = "Missing in document"
@@ -856,7 +894,7 @@ internal class ValidateContractHandler(
                     Category = "Locations",
                     Field = dbLocationName,
                     Type = "missing",
-                    DatabaseValue = $"{dbLocationName} ({dbGuards} guards)",
+                    DatabaseValue = dbLocationName,
                     DocumentValue = null,
                     Description = $"Location '{dbLocationName}' found in DB but not in document",
                     Severity = "high"
@@ -864,29 +902,47 @@ internal class ValidateContractHandler(
             }
             else
             {
-                // Check guards count
+                // Location name found
+                fields.Add(new FieldComparison
+                {
+                    FieldName = $"Location Name: {dbLocationName}",
+                    DatabaseValue = dbLocationName,
+                    DocumentValue = docLocation.LocationName,
+                    IsMatch = true,
+                    Difference = null
+                });
+                matchedFields++;
+
+                // 2. CHECK GUARDS COUNT (separate field)
+                totalFields++;
                 var guardsMatch = dbGuards == docLocation.GuardsRequired;
 
                 fields.Add(new FieldComparison
                 {
-                    FieldName = $"Location: {dbLocationName}",
+                    FieldName = $"Guards at {dbLocationName}",
                     DatabaseValue = $"{dbGuards} guards",
                     DocumentValue = $"{docLocation.GuardsRequired} guards",
                     IsMatch = guardsMatch,
                     Difference = guardsMatch ? null : $"DB: {dbGuards}, Doc: {docLocation.GuardsRequired}"
                 });
 
-                if (guardsMatch) matchedFields++;
-                else differences.Add(new ValidationDifference
+                if (guardsMatch)
                 {
-                    Category = "Locations",
-                    Field = $"{dbLocationName} - Guards Required",
-                    Type = "mismatch",
-                    DatabaseValue = dbGuards.ToString(),
-                    DocumentValue = docLocation.GuardsRequired.ToString(),
-                    Description = $"Guards count mismatch at '{dbLocationName}': DB={dbGuards} vs Doc={docLocation.GuardsRequired}",
-                    Severity = "medium"
-                });
+                    matchedFields++;
+                }
+                else
+                {
+                    differences.Add(new ValidationDifference
+                    {
+                        Category = "Locations",
+                        Field = $"{dbLocationName} - Guards Required",
+                        Type = "mismatch",
+                        DatabaseValue = dbGuards.ToString(),
+                        DocumentValue = docLocation.GuardsRequired.ToString(),
+                        Description = $"Guards count mismatch at '{dbLocationName}': DB={dbGuards} vs Doc={docLocation.GuardsRequired}",
+                        Severity = "medium"
+                    });
+                }
             }
         }
 
@@ -1010,6 +1066,29 @@ internal class ValidateContractHandler(
             Fields = fields
         };
     }
+    
+private static string RemoveDiacritics(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return text;
+    
+        var normalizedString = text.Normalize(NormalizationForm.FormD);
+        var stringBuilder = new StringBuilder(capacity: normalizedString.Length);
+    
+        foreach (var c in normalizedString)
+        {
+            var unicodeCategory = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c);
+            if (unicodeCategory != System.Globalization.UnicodeCategory.NonSpacingMark)
+            {
+                stringBuilder.Append(c);
+            }
+        }
+    
+        return stringBuilder
+            .ToString()
+            .Normalize(NormalizationForm.FormC);
+    }
+    
 
     private SectionComparison ComparePublicHolidays(
         List<Models.PublicHoliday> dbHolidays,
@@ -1029,9 +1108,25 @@ internal class ValidateContractHandler(
 
             // Tìm holiday tương ứng trong document (match by date hoặc name)
             var docHoliday = extracted.Holidays.FirstOrDefault(h =>
-                h.HolidayDate.Date == dbHoliday.HolidayDate.Date ||
-                (h.HolidayName.Contains("Tết") && dbHoliday.HolidayName.Contains("Tết") && dbHoliday.IsTetHoliday) ||
-                h.HolidayName.Equals(dbHoliday.HolidayName, StringComparison.OrdinalIgnoreCase));
+            {
+                // CÁCH 1: So sánh chính xác cả ngày + tháng + năm
+                if (h.HolidayDate.Day == dbHoliday.HolidayDate.Day &&
+                    h.HolidayDate.Month == dbHoliday.HolidayDate.Month &&
+                    h.HolidayDate.Year == dbHoliday.HolidayDate.Year)
+                    return true;
+
+                // CÁCH 2: Match by name (với tolerance cho Tết)
+                if (h.HolidayName.Contains("Tết") && dbHoliday.HolidayName.Contains("Tết") && dbHoliday.IsTetHoliday)
+                    return true;
+
+                // CÁCH 3: Normalize tên (bỏ dấu, lowercase) rồi compare
+                var normalizedDoc = RemoveDiacritics(h.HolidayName).ToLower();
+                var normalizedDb = RemoveDiacritics(dbHoliday.HolidayName).ToLower();
+                if (normalizedDoc.Contains(normalizedDb) || normalizedDb.Contains(normalizedDoc))
+                    return true;
+
+                return false;
+            });
 
             totalFields++;
 
@@ -1091,8 +1186,18 @@ internal class ValidateContractHandler(
         foreach (var docHoliday in extracted.Holidays)
         {
             var existsInDb = dbHolidays.Any(h =>
-                h.HolidayDate.Date == docHoliday.HolidayDate.Date ||
-                h.HolidayName.Equals(docHoliday.HolidayName, StringComparison.OrdinalIgnoreCase));
+            {
+                // So sánh chính xác Day + Month + Year thay vì Date (tránh timezone issues)
+                if (h.HolidayDate.Day == docHoliday.HolidayDate.Day &&
+                    h.HolidayDate.Month == docHoliday.HolidayDate.Month &&
+                    h.HolidayDate.Year == docHoliday.HolidayDate.Year)
+                    return true;
+
+                // Match by normalized name
+                var normalizedDoc = RemoveDiacritics(docHoliday.HolidayName).ToLower();
+                var normalizedDb = RemoveDiacritics(h.HolidayName).ToLower();
+                return normalizedDoc.Contains(normalizedDb) || normalizedDb.Contains(normalizedDoc);
+            });
 
             if (!existsInDb)
             {
@@ -1108,6 +1213,7 @@ internal class ValidateContractHandler(
                 });
             }
         }
+
 
         var sectionMatchedFields = fields.Count(f => f.IsMatch);
         var sectionTotalFields = fields.Count;

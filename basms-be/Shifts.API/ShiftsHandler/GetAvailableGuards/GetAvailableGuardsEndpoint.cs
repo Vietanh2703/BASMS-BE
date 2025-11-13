@@ -5,7 +5,7 @@ public class GetAvailableGuardsEndpoint : ICarterModule
     public void AddRoutes(IEndpointRouteBuilder app)
     {
         // Route: GET /shifts/available-guards
-        app.MapGet("/shifts/available-guards", async (
+        app.MapGet("/api/shifts/available-guards", async (
             Guid locationId,
             DateTime shiftDate,
             TimeSpan startTime,
@@ -23,6 +23,7 @@ public class GetAvailableGuardsEndpoint : ICarterModule
 
             return Results.Ok(result);
         })
+        .RequireAuthorization()
         .WithTags("Shifts")
         .WithName("GetAvailableGuards")
         .Produces<GetAvailableGuardsResult>(StatusCodes.Status200OK)

@@ -50,14 +50,7 @@ public class UserUpdatedConsumer : IConsumer<UserUpdatedEvent>
             bool customerUpdated = false;
             var oldValues = new Dictionary<string, object?>();
             var newValues = new Dictionary<string, object?>();
-
-            if (@event.ChangedFields.Contains("Email") && existingCustomer.Email != @event.Email)
-            {
-                oldValues["Email"] = existingCustomer.Email;
-                newValues["Email"] = @event.Email;
-                existingCustomer.Email = @event.Email;
-                customerUpdated = true;
-            }
+            
 
             if (@event.ChangedFields.Contains("Phone") && existingCustomer.Phone != @event.Phone)
             {

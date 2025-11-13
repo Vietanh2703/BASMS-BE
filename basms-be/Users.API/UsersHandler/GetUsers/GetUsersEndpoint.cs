@@ -1,6 +1,4 @@
-﻿using Users.API.Authorization;
-
-namespace Users.API.UsersHandler.GetUsers;
+﻿namespace Users.API.UsersHandler.GetUsers;
 
 public class GetUsersEndpoint : ICarterModule
 {

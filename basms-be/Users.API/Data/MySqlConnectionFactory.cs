@@ -40,11 +40,13 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     CREATE TABLE `users` (
                         `Id` CHAR(36) PRIMARY KEY,
                         `FirebaseUid` VARCHAR(255) NOT NULL UNIQUE,
+                        `IdentityNumber` VARCHAR(20) NOT NULL UNIQUE,
                         `Email` VARCHAR(255) NOT NULL UNIQUE,
                         `EmailVerified` BOOLEAN DEFAULT FALSE,
                         `EmailVerifiedAt` DATETIME NULL,
                         `FullName` VARCHAR(255) NOT NULL,
                         `AvatarUrl` VARCHAR(500) NULL,
+                        `Gender` VARCHAR(10) NULL,
                         `Phone` VARCHAR(20) NULL,
                         `Address` TEXT NULL,
                         `BirthDay` INT NULL,

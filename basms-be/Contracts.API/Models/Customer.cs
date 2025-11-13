@@ -39,9 +39,18 @@ public class Customer
     /// Chức danh: "Giám đốc hành chính", "Trưởng phòng hành chính"
     /// </summary>
     public string? ContactPersonTitle { get; set; }
+    
+    /// <summary>
+    /// Số CCCD
+    /// </summary>
+    public string IdentityNumber { get; set; } = string.Empty;
 
     public string Email { get; set; } = string.Empty;
     public string Phone { get; set; } = string.Empty;
+    
+    public string AvatarUrl { get; set; }
+    public string? Gender { get; set; }
+    public DateTime DateOfBirth { get; set; }
 
     // ============================================================================
     // ĐỊA CHỈ

@@ -8,11 +8,12 @@ public record UserCreatedEvent
 {
     public Guid UserId { get; init; }
     public string FirebaseUid { get; init; } = string.Empty;
+    public string IdentityNumber { get; set; }
     public string Email { get; init; } = string.Empty;
     public string FullName { get; init; } = string.Empty;
     public string? Phone { get; init; }
     public string? AvatarUrl { get; init; }
-
+    
     // Role information
     public Guid RoleId { get; init; }
     public string RoleName { get; init; } = string.Empty; // "admin", "manager", "director", "guard", "customer"
@@ -23,9 +24,8 @@ public record UserCreatedEvent
     public string? Department { get; init; }
 
     // Additional info for guards
-    public DateTime? DateOfBirth { get; init; }
+    public DateTime DateOfBirth { get; init; }
     public string? Gender { get; init; }
-    public string? NationalId { get; init; }
     public string? Address { get; init; }
     public DateTime? HireDate { get; init; }
     public string? ContractType { get; init; }

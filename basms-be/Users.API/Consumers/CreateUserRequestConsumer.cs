@@ -116,10 +116,12 @@ public class CreateUserRequestConsumer(
                 var user = new Models.Users
                 {
                     Id = Guid.NewGuid(),
+                    IdentityNumber = request.IdentityNumber,
                     FirebaseUid = firebaseUser.Uid,
                     Email = request.Email,
                     FullName = request.FullName,
                     Phone = request.Phone,
+                    Gender = request.Gender,
                     Address = request.Address,
                     RoleId = role.Id,
                     AvatarUrl = request.AvatarUrl,

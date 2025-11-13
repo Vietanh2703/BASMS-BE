@@ -19,7 +19,7 @@ public class GetUserByIdEndpoint : ICarterModule
             // Bước 3: Trả về 200 OK với thông tin user đầy đủ
             return Results.Ok(result);
         })
-        .RequireAuthorization()  // Chỉ cần đăng nhập, không giới hạn roleId
+        .RequireAuthorization() 
         .WithTags("Users")
         .WithName("GetUserById")
         .Produces<GetUserByIdResult>(StatusCodes.Status200OK)  // Thành công

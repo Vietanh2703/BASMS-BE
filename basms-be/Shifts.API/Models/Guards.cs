@@ -18,6 +18,11 @@ public class Guards
     // ============================================================================
 
     /// <summary>
+    /// Số CCCD
+    /// </summary>
+    public string IdentityNumber { get; set; } = string.Empty;
+    
+    /// <summary>
     /// Mã NV: GRD001
     /// </summary>
     public string EmployeeCode { get; set; } = string.Empty;
@@ -27,6 +32,11 @@ public class Guards
     /// </summary>
     public string FullName { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Link ảnh đại diện
+    /// </summary>
+    public string? AvatarUrl { get; set; }
+    
     /// <summary>
     /// Email (optional cho guards)
     /// </summary>
@@ -50,12 +60,12 @@ public class Guards
     /// MALE | FEMALE
     /// </summary>
     public string? Gender { get; set; }
-
+    
     /// <summary>
-    /// CCCD/CMND - unique, validate format VN
+    /// GUARD
     /// </summary>
-    public string? NationalId { get; set; }
-
+    public string Role { get; set; } = "GUARD";
+    
     /// <summary>
     /// Địa chỉ hiện tại
     /// </summary>
@@ -214,11 +224,7 @@ public class Guards
     /// JSON array tokens push notification
     /// </summary>
     public string? DeviceTokens { get; set; }
-
-    /// <summary>
-    /// Link ảnh đại diện
-    /// </summary>
-    public string? AvatarUrl { get; set; }
+    
 
     // ============================================================================
     // SYNC METADATA

@@ -13,7 +13,7 @@ public class CancelShiftEndpoint : ICarterModule
     public void AddRoutes(IEndpointRouteBuilder app)
     {
         // Route: POST /shifts/{shiftId}/cancel
-        app.MapPost("/shifts/{shiftId}/cancel", async (
+        app.MapPost("/api/shifts/{shiftId}/cancel", async (
             Guid shiftId,
             CancelShiftRequest req,
             ISender sender,
@@ -59,6 +59,7 @@ public class CancelShiftEndpoint : ICarterModule
             // Trả về 200 OK với kết quả
             return Results.Ok(result);
         })
+        .RequireAuthorization()
         .WithTags("Shifts")
         .WithName("CancelShift")
         .Produces<CancelShiftResult>(StatusCodes.Status200OK)

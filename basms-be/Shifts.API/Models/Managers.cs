@@ -20,6 +20,11 @@ public class Managers
     // ============================================================================
 
     /// <summary>
+    /// Số CCCD
+    /// </summary>
+    public string IdentityNumber { get; set; } = string.Empty;
+    
+    /// <summary>
     /// Mã NV: MGR001
     /// </summary>
     public string EmployeeCode { get; set; } = string.Empty;
@@ -30,6 +35,11 @@ public class Managers
     public string FullName { get; set; } = string.Empty;
 
     /// <summary>
+    /// Link ảnh đại diện
+    /// </summary>
+    public string? AvatarUrl { get; set; }
+    
+    /// <summary>
     /// Email đăng nhập
     /// </summary>
     public string Email { get; set; } = string.Empty;
@@ -38,13 +48,25 @@ public class Managers
     /// SĐT liên hệ
     /// </summary>
     public string? PhoneNumber { get; set; }
+    
+    /// <summary>
+    /// Địa chỉ hiện tại
+    /// </summary>
+    public string? CurrentAddress { get; set; }
+    
+    /// <summary>
+    /// MALE | FEMALE
+    /// </summary>
+    public string? Gender { get; set; }
+    
+    public DateTime? DateOfBirth { get; set; }
 
     // ============================================================================
     // VAI TRÒ & CHỨC VỤ
     // ============================================================================
 
     /// <summary>
-    /// MANAGER=quản lý team | DIRECTOR=giám đốc | SUPERVISOR=trưởng ca
+    /// MANAGER| DIRECTOR
     /// </summary>
     public string Role { get; set; } = "MANAGER";
 
@@ -133,11 +155,7 @@ public class Managers
     /// Tổng ca đã tạo
     /// </summary>
     public int TotalShiftsCreated { get; set; } = 0;
-
-    /// <summary>
-    /// Link ảnh đại diện S3
-    /// </summary>
-    public string? AvatarUrl { get; set; }
+    
 
     // ============================================================================
     // SYNC METADATA (quan trọng!)

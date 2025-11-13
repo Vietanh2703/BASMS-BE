@@ -10,11 +10,13 @@ namespace BuildingBlocks.Messaging.Events;
 /// </summary>
 public record CreateUserRequest
 {
+    public string? IdentityNumber { get; init; }
     public string Email { get; init; } = string.Empty;
     public string Password { get; init; } = string.Empty;
     public string FullName { get; init; } = string.Empty;
     public string? Phone { get; init; }
     public string? Address { get; init; }
+    public string Gender { get; init; }
     public string RoleName { get; init; } = "customer";  // Default role
     public string? AvatarUrl { get; init; }
     public string AuthProvider { get; init; } = "email";

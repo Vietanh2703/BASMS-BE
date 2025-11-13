@@ -94,8 +94,12 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     `CompanyName` VARCHAR(255) NOT NULL,
                     `ContactPersonName` VARCHAR(255) NOT NULL,
                     `ContactPersonTitle` VARCHAR(100) NULL,
+                    `IdentityNumber` VARCHAR(12) NOT NULL UNIQUE,
                     `Email` VARCHAR(255) NOT NULL,
                     `Phone` VARCHAR(20) NOT NULL,
+                    `AvatarUrl` VARCHAR(500) NULL,
+                    `Gender` VARCHAR(6) NULL COMMENT 'male, female, other...',
+                    `DateOfBirth` DATE NOT NULL,
                     `Address` TEXT NOT NULL,
                     `City` VARCHAR(100) NULL,
                     `District` VARCHAR(100) NULL,
@@ -112,6 +116,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     `UpdatedBy` CHAR(36) NULL,
                     INDEX `idx_customer_user` (`UserId`),
                     INDEX `idx_customer_code` (`CustomerCode`),
+                    INDEX `idx_customer_identity_number` (`IdentityNumber`),
                     INDEX `idx_customer_status` (`Status`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 COMMENT='Khách hàng - công ty thuê dịch vụ bảo vệ';

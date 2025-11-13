@@ -4,6 +4,9 @@ public class CreateUserValidator : AbstractValidator<CreateUserCommand>
 {
     public CreateUserValidator()
     {
+        RuleFor(x => x.IdentityNumber)
+            .NotEmpty().WithMessage("Identity number is required")
+            .Length(12).WithMessage("Identity number must be 12 characters");
         RuleFor(x => x.Email)
             .NotEmpty().WithMessage("Email is required")
             .EmailAddress().WithMessage("Invalid email format")

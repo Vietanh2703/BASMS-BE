@@ -5,10 +5,12 @@ namespace Users.API.UsersHandler.CreateUser;
 
 // Command chứa dữ liệu để tạo user - được gửi từ Endpoint đến Handler
 public record CreateUserCommand(
+    string IdentityNumber,
     string Email,
     string Password,
     string FullName,
     string? Phone = null,
+    string? Gender = null,
     string? Address = null,
     DateOnly? DateOfBirth = null,  // DateOnly để tính BirthDay/Month/Year
     int? BirthDay = null,
@@ -31,163 +33,168 @@ public class CreateUserHandler(
     : ICommandHandler<CreateUserCommand, CreateUserResult>
 {
     public async Task<CreateUserResult> Handle(CreateUserCommand command, CancellationToken cancellationToken)
+{
+    // Bước 1: Validate dữ liệu đầu vào bằng FluentValidation
+    var validationResult = await validator.ValidateAsync(command, cancellationToken);
+    if (!validationResult.IsValid)
     {
-        // Bước 1: Validate dữ liệu đầu vào bằng FluentValidation
-        // Kiểm tra email format, password strength, required fields, etc.
-        var validationResult = await validator.ValidateAsync(command, cancellationToken);
-        if (!validationResult.IsValid)
-        {
-            var errors = string.Join(", ", validationResult.Errors.Select(e => e.ErrorMessage));
-            throw new InvalidOperationException($"Validation failed: {errors}");
-        }
+        var errors = string.Join(", ", validationResult.Errors.Select(e => e.ErrorMessage));
+        throw new InvalidOperationException($"Validation failed: {errors}");
+    }
 
-        // Bước 2: Đảm bảo tất cả bảng database đã được tạo (chạy migration nếu cần)
-        await connectionFactory.EnsureTablesCreatedAsync();
+    // Bước 2: Đảm bảo tất cả bảng database đã được tạo
+    await connectionFactory.EnsureTablesCreatedAsync();
+
+    // Bước 3: TẠO FIREBASE USER TRƯỚC
+    UserRecord firebaseUser = null;
+    try
+    {
+        firebaseUser = await CreateFirebaseUserAsync(command);
+        logger.LogDebug("Firebase user created: {FirebaseUid}", firebaseUser.Uid);
+    }
+    catch (Exception firebaseEx)
+    {
+        logger.LogError(firebaseEx, "Failed to create Firebase user for {Email}", command.Email);
+        throw new InvalidOperationException($"Failed to create Firebase user: {firebaseEx.Message}", firebaseEx);
+    }
+
+    try
+    {
+        // Bước 4: Tạo kết nối database và bắt đầu transaction
+        using var connection = await connectionFactory.CreateConnectionAsync();
+        using var transaction = connection.BeginTransaction();
 
         try
         {
-            // Bước 3: Tạo kết nối database và bắt đầu transaction
-            // Transaction đảm bảo tất cả thay đổi DB cùng commit hoặc rollback
-            using var connection = await connectionFactory.CreateConnectionAsync();
-            using var transaction = connection.BeginTransaction();
+            // Bước 5: Kiểm tra email đã tồn tại chưa
+            var existingUsers = await connection.GetAllAsync<Models.Users>(transaction);
+            var existingUser = existingUsers.FirstOrDefault(u =>
+                u.Email == command.Email && !u.IsDeleted);
 
-            try
+            if (existingUser != null)
             {
-                // Bước 4: Kiểm tra email đã tồn tại chưa (unique constraint)
-                var existingUsers = await connection.GetAllAsync<Models.Users>(transaction);
-                var existingUser = existingUsers.FirstOrDefault(u => 
-                    u.Email == command.Email && !u.IsDeleted);
+                throw new InvalidOperationException($"Email {command.Email} already exists");
+            }
 
-                if (existingUser != null)
-                {
-                    throw new InvalidOperationException($"Email {command.Email} already exists");
-                }
+            // Bước 6: Lấy hoặc tạo role mặc định
+            Guid roleId = command.RoleId ?? await GetDefaultRoleIdAsync(connection, transaction);
 
-                // Bước 5: Lấy hoặc tạo role mặc định nếu không được cung cấp
-                // Mặc định là role "guard"
-                Guid roleId = command.RoleId ?? await GetDefaultRoleIdAsync(connection, transaction);
+            // Bước 7: Tự động tính toán các trường ngày sinh
+            int? birthDay = command.BirthDay;
+            int? birthMonth = command.BirthMonth;
+            int? birthYear = command.BirthYear;
 
-                // Bước 6: Tạo tài khoản trên Firebase Authentication
-                // Firebase sẽ quản lý authentication và trả về UID
-                var firebaseUser = await CreateFirebaseUserAsync(command);
+            if (command.DateOfBirth.HasValue && (!birthDay.HasValue || !birthMonth.HasValue || !birthYear.HasValue))
+            {
+                birthDay = command.DateOfBirth.Value.Day;
+                birthMonth = command.DateOfBirth.Value.Month;
+                birthYear = command.DateOfBirth.Value.Year;
+            }
 
-                // Bước 7: Tự động tính toán các trường ngày sinh
-                // Nếu có DateOfBirth thì split ra BirthDay, BirthMonth, BirthYear
-                int? birthDay = command.BirthDay;
-                int? birthMonth = command.BirthMonth;
-                int? birthYear = command.BirthYear;
+            // Bước 8: Tạo entity User với FirebaseUid đã có
+            var user = new Models.Users
+            {
+                Id = Guid.NewGuid(),
+                FirebaseUid = firebaseUser.Uid,
+                IdentityNumber = command.IdentityNumber,
+                Email = command.Email,
+                FullName = command.FullName,
+                Phone = command.Phone,
+                Gender = command.Gender,
+                Address = command.Address,
+                BirthDay = birthDay,
+                BirthMonth = birthMonth,
+                BirthYear = birthYear,
+                RoleId = roleId,
+                AvatarUrl = command.AvatarUrl,
+                AuthProvider = command.AuthProvider,
+                Status = "active",
+                IsActive = true,
+                IsDeleted = false,
+                LoginCount = 0,
+                Password = BCrypt.Net.BCrypt.HashPassword(command.Password),
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
 
-                if (command.DateOfBirth.HasValue && (!birthDay.HasValue || !birthMonth.HasValue || !birthYear.HasValue))
-                {
-                    birthDay = command.DateOfBirth.Value.Day;
-                    birthMonth = command.DateOfBirth.Value.Month;
-                    birthYear = command.DateOfBirth.Value.Year;
-                }
+            // Bước 9: INSERT user vào database
+            await connection.InsertAsync(user, transaction);
+            logger.LogDebug("User inserted into database: {UserId}", user.Id);
 
-                // Bước 8: Tạo entity User để lưu vào database
-                var user = new Models.Users
-                {
-                    Id = Guid.NewGuid(),                    // Tạo ID mới
-                    FirebaseUid = firebaseUser.Uid,         // UID từ Firebase
-                    Email = command.Email,
-                    FullName = command.FullName,
-                    Phone = command.Phone,
-                    Address = command.Address,
-                    BirthDay = birthDay,
-                    BirthMonth = birthMonth,
-                    BirthYear = birthYear,
-                    RoleId = roleId,
-                    AvatarUrl = command.AvatarUrl,
-                    AuthProvider = command.AuthProvider,
-                    Status = "active",                      // Trạng thái mặc định
-                    IsActive = true,                        // Kích hoạt ngay
-                    IsDeleted = false,                      // Chưa bị xóa
-                    LoginCount = 0,                         // Chưa đăng nhập lần nào
-                    Password = BCrypt.Net.BCrypt.HashPassword(command.Password),  // Hash password bằng BCrypt
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
-                };
+            // Bước 10: Ghi log audit trail
+            await LogAuditAsync(connection, transaction, user);
+            logger.LogDebug("Audit log created for user: {UserId}", user.Id);
 
-                // Bước 9: INSERT user vào bảng users trong database
-                await connection.InsertAsync(user, transaction);
-                logger.LogDebug("User inserted into database: {UserId}", user.Id);
+            // Bước 11: Commit transaction
+            transaction.Commit();
+            logger.LogDebug("Transaction committed successfully for user: {UserId}", user.Id);
 
-                // Bước 10: Ghi log audit trail vào bảng audit_logs
-                // Lưu lại hành động CREATE_USER để theo dõi
-                await LogAuditAsync(connection, transaction, user);
-                logger.LogDebug("Audit log created for user: {UserId}", user.Id);
+            // Bước 12: Lấy thông tin role để publish event
+            var role = await connection.GetAsync<Roles>(roleId);
+            if (role == null)
+            {
+                logger.LogWarning("Role not found with ID {RoleId} for user {UserId}", roleId, user.Id);
+            }
 
-                // Bước 11: Commit transaction - lưu tất cả thay đổi vào database
-                // Nếu có lỗi ở các bước trước, sẽ rollback tự động
-                transaction.Commit();
-                logger.LogDebug("Transaction committed successfully for user: {UserId}", user.Id);
-
-                // Bước 11.5: Lấy thông tin role để publish event
-                var role = await connection.GetAsync<Roles>(roleId);
-                if (role == null)
-                {
-                    logger.LogWarning("Role not found with ID {RoleId} for user {UserId}", roleId, user.Id);
-                }
-
-                // Bước 11.6: Publish UserCreatedEvent to RabbitMQ for other services
-                // Shifts.API sẽ nhận event này và tạo cache cho manager/guard
-                if (role != null)
-                {
-                    try
-                    {
-                        await eventPublisher.PublishUserCreatedAsync(user, role, cancellationToken);
-                        logger.LogInformation("UserCreatedEvent published successfully for user: {UserId}", user.Id);
-                    }
-                    catch (Exception eventEx)
-                    {
-                        // Log lỗi nhưng không throw - user đã được tạo thành công
-                        logger.LogError(eventEx, "Failed to publish UserCreatedEvent for user {UserId}, but user was created successfully", user.Id);
-                    }
-                }
-
-                // Bước 12: Gửi email chào mừng cho user mới
-                // Chạy riêng biệt, không ảnh hưởng đến việc tạo user nếu thất bại
+            // Bước 13: Publish UserCreatedEvent to RabbitMQ
+            if (role != null)
+            {
                 try
                 {
-                    await emailHandler.SendWelcomeEmailAsync(user.FullName, user.Email, command.Password);
-                    logger.LogInformation("Welcome email sent successfully to {Email}", user.Email);
+                    await eventPublisher.PublishUserCreatedAsync(user, role, cancellationToken);
+                    logger.LogInformation("UserCreatedEvent published successfully for user: {UserId}", user.Id);
                 }
-                catch (Exception emailEx)
+                catch (Exception eventEx)
                 {
-                    // Log lỗi nhưng không throw exception
-                    // User vẫn được tạo thành công dù email thất bại
-                    logger.LogError(emailEx, "Failed to send welcome email to {Email}, but user was created successfully", user.Email);
+                    logger.LogError(eventEx, "Failed to publish UserCreatedEvent for user {UserId}, but user was created successfully", user.Id);
                 }
-
-                logger.LogInformation("User created successfully: {Email}, FirebaseUid: {FirebaseUid}",
-                    user.Email, user.FirebaseUid);
-
-                // Bước 13: Trả về kết quả với thông tin user vừa tạo
-                var result = new CreateUserResult(user.Id, user.FirebaseUid, user.Email);
-                return result;
             }
-            catch
+
+            // Bước 14: Gửi email chào mừng
+            try
             {
-                // Rollback transaction nếu có lỗi bất kỳ
-                // Đảm bảo database không bị corrupted
-                transaction.Rollback();
-                logger.LogWarning("Transaction rolled back due to error");
-                throw;
+                await emailHandler.SendWelcomeEmailAsync(user.FullName, user.Email, command.Password);
+                logger.LogInformation("Welcome email sent successfully to {Email}", user.Email);
             }
+            catch (Exception emailEx)
+            {
+                logger.LogError(emailEx, "Failed to send welcome email to {Email}, but user was created successfully", user.Email);
+            }
+
+            logger.LogInformation("User created successfully: {Email}, FirebaseUid: {FirebaseUid}",
+                user.Email, user.FirebaseUid);
+
+            return new CreateUserResult(user.Id, user.FirebaseUid, user.Email);
         }
-        catch (FirebaseAuthException ex)
+        catch
         {
-            // Xử lý riêng lỗi từ Firebase (email đã tồn tại, password yếu, etc.)
-            logger.LogError(ex, "Firebase error creating user: {Email}", command.Email);
-            throw new InvalidOperationException($"Failed to create Firebase user: {ex.Message}", ex);
-        }
-        catch (Exception ex)
-        {
-            // Xử lý các lỗi khác
-            logger.LogError(ex, "Error creating user: {Email}", command.Email);
+            transaction.Rollback();
+            logger.LogWarning("Transaction rolled back due to error");
             throw;
         }
     }
+    catch (Exception ex)
+    {
+        // NẾU DATABASE LỖI, XÓA FIREBASE USER ĐÃ TẠO
+        if (firebaseUser != null)
+        {
+            try
+            {
+                await FirebaseAuth.DefaultInstance.DeleteUserAsync(firebaseUser.Uid);
+                logger.LogWarning("Deleted Firebase user {FirebaseUid} due to database error", firebaseUser.Uid);
+            }
+            catch (Exception deleteEx)
+            {
+                logger.LogError(deleteEx, "Failed to delete Firebase user {FirebaseUid} after database error", firebaseUser.Uid);
+            }
+        }
+
+        logger.LogError(ex, "Error creating user: {Email}", command.Email);
+        throw;
+    }
+}
+
+
 
     // Hàm tạo user trên Firebase Authentication
     private async Task<UserRecord> CreateFirebaseUserAsync(CreateUserCommand command)
@@ -261,6 +268,7 @@ public class CreateUserHandler(
             EntityId = user.Id,              // ID của entity
             NewValues = System.Text.Json.JsonSerializer.Serialize(new  // Giá trị mới (JSON)
             {
+                user.IdentityNumber,
                 user.Email,
                 user.FullName,
                 user.RoleId,

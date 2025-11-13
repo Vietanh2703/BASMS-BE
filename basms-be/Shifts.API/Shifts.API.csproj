@@ -15,6 +15,10 @@
 
     <ItemGroup>
       <Folder Include="Data\" />
+      <Folder Include="GuardsHandler\GetAllGuards\" />
+      <Folder Include="GuardsHandler\GetGuardById\" />
+      <Folder Include="ManagersHandler\GetAllManagers\" />
+      <Folder Include="ManagersHandler\GetManagerById\" />
       <Folder Include="Models\" />
       <Folder Include="ShiftsHandler\" />
     </ItemGroup>

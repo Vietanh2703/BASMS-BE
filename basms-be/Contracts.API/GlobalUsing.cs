@@ -21,3 +21,7 @@ global using Microsoft.Extensions.Options;
 global using Contracts.API.Extensions;
 global using Microsoft.AspNetCore.Mvc;
 global using System.Text.Json;
+global using Amazon;
+global using Amazon.Runtime;
+global using Microsoft.AspNetCore.Authentication.JwtBearer;
+global using Microsoft.IdentityModel.Tokens;

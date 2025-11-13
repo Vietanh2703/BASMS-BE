@@ -8,7 +8,7 @@ public class GetAllContractDocumentsEndpoint : ICarterModule
     public void AddRoutes(IEndpointRouteBuilder app)
     {
         // Route: GET /api/contracts/documents
-        app.MapGet("/contracts/documents", async (
+        app.MapGet("/api/contracts/documents", async (
             ISender sender,
             ILogger<GetAllContractDocumentsEndpoint> logger) =>
         {

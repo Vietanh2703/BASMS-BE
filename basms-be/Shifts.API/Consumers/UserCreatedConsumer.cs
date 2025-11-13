@@ -34,7 +34,7 @@ public class UserCreatedConsumer : IConsumer<UserCreatedEvent>
 
             // Determine if user is manager or guard
             var isManager = @event.RoleName.ToLower() is "manager";
-            var isGuard = @event.RoleName.ToLower() == "guard";
+            var isGuard = @event.RoleName.ToLower() is "guard";
 
             if (isManager)
             {
@@ -61,6 +61,7 @@ public class UserCreatedConsumer : IConsumer<UserCreatedEvent>
                 @event.UserId,
                 isManager ? "MANAGER" : "GUARD");
         }
+
         catch (Exception ex)
         {
             _logger.LogError(ex,
@@ -74,33 +75,33 @@ public class UserCreatedConsumer : IConsumer<UserCreatedEvent>
             throw; // Re-throw to trigger MassTransit retry
         }
     }
-
+    
     private async Task CreateManagerCacheAsync(IDbConnection connection, UserCreatedEvent @event)
     {
         var manager = new Managers
         {
             Id = @event.UserId,
+            IdentityNumber = @event.IdentityNumber,
             EmployeeCode = @event.EmployeeCode ?? $"MGR-{@event.UserId.ToString()[..8]}",
             FullName = @event.FullName,
             Email = @event.Email,
+            Gender = @event.Gender,
+            DateOfBirth = @event.DateOfBirth,
+            AvatarUrl = @event.AvatarUrl,
+            CurrentAddress = @event.Address,
             PhoneNumber = @event.Phone,
 
             Role = @event.RoleName.ToUpper(),
             Position = @event.Position,
             Department = @event.Department,
 
-            ManagerLevel = @event.RoleName.ToLower() switch
-            {
-                "director" => 3,
-                "supervisor" => 2,
-                _ => 1
-            },
+            ManagerLevel = 1, // Line Manager
 
             EmploymentStatus = "ACTIVE",
 
             // Default permissions
             CanCreateShifts = true,
-            CanApproveShifts = true,
+            CanApproveShifts = false,
             CanAssignGuards = true,
             CanApproveOvertime = true,
             CanManageTeams = true,
@@ -128,14 +129,15 @@ public class UserCreatedConsumer : IConsumer<UserCreatedEvent>
         var guard = new Guards
         {
             Id = @event.UserId,
+            IdentityNumber = @event.IdentityNumber,
             EmployeeCode = @event.EmployeeCode ?? $"GRD-{@event.UserId.ToString()[..8]}",
             FullName = @event.FullName,
             Email = @event.Email,
+            AvatarUrl = @event.AvatarUrl,
             PhoneNumber = @event.Phone ?? "N/A",
 
             DateOfBirth = @event.DateOfBirth,
             Gender = @event.Gender,
-            NationalId = @event.NationalId,
             CurrentAddress = @event.Address,
 
             EmploymentStatus = "ACTIVE",
@@ -179,7 +181,7 @@ public class UserCreatedConsumer : IConsumer<UserCreatedEvent>
         {
             Id = Guid.NewGuid(),
             UserId = @event.UserId,
-            UserType = @event.RoleName.ToLower() is "manager" or "director" or "supervisor" ? "MANAGER" : "GUARD",
+            UserType = @event.RoleName.ToLower() == "manager" ? "MANAGER" : "GUARD",
             SyncType = "CREATE",
             SyncStatus = status,
             SyncInitiatedBy = "WEBHOOK",

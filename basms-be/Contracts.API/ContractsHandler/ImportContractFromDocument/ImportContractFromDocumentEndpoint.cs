@@ -9,7 +9,7 @@ public class ImportContractFromDocumentEndpoint : ICarterModule
     public void AddRoutes(IEndpointRouteBuilder app)
     {
         // Route: POST /api/contracts/import-from-document
-        app.MapPost("/contracts/import-from-document", async (
+        app.MapPost("/api/contracts/import-from-document", async (
             HttpRequest request,
             ISender sender,
             ILogger<ImportContractFromDocumentEndpoint> logger) =>

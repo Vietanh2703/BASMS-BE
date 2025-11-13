@@ -73,13 +73,17 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                         `Id` CHAR(36) PRIMARY KEY COMMENT 'Trùng với User Service user_id',
 
                         -- Thông tin cơ bản
+                        `IdentityNumber` VARCHAR(12) UNIQUE NOT NULL COMMENT 'CCCD',
                         `EmployeeCode` VARCHAR(50) UNIQUE NOT NULL COMMENT 'Mã NV: MGR001',
                         `FullName` VARCHAR(200) NOT NULL COMMENT 'Họ tên đầy đủ',
                         `Email` VARCHAR(255) UNIQUE NOT NULL COMMENT 'Email đăng nhập',
                         `PhoneNumber` VARCHAR(20) NULL COMMENT 'SĐT liên hệ',
+                        `DateOfBirth` DATE NULL,
+                        `CurrentAddress` VARCHAR(200) NULL,
+                        `Gender` VARCHAR(10) NULL COMMENT 'MALE | FEMALE',
 
                         -- Vai trò & chức vụ
-                        `Role` VARCHAR(50) NOT NULL DEFAULT 'MANAGER' COMMENT 'MANAGER | DIRECTOR | SUPERVISOR',
+                        `Role` VARCHAR(50) NOT NULL DEFAULT 'MANAGER' COMMENT 'MANAGER | DIRECTOR',
                         `Position` VARCHAR(100) NULL COMMENT 'Chức danh',
                         `Department` VARCHAR(100) NULL COMMENT 'Phòng ban',
 
@@ -121,6 +125,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                         -- Indexes
                         INDEX `idx_managers_active` (`IsActive`),
                         INDEX `idx_managers_code` (`EmployeeCode`),
+                        INDEX `idx_managers_identity_number` (`IdentityNumber`),
                         INDEX `idx_managers_email` (`Email`),
                         INDEX `idx_managers_status` (`EmploymentStatus`),
                         INDEX `idx_managers_hierarchy` (`ReportsToManagerId`)
@@ -142,6 +147,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                         `Id` CHAR(36) PRIMARY KEY COMMENT 'Trùng với User Service user_id',
 
                         -- Thông tin cơ bản
+                        `IdentityNumber` VARCHAR(12) UNIQUE NOT NULL COMMENT 'CCCD',
                         `EmployeeCode` VARCHAR(50) UNIQUE NOT NULL COMMENT 'Mã NV: GRD001',
                         `FullName` VARCHAR(200) NOT NULL,
                         `Email` VARCHAR(255) NULL,
@@ -150,7 +156,6 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                         -- Thông tin cá nhân
                         `DateOfBirth` DATE NULL,
                         `Gender` VARCHAR(10) NULL COMMENT 'MALE | FEMALE',
-                        `NationalId` VARCHAR(50) UNIQUE NULL COMMENT 'CCCD/CMND',
                         `CurrentAddress` TEXT NULL,
 
                         -- Tuyển dụng
@@ -210,7 +215,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                         INDEX `idx_guards_active` (`IsActive`),
                         INDEX `idx_guards_code` (`EmployeeCode`),
                         INDEX `idx_guards_phone` (`PhoneNumber`),
-                        INDEX `idx_guards_national_id` (`NationalId`),
+                        INDEX `idx_guards_identity_number` (`IdentityNumber`),
                         INDEX `idx_guards_status` (`EmploymentStatus`),
                         INDEX `idx_guards_manager` (`DirectManagerId`),
                         INDEX `idx_guards_availability` (`CurrentAvailability`, `IsActive`),

@@ -32,8 +32,9 @@ public class UserUpdatedConsumer : IConsumer<UserUpdatedEvent>
         {
             using var connection = await _dbFactory.CreateConnectionAsync();
 
-            var isManager = @event.RoleName.ToLower() is "manager" or "director" or "supervisor";
-            var isGuard = @event.RoleName.ToLower() == "guard";
+            var roleLower = @event.RoleName.ToLower();
+            var isManager = roleLower == "manager";
+            var isGuard = roleLower == "guard";
 
             if (isManager)
             {
@@ -85,8 +86,7 @@ public class UserUpdatedConsumer : IConsumer<UserUpdatedEvent>
         }
 
         // Update fields
-        manager.FullName = @event.FullName;
-        manager.Email = @event.Email;
+        manager.AvatarUrl = @event.AvatarUrl;
         manager.PhoneNumber = @event.Phone;
         manager.Position = @event.Position;
         manager.Department = @event.Department;
@@ -117,8 +117,7 @@ public class UserUpdatedConsumer : IConsumer<UserUpdatedEvent>
         }
 
         // Update fields
-        guard.FullName = @event.FullName;
-        guard.Email = @event.Email;
+        guard.AvatarUrl = @event.AvatarUrl ?? guard.AvatarUrl;
         guard.PhoneNumber = @event.Phone ?? guard.PhoneNumber;
         guard.CurrentAddress = @event.Address;
         guard.EmploymentStatus = MapStatus(@event.Status);
@@ -161,10 +160,15 @@ public class UserUpdatedConsumer : IConsumer<UserUpdatedEvent>
         {
             Id = Guid.NewGuid(),
             UserId = @event.UserId,
-            UserType = @event.RoleName.ToLower() is "manager" or "director" or "supervisor" ? "MANAGER" : "GUARD",
+            UserType = @event.RoleName.ToLower() switch
+            {
+                "manager" => "MANAGER",
+                "guard" => "GUARD",
+                _ => "UNKNOWN"
+            },
             SyncType = "UPDATE",
             SyncStatus = status,
-            FieldsChanged = System.Text.Json.JsonSerializer.Serialize(@event.ChangedFields),
+            FieldsChanged = JsonSerializer.Serialize(@event.ChangedFields),
             SyncInitiatedBy = "WEBHOOK",
             UserServiceVersionBefore = @event.Version - 1,
             UserServiceVersionAfter = @event.Version,

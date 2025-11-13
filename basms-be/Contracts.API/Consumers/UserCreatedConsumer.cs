@@ -116,15 +116,17 @@ public class UserCreatedConsumer : IConsumer<UserCreatedEvent>
             Id = Guid.NewGuid(),
             UserId = @event.UserId,
             CustomerCode = customerCode,
-
-            // Company info - sử dụng FullName làm CompanyName tạm thời
-            // Customer có thể update sau
+            
             CompanyName = @event.FullName,
             ContactPersonName = @event.FullName,
             ContactPersonTitle = null,
 
+            IdentityNumber = @event.IdentityNumber,
             Email = @event.Email,
             Phone = @event.Phone ?? "",
+            AvatarUrl = @event.AvatarUrl,
+            Gender = @event.Gender,
+            DateOfBirth = @event.DateOfBirth,
             Address = @event.Address ?? "",
             City = null,
             District = null,

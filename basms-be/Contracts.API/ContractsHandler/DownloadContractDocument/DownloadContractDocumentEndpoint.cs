@@ -8,7 +8,7 @@ public class DownloadContractDocumentEndpoint : ICarterModule
     public void AddRoutes(IEndpointRouteBuilder app)
     {
         // Route: GET /api/contracts/documents/{documentId}/download
-        app.MapGet("/contracts/documents/{documentId:guid}/download", async (
+        app.MapGet("/api/contracts/documents/{documentId:guid}/download", async (
             Guid documentId,
             ISender sender,
             ILogger<DownloadContractDocumentEndpoint> logger) =>

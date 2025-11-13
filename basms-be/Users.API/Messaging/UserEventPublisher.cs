@@ -27,10 +27,35 @@ public class UserEventPublisher
     {
         try
         {
+            DateTime dateOfBirth = default;
+        
+            if (user.BirthYear.HasValue && user.BirthMonth.HasValue && user.BirthDay.HasValue)
+            {
+                try
+                {
+                    dateOfBirth = new DateTime(
+                        user.BirthYear.Value,
+                        user.BirthMonth.Value,
+                        user.BirthDay.Value
+                    );
+                }
+                catch (ArgumentOutOfRangeException ex)
+                {
+                    _logger.LogWarning(ex,
+                        "Invalid birth date for User {UserId}: {Year}/{Month}/{Day}",
+                        user.Id,
+                        user.BirthYear,
+                        user.BirthMonth,
+                        user.BirthDay);
+                    // Keep dateOfBirth as null if invalid
+                }
+            }
+            
             var @event = new UserCreatedEvent
             {
                 UserId = user.Id,
                 FirebaseUid = user.FirebaseUid,
+                IdentityNumber = user.IdentityNumber,
                 Email = user.Email,
                 FullName = user.FullName,
                 Phone = user.Phone,
@@ -44,9 +69,8 @@ public class UserEventPublisher
                 EmployeeCode = null, 
                 Position = null,
                 Department = null,
-                DateOfBirth = null,
-                Gender = null,
-                NationalId = null,
+                DateOfBirth = dateOfBirth,
+                Gender = user.Gender,
                 Address = user.Address,
                 HireDate = null,
                 ContractType = null,
@@ -86,15 +110,11 @@ public class UserEventPublisher
             var @event = new UserUpdatedEvent
             {
                 UserId = user.Id,
-                Email = user.Email,
                 FullName = user.FullName,
                 Phone = user.Phone,
                 AvatarUrl = user.AvatarUrl,
-
-                RoleId = user.RoleId,
-                RoleName = role.Name,
-
-                EmployeeCode = null, 
+                
+                
                 Position = null,
                 Department = null,
                 Address = user.Address,
@@ -106,7 +126,7 @@ public class UserEventPublisher
 
                 UpdatedAt = user.UpdatedAt ?? DateTime.UtcNow,
                 UpdatedBy = user.UpdatedBy,
-                Version = 1, // version field to Users model for optimistic locking
+                Version = 1, 
 
                 ChangedFields = changedFields
             };

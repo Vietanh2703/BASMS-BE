@@ -32,8 +32,9 @@ public class UserDeletedConsumer : IConsumer<UserDeletedEvent>
         {
             using var connection = await _dbFactory.CreateConnectionAsync();
 
-            var isManager = @event.RoleName.ToLower() is "manager" or "director" or "supervisor";
-            var isGuard = @event.RoleName.ToLower() == "guard";
+            var roleLower = @event.RoleName.ToLower();
+            var isManager = roleLower == "manager";
+            var isGuard = roleLower == "guard";
 
             if (isManager)
             {
@@ -123,7 +124,12 @@ public class UserDeletedConsumer : IConsumer<UserDeletedEvent>
         {
             Id = Guid.NewGuid(),
             UserId = @event.UserId,
-            UserType = @event.RoleName.ToLower() is "manager" or "director" or "supervisor" ? "MANAGER" : "GUARD",
+            UserType = @event.RoleName.ToLower() switch
+            {
+                "manager" => "MANAGER",
+                "guard" => "GUARD",
+                _ => "UNKNOWN"
+            },
             SyncType = "DELETE",
             SyncStatus = status,
             SyncInitiatedBy = "WEBHOOK",

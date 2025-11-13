@@ -6,13 +6,13 @@ public class Users
     [ExplicitKey]
     public Guid Id { get; set; }
     public string FirebaseUid { get; set; } = string.Empty;
+    public string? IdentityNumber { get; set; }
     public string Email { get; set; } = string.Empty;
-    
     public bool EmailVerified { get; set; }
-    
     public DateTime? EmailVerifiedAt { get; set; }
     public string FullName { get; set; } = string.Empty;
     public string? AvatarUrl { get; set; }
+    public string? Gender { get; set; }
     public string? Phone { get; set; }
     public string? Address { get; set; }
     public int? BirthDay { get; set; }
@@ -21,7 +21,6 @@ public class Users
     public Guid RoleId { get; set; }
     public string AuthProvider { get; set; } = "email";
     public string Status { get; set; } = "active";
-    
     public DateTime? LastLoginAt { get; set; }
     public int LoginCount { get; set; }
     public bool IsDeleted { get; set; }

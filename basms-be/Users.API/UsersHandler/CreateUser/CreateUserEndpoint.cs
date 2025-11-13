@@ -3,10 +3,12 @@
 // DTO (Data Transfer Object) nhận dữ liệu từ client
 // Chứa tất cả thông tin cần thiết để tạo tài khoản người dùng mới
 public record CreateUserRequest(
+    string IdentityNumber,
     string Email,              // Email đăng nhập (bắt buộc)
     string Password,           // Mật khẩu (bắt buộc)
     string FullName,           // Họ và tên đầy đủ (bắt buộc)
     string? Phone,             // Số điện thoại (tùy chọn)
+    string Gender,
     string? Address,           // Địa chỉ (tùy chọn)
     int? BirthDay,            // Ngày sinh (1-31)
     int? BirthMonth,          // Tháng sinh (1-12)
@@ -45,9 +47,7 @@ public class CreateUserEndpoint : ICarterModule
             // Location header chứa URL để lấy thông tin user vừa tạo
             return Results.Created($"/users/{response.Id}", response);
         })
-        //.RequireAuthorization()  // Yêu cầu user phải đăng nhập (có access token hợp lệ)
-        // Chỉ cho phép 2 roleId cụ thể tạo user mới (admin roles)
-        //.AddEndpointFilter(new RoleAuthorizationFilter("ddbd5fad-ba6e-11f0-bcac-00155dca8f48", "ddbd612f-ba6e-11f0-bcac-00155dca8f48"))
+        .RequireAuthorization()
         .WithTags("Users")  // Nhóm endpoint trong Swagger UI
         .WithName("CreateUser")  // Tên endpoint để reference
         // Định nghĩa các response codes có thể trả về

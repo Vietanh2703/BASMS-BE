@@ -19,7 +19,7 @@ public class CreateShiftEndpoint : ICarterModule
     public void AddRoutes(IEndpointRouteBuilder app)
     {
         // Route: POST /shifts
-        app.MapPost("/shifts", async (CreateShiftRequest req, ISender sender, HttpContext context) =>
+        app.MapPost("/api/shifts", async (CreateShiftRequest req, ISender sender, HttpContext context) =>
         {
             // Lấy userId từ claims (giả sử đã authenticate)
             var userIdClaim = context.User.FindFirst("userId")?.Value;
@@ -48,6 +48,7 @@ public class CreateShiftEndpoint : ICarterModule
             // Trả về 201 Created với shift ID
             return Results.Created($"/shifts/{result.ShiftId}", result);
         })
+        .RequireAuthorization()
         .WithTags("Shifts")
         .WithName("CreateShift")
         .Produces<CreateShiftResult>(StatusCodes.Status201Created)

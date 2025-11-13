@@ -8,7 +8,7 @@ public class GenerateShiftsEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        app.MapPost("/shifts/generate",
+        app.MapPost("/api/shifts/generate",
             async (GenerateShiftsRequest request, ISender sender, HttpContext httpContext) =>
             {
                 // Lấy userId từ JWT token
@@ -31,6 +31,7 @@ public class GenerateShiftsEndpoint : ICarterModule
                     data = result
                 });
             })
+            .RequireAuthorization()
             .WithName("GenerateShifts")
             .WithTags("Shifts - Auto Generation")
             .WithDescription(@"

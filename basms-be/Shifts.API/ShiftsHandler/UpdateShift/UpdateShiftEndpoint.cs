@@ -16,7 +16,7 @@ public class UpdateShiftEndpoint : ICarterModule
     public void AddRoutes(IEndpointRouteBuilder app)
     {
         // Route: PUT /shifts/{id}
-        app.MapPut("/shifts/{id:guid}", async (Guid id, UpdateShiftRequest req, ISender sender, HttpContext context) =>
+        app.MapPut("/api/shifts/{id:guid}", async (Guid id, UpdateShiftRequest req, ISender sender, HttpContext context) =>
         {
             // Lấy userId từ claims
             var userIdClaim = context.User.FindFirst("userId")?.Value;
@@ -42,6 +42,7 @@ public class UpdateShiftEndpoint : ICarterModule
             // Trả về 200 OK
             return Results.Ok(result);
         })
+        .RequireAuthorization()
         .WithTags("Shifts")
         .WithName("UpdateShift")
         .Produces<UpdateShiftResult>(StatusCodes.Status200OK)

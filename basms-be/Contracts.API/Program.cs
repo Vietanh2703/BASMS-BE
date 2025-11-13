@@ -1,6 +1,3 @@
-using Amazon;
-using Amazon.Runtime;
-
 var builder = WebApplication.CreateBuilder(args);
 
 // Đăng ký Carter - Library để tổ chức API endpoints theo module
@@ -70,6 +67,7 @@ builder.Services.AddMassTransit(x =>
     });
 });
 
+
 // Cấu hình CORS cho frontend
 var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>();
 builder.Services.AddCors(options =>
@@ -84,6 +82,29 @@ builder.Services.AddCors(options =>
                 .AllowCredentials();
         });
 });
+
+builder.Services.AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    })
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(
+                System.Text.Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
+        };
+    });
+
+builder.Services.AddAuthorization();
+
 var app = builder.Build();
 
 // Initialize database tables
@@ -97,9 +118,10 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-
 app.MapCarter();
 app.UseCors("AllowFrontend");
+app.UseAuthentication();
+app.UseAuthorization();
 app.MapGet("/", () => "Contracts API - Customer & Contract Management Service");
 
 app.Run();

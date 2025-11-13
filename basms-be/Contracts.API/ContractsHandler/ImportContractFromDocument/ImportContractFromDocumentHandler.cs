@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Contracts.API.ContractsHandler.ImportContractFromDocument;
 
 // ================================================================
@@ -5,8 +7,8 @@ namespace Contracts.API.ContractsHandler.ImportContractFromDocument;
 // ================================================================
 
 /// <summary>
-/// Command để import contract từ file Word/PDF
-/// Upload document file, parse information, and save to database
+///     Command để import contract từ file Word/PDF
+///     Upload document file, parse information, and save to database
 /// </summary>
 public record ImportContractFromDocumentCommand(
     Stream FileStream,
@@ -15,7 +17,7 @@ public record ImportContractFromDocumentCommand(
 ) : ICommand<ImportContractFromDocumentResult>;
 
 /// <summary>
-/// Kết quả import
+///     Kết quả import
 /// </summary>
 public record ImportContractFromDocumentResult
 {
@@ -44,7 +46,7 @@ internal class ImportContractFromDocumentHandler(
     IDbConnectionFactory connectionFactory,
     ILogger<ImportContractFromDocumentHandler> logger,
     IRequestClient<CreateUserRequest> createUserClient,
-    Contracts.API.Extensions.EmailHandler emailHandler,
+    EmailHandler emailHandler,
     IConfiguration configuration)
     : ICommandHandler<ImportContractFromDocumentCommand, ImportContractFromDocumentResult>
 {
@@ -65,30 +67,22 @@ internal class ImportContractFromDocumentHandler(
             var fileExtension = Path.GetExtension(request.FileName).ToLower();
 
             if (fileExtension == ".docx")
-            {
                 rawText = await ExtractTextFromWordAsync(request.FileStream);
-            }
             else if (fileExtension == ".pdf")
-            {
                 rawText = await ExtractTextFromPdfAsync(request.FileStream);
-            }
             else
-            {
                 return new ImportContractFromDocumentResult
                 {
                     Success = false,
                     ErrorMessage = $"File type không được hỗ trợ: {fileExtension}. Chỉ hỗ trợ .docx và .pdf"
                 };
-            }
 
             if (string.IsNullOrWhiteSpace(rawText))
-            {
                 return new ImportContractFromDocumentResult
                 {
                     Success = false,
                     ErrorMessage = "Không thể đọc text từ file. File có thể bị lỗi hoặc rỗng."
                 };
-            }
 
             logger.LogInformation("Extracted {Length} characters from document", rawText.Length);
 
@@ -99,28 +93,31 @@ internal class ImportContractFromDocumentHandler(
             var (startDate, endDate) = ExtractDates(rawText);
             var customerName = ExtractCustomerName(rawText);
             var customerAddress = ExtractAddress(rawText);
-            var customerPhone = ExtractPhoneNumber(rawText); 
-            var customerEmail = ExtractEmail(rawText); 
+            var customerPhone = ExtractPhoneNumber(rawText);
+            var customerEmail = ExtractEmail(rawText);
             var taxCode = ExtractTaxCode(rawText);
-            var contactPersonName = ExtractContactPersonName(rawText); 
-            var contactPersonTitle = ExtractContactPersonTitle(rawText); 
+            var contactPersonName = ExtractContactPersonName(rawText);
+            var contactPersonTitle = ExtractContactPersonTitle(rawText);
+            var identityNumber = ExtractIdentityNumber(rawText);
+            var gender = ExtractGender(rawText);
             var guardsRequired = ExtractGuardsRequired(rawText);
             var coverageType = ExtractCoverageType(rawText);
 
             // Parse ĐIỀU 3 toàn bộ
             var dieu3Info = ParseDieu3(rawText, startDate, endDate);
-            
+
             var (locationName, locationAddress) = ExtractLocationDetails(rawText);
-            
+
             var (periodStartDate, periodEndDate, periodDuration) = ExtractContractPeriod(rawText);
-            
+
             var contractTypeInfo = AnalyzeContractType(rawText, startDate, endDate);
 
             // Log extracted info for debugging
             logger.LogInformation(
-                "Parsed: Contract={Contract}, Customer={Customer}, Email={Email}, Phone={Phone}, Contact={Contact}, Title={Title}, Type={Type}, Duration={Duration}",
-                contractNumber, customerName, customerEmail, customerPhone, contactPersonName, contactPersonTitle, 
-                contractTypeInfo.ContractType, contractTypeInfo.DurationMonths);
+                "Parsed: Contract={Contract}, Customer={Customer}, Email={Email}, Phone={Phone}, Contact={Contact}, Title={Title}, CCCD={CCCD}, Gender={Gender}, Type={Type}, Duration={Duration}",
+                contractNumber, customerName, customerEmail, customerPhone, contactPersonName, contactPersonTitle,
+                identityNumber, gender, contractTypeInfo.ContractType, contractTypeInfo.DurationMonths);
+
 
             // Validation
             if (string.IsNullOrEmpty(contractNumber))
@@ -130,7 +127,6 @@ internal class ImportContractFromDocumentHandler(
             }
 
             if (string.IsNullOrEmpty(customerName))
-            {
                 return new ImportContractFromDocumentResult
                 {
                     Success = false,
@@ -138,7 +134,6 @@ internal class ImportContractFromDocumentHandler(
                     RawText = rawText,
                     Warnings = warnings
                 };
-            }
 
             if (!startDate.HasValue || !endDate.HasValue)
             {
@@ -154,7 +149,6 @@ internal class ImportContractFromDocumentHandler(
             string? generatedPassword = null;
 
             if (!string.IsNullOrEmpty(customerEmail))
-            {
                 try
                 {
                     // Generate password mạnh
@@ -163,6 +157,7 @@ internal class ImportContractFromDocumentHandler(
                     // Gửi request tới Users.API để tạo user với role "customer"
                     var createUserRequest = new CreateUserRequest
                     {
+                        IdentityNumber = identityNumber,
                         Email = customerEmail,
                         Password = generatedPassword,
                         FullName = customerName,
@@ -177,7 +172,7 @@ internal class ImportContractFromDocumentHandler(
                     var response = await createUserClient.GetResponse<CreateUserResponse>(
                         createUserRequest,
                         cancellationToken,
-                        timeout: RequestTimeout.After(s: 30));
+                        RequestTimeout.After(s: 30));
 
                     var createUserResponse = response.Message;
 
@@ -202,11 +197,8 @@ internal class ImportContractFromDocumentHandler(
                     warnings.Add($"Lỗi khi tạo tài khoản đăng nhập: {userEx.Message}");
                     // Continue without user account - không fail toàn bộ import
                 }
-            }
             else
-            {
                 warnings.Add("Không có email - không thể tạo tài khoản đăng nhập cho khách hàng");
-            }
 
             // ================================================================
             // BƯỚC 4: LƯU VÀO DATABASE
@@ -220,22 +212,25 @@ internal class ImportContractFromDocumentHandler(
                 var customerId = await CreateOrFindCustomerAsync(
                     connection, transaction,
                     customerName, customerAddress, customerPhone, customerEmail, taxCode,
-                    contactPersonName, contactPersonTitle, userId);
+                    contactPersonName, contactPersonTitle, userId, identityNumber, gender);
 
-                logger.LogInformation("Customer created/found: {CustomerId} with contact: {ContactName} - {ContactTitle}",
+
+                logger.LogInformation(
+                    "Customer created/found: {CustomerId} with contact: {ContactName} - {ContactTitle}",
                     customerId, contactPersonName, contactPersonTitle);
 
                 // 4.2: Log customer sync to customer_sync_log
                 if (userId.HasValue)
                 {
-                    var syncLog = new Models.CustomerSyncLog
+                    var syncLog = new CustomerSyncLog
                     {
                         Id = Guid.NewGuid(),
                         UserId = userId.Value,
                         SyncType = "CREATE",
                         SyncStatus = "SUCCESS",
-                        FieldsChanged = System.Text.Json.JsonSerializer.Serialize(new[] { "CompanyName", "Address", "Phone", "Email", "ContactPersonName", "ContactPersonTitle" }),
-                        NewValues = System.Text.Json.JsonSerializer.Serialize(new
+                        FieldsChanged = JsonSerializer.Serialize(new[]
+                            { "CompanyName", "Address", "Phone", "Email", "ContactPersonName", "ContactPersonTitle" }),
+                        NewValues = JsonSerializer.Serialize(new
                         {
                             CompanyName = customerName,
                             Address = customerAddress,
@@ -257,10 +252,10 @@ internal class ImportContractFromDocumentHandler(
                 }
 
                 // 3.2: Tạo Contract
-                var durationMonths = ((endDate.Value.Year - startDate.Value.Year) * 12) +
-                                    endDate.Value.Month - startDate.Value.Month;
+                var durationMonths = (endDate.Value.Year - startDate.Value.Year) * 12 +
+                    endDate.Value.Month - startDate.Value.Month;
 
-                var contract = new Models.Contract
+                var contract = new Contract
                 {
                     Id = Guid.NewGuid(),
                     ContractNumber = contractNumber,
@@ -288,7 +283,8 @@ internal class ImportContractFromDocumentHandler(
                 };
 
                 await connection.InsertAsync(contract, transaction);
-                logger.LogInformation("Contract created: {ContractId} - {ContractNumber} (Type: {Type}, Duration: {Duration} months)",
+                logger.LogInformation(
+                    "Contract created: {ContractId} - {ContractNumber} (Type: {Type}, Duration: {Duration} months)",
                     contract.Id, contract.ContractNumber, contract.ContractType, contract.DurationMonths);
 
                 // 3.2.1: Tạo Contract Period từ ĐIỀU 2
@@ -299,7 +295,7 @@ internal class ImportContractFromDocumentHandler(
                     periodStartDate ?? startDate,
                     periodEndDate ?? endDate,
                     periodDuration,
-                    isRenewal: false);
+                    false);
 
                 // 3.3: Tạo Default Location nếu có thông tin guards required
                 var locationIds = new List<Guid>();
@@ -315,7 +311,6 @@ internal class ImportContractFromDocumentHandler(
                     decimal? longitude = null;
 
                     if (!string.IsNullOrWhiteSpace(finalLocationAddress))
-                    {
                         try
                         {
                             var coordinates = await GetGpsCoordinatesAsync(finalLocationAddress);
@@ -334,12 +329,12 @@ internal class ImportContractFromDocumentHandler(
                         }
                         catch (Exception gpsEx)
                         {
-                            logger.LogWarning(gpsEx, "Failed to get GPS coordinates for address: {Address}", finalLocationAddress);
+                            logger.LogWarning(gpsEx, "Failed to get GPS coordinates for address: {Address}",
+                                finalLocationAddress);
                             warnings.Add($"Lỗi khi lấy tọa độ GPS: {gpsEx.Message}");
                         }
-                    }
 
-                    var location = new Models.CustomerLocation
+                    var location = new CustomerLocation
                     {
                         Id = Guid.NewGuid(),
                         CustomerId = customerId,
@@ -368,7 +363,7 @@ internal class ImportContractFromDocumentHandler(
                         location.LocationName, location.Address, latitude.HasValue);
 
                     // Link location với contract
-                    var contractLocation = new Models.ContractLocation
+                    var contractLocation = new ContractLocation
                     {
                         Id = Guid.NewGuid(),
                         ContractId = contract.Id,
@@ -390,7 +385,7 @@ internal class ImportContractFromDocumentHandler(
                     // 3.4: Tạo Shift Schedules từ ĐIỀU 3 cho location này
                     foreach (var shiftInfo in dieu3Info.ShiftSchedules)
                     {
-                        var schedule = new Models.ContractShiftSchedule
+                        var schedule = new ContractShiftSchedule
                         {
                             Id = Guid.NewGuid(),
                             ContractId = contract.Id,
@@ -441,13 +436,12 @@ internal class ImportContractFromDocumentHandler(
                         logger.LogInformation(
                             "Shift schedule created: {ScheduleName} ({Start}-{End}) for Location {LocationId} - Sat={Sat}, Sun={Sun}, Weekend={Weekend}, Holiday={Holiday}",
                             schedule.ScheduleName, schedule.ShiftStartTime, schedule.ShiftEndTime, location.Id,
-                            schedule.AppliesSaturday, schedule.AppliesSunday, schedule.AppliesOnWeekends, schedule.AppliesOnPublicHolidays);
+                            schedule.AppliesSaturday, schedule.AppliesSunday, schedule.AppliesOnWeekends,
+                            schedule.AppliesOnPublicHolidays);
                     }
 
                     if (!scheduleIds.Any())
-                    {
                         warnings.Add("Không tìm thấy thông tin ca làm việc trong ĐIỀU 3 - chưa tạo shift schedules");
-                    }
                 }
                 else
                 {
@@ -460,14 +454,14 @@ internal class ImportContractFromDocumentHandler(
                 foreach (var holidayInfo in dieu3Info.PublicHolidays)
                 {
                     // Kiểm tra xem ngày lễ này đã tồn tại chưa
-                    var existingHoliday = await connection.QueryFirstOrDefaultAsync<Models.PublicHoliday>(
+                    var existingHoliday = await connection.QueryFirstOrDefaultAsync<PublicHoliday>(
                         "SELECT * FROM public_holidays WHERE HolidayDate = @Date AND Year = @Year LIMIT 1",
-                        new { Date = holidayInfo.HolidayDate, Year = holidayInfo.Year },
+                        new { Date = holidayInfo.HolidayDate, holidayInfo.Year },
                         transaction);
 
                     if (existingHoliday == null)
                     {
-                        var holiday = new Models.PublicHoliday
+                        var holiday = new PublicHoliday
                         {
                             Id = Guid.NewGuid(),
                             HolidayDate = holidayInfo.HolidayDate,
@@ -506,19 +500,20 @@ internal class ImportContractFromDocumentHandler(
                 foreach (var subInfo in dieu3Info.SubstituteWorkDays)
                 {
                     // Tìm holiday tương ứng
-                    var relatedHoliday = await connection.QueryFirstOrDefaultAsync<Models.PublicHoliday>(
+                    var relatedHoliday = await connection.QueryFirstOrDefaultAsync<PublicHoliday>(
                         "SELECT * FROM public_holidays WHERE HolidayDate >= @SubDate - INTERVAL 7 DAY AND HolidayDate <= @SubDate + INTERVAL 7 DAY AND Year = @Year LIMIT 1",
-                        new { SubDate = subInfo.SubstituteDate, Year = subInfo.Year },
+                        new { SubDate = subInfo.SubstituteDate, subInfo.Year },
                         transaction);
 
                     if (relatedHoliday != null)
                     {
-                        var substituteDay = new Models.HolidaySubstituteWorkDay
+                        var substituteDay = new HolidaySubstituteWorkDay
                         {
                             Id = Guid.NewGuid(),
                             HolidayId = relatedHoliday.Id,
                             SubstituteDate = subInfo.SubstituteDate,
-                            Reason = subInfo.Reason ?? $"Work on {subInfo.SubstituteDate.ToShortDateString()} to substitute for {relatedHoliday.HolidayName}",
+                            Reason = subInfo.Reason ??
+                                     $"Work on {subInfo.SubstituteDate.ToShortDateString()} to substitute for {relatedHoliday.HolidayName}",
                             Year = subInfo.Year,
                             CreatedAt = DateTime.UtcNow
                         };
@@ -538,7 +533,6 @@ internal class ImportContractFromDocumentHandler(
                 // BƯỚC 6: GỬI EMAIL THÔNG TIN ĐĂNG NHẬP CHO CUSTOMER
                 // ================================================================
                 if (userId.HasValue && !string.IsNullOrEmpty(customerEmail) && !string.IsNullOrEmpty(generatedPassword))
-                {
                     try
                     {
                         await emailHandler.SendCustomerLoginInfoEmailAsync(
@@ -559,10 +553,9 @@ internal class ImportContractFromDocumentHandler(
                             customerEmail);
                         warnings.Add($"Không thể gửi email thông tin đăng nhập: {emailEx.Message}");
                     }
-                }
 
                 // Calculate confidence score
-                int score = CalculateConfidenceScore(
+                var score = CalculateConfidenceScore(
                     contractNumber, customerName, startDate, endDate,
                     guardsRequired, scheduleIds.Count);
 
@@ -623,23 +616,15 @@ internal class ImportContractFromDocumentHandler(
             foreach (var paragraph in body.Descendants<Paragraph>())
             {
                 var paragraphText = paragraph.InnerText;
-                if (!string.IsNullOrWhiteSpace(paragraphText))
-                {
-                    text.AppendLine(paragraphText);
-                }
+                if (!string.IsNullOrWhiteSpace(paragraphText)) text.AppendLine(paragraphText);
             }
 
             foreach (var table in body.Descendants<Table>())
+            foreach (var row in table.Descendants<TableRow>())
             {
-                foreach (var row in table.Descendants<TableRow>())
-                {
-                    var rowText = string.Join(" | ",
-                        row.Descendants<TableCell>().Select(c => c.InnerText.Trim()));
-                    if (!string.IsNullOrWhiteSpace(rowText))
-                    {
-                        text.AppendLine(rowText);
-                    }
-                }
+                var rowText = string.Join(" | ",
+                    row.Descendants<TableCell>().Select(c => c.InnerText.Trim()));
+                if (!string.IsNullOrWhiteSpace(rowText)) text.AppendLine(rowText);
             }
         }
 
@@ -655,8 +640,7 @@ internal class ImportContractFromDocumentHandler(
             using (var reader = new PdfReader(stream))
             {
                 // iTextSharp.LGPLv2.Core simple text extraction
-                for (int page = 1; page <= reader.NumberOfPages; page++)
-                {
+                for (var page = 1; page <= reader.NumberOfPages; page++)
                     try
                     {
                         // Get page content bytes
@@ -679,12 +663,10 @@ internal class ImportContractFromDocumentHandler(
                                     var extractedText = textMatch.Groups[1].Success
                                         ? textMatch.Groups[1].Value
                                         : textMatch.Groups[2].Value;
-                                    if (!string.IsNullOrWhiteSpace(extractedText))
-                                    {
-                                        text.Append(extractedText + " ");
-                                    }
+                                    if (!string.IsNullOrWhiteSpace(extractedText)) text.Append(extractedText + " ");
                                 }
                             }
+
                             text.AppendLine();
                         }
                     }
@@ -693,13 +675,13 @@ internal class ImportContractFromDocumentHandler(
                         logger.LogWarning(pageEx, "Could not extract text from page {Page}", page);
                         // Continue with next page
                     }
-                }
             }
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Error extracting text from PDF");
-            throw new InvalidOperationException("Không thể đọc file PDF. Vui lòng kiểm tra file có bị mã hóa hoặc hỏng.", ex);
+            throw new InvalidOperationException(
+                "Không thể đọc file PDF. Vui lòng kiểm tra file có bị mã hóa hoặc hỏng.", ex);
         }
 
         return await Task.FromResult(text.ToString());
@@ -710,7 +692,7 @@ internal class ImportContractFromDocumentHandler(
     // ================================================================
 
     /// <summary>
-    /// Phân tích loại hợp đồng và thời hạn từ văn bản
+    ///     Phân tích loại hợp đồng và thời hạn từ văn bản
     /// </summary>
     private ContractTypeInfo AnalyzeContractType(string text, DateTime? startDate, DateTime? endDate)
     {
@@ -720,8 +702,8 @@ internal class ImportContractFromDocumentHandler(
         if (startDate.HasValue && endDate.HasValue)
         {
             var totalDays = (endDate.Value - startDate.Value).Days;
-            info.DurationMonths = ((endDate.Value.Year - startDate.Value.Year) * 12) + 
-                                  endDate.Value.Month - startDate.Value.Month;
+            info.DurationMonths = (endDate.Value.Year - startDate.Value.Year) * 12 +
+                endDate.Value.Month - startDate.Value.Month;
             info.TotalDays = totalDays;
 
             // Phân loại dựa trên số ngày
@@ -785,7 +767,7 @@ internal class ImportContractFromDocumentHandler(
 
         // Override từ keywords trong văn bản
         var lowerText = text.ToLower();
-        
+
         if (Regex.IsMatch(lowerText, @"hợp\s*đồng\s*(dài\s*hạn|lâu\s*dài)", RegexOptions.IgnoreCase))
         {
             info.ContractType = "long_term";
@@ -810,16 +792,11 @@ internal class ImportContractFromDocumentHandler(
         }
 
         // Kiểm tra tự động gia hạn
-        if (Regex.IsMatch(lowerText, @"tự\s*động\s*gia\s*hạn", RegexOptions.IgnoreCase))
-        {
-            info.AutoRenewal = true;
-        }
+        if (Regex.IsMatch(lowerText, @"tự\s*động\s*gia\s*hạn", RegexOptions.IgnoreCase)) info.AutoRenewal = true;
 
         // Kiểm tra dịch vụ theo sự kiện
         if (Regex.IsMatch(lowerText, @"sự\s*kiện|event|buổi|occasion", RegexOptions.IgnoreCase))
-        {
             info.ServiceScope = "event_based";
-        }
 
         return info;
     }
@@ -830,16 +807,16 @@ internal class ImportContractFromDocumentHandler(
         {
             // Pattern 1: Số thứ tự/năm/HĐDV-BV/HCM/tên đối tác (001/2025/HDDV-BV/HCM/NVHSV)
             @"(?:Số\s*HĐ|Hợp\s*đồng\s*số|Contract\s*No\.?)\s*[:：]?\s*(\d{3,4}/\d{4}/[A-Z\-]+/[A-Z]+/[A-Z]+)",
-        
+
             // Pattern 2: Fallback - match trực tiếp format XXX/YYYY/HDDV-BV/...
             @"(\d{3,4}/\d{4}/HĐDV-BV/[A-Z]+/[A-Z]+)",
-        
+
             // Pattern 3: Format cũ - HĐ số hoặc Contract No
             @"(?:Số\s*HĐ|Hợp\s*đồng\s*số|Contract\s*No\.?)\s*[:：]\s*([A-Z0-9\-/]+)",
-        
+
             // Pattern 4: HĐ với mã
             @"HĐ\s*[-:]?\s*([A-Z0-9\-/]{5,})",
-        
+
             // Pattern 5: CTR format
             @"CTR[-\s]?(\d{4})[-\s]?(\d{3})"
         };
@@ -851,14 +828,12 @@ internal class ImportContractFromDocumentHandler(
             {
                 // Với pattern 5 (CTR), cần ghép groups
                 if (match.Groups.Count > 2 && !string.IsNullOrEmpty(match.Groups[2].Value))
-                {
                     return $"{match.Groups[1].Value}-{match.Groups[2].Value}".Trim();
-                }
-            
+
                 return match.Groups[1].Value.Trim();
             }
         }
-    
+
         return null;
     }
 
@@ -869,16 +844,12 @@ internal class ImportContractFromDocumentHandler(
         var dieu2Match = Regex.Match(text, @"ĐIỀU\s*2[:\.\s]+(.*?)(?=ĐIỀU\s*3|$)",
             RegexOptions.IgnoreCase | RegexOptions.Singleline);
 
-        string searchText = dieu2Match.Success ? dieu2Match.Value : text;
+        var searchText = dieu2Match.Success ? dieu2Match.Value : text;
 
         if (dieu2Match.Success)
-        {
             logger.LogInformation("📋 Found ĐIỀU 2 section ({Length} chars)", searchText.Length);
-        }
         else
-        {
             logger.LogWarning("⚠ ĐIỀU 2 not found, searching entire document");
-        }
 
         // Tìm TẤT CẢ các dates trong section
         var allDates = new List<DateTime>();
@@ -889,8 +860,8 @@ internal class ImportContractFromDocumentHandler(
         {
             var dateStr = match.Value;
             if (DateTime.TryParseExact(dateStr, new[] { "dd/MM/yyyy", "d/M/yyyy", "dd-MM-yyyy", "d-M-yyyy" },
-                System.Globalization.CultureInfo.InvariantCulture,
-                System.Globalization.DateTimeStyles.None, out var date))
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out var date))
             {
                 allDates.Add(date);
                 logger.LogInformation("  Found date: {Date}", date.ToString("dd/MM/yyyy"));
@@ -932,7 +903,7 @@ internal class ImportContractFromDocumentHandler(
         if (dieu2Index == -1)
             dieu2Index = text.IndexOf("Điều 2", StringComparison.OrdinalIgnoreCase);
 
-        string searchText = text;
+        var searchText = text;
         if (dieu2Index >= 0)
         {
             // Lấy khoảng 1000 ký tự sau "ĐIỀU 2" để tìm thông tin thời hạn (tăng từ 800)
@@ -948,20 +919,20 @@ internal class ImportContractFromDocumentHandler(
         {
             // Match với "có hiệu lực từ ngày ... đến hết ngày ..."
             @"(?:có\s+hiệu\s+lực\s+)?từ\s+ngày\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})\s+đến\s+(?:hết\s+)?ngày\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})",
-        
+
             // Match với "Từ ngày ... đến ngày ..."
             @"(?:Từ|từ)\s+ngày\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})\s+đến\s+ngày\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})",
-        
+
             // Match với "Bắt đầu từ ngày ... đến ngày ..."
             @"(?:Bắt\s+đầu\s+từ|bắt\s+đầu\s+từ)\s+ngày\s+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})\s+đến\s+(?:ngày\s+)?(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})",
-        
+
             // Match với "hiệu lực kể từ ... đến ..."
             @"(?:hiệu\s+lực\s+)?kể\s+từ\s+(?:ngày\s+)?(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})\s+đến\s+(?:hết\s+)?(?:ngày\s+)?(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})"
         };
         foreach (var pattern in datePatterns)
         {
             var dateMatch = Regex.Match(searchText, pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
-        
+
             if (dateMatch.Success)
             {
                 if (DateTime.TryParse(dateMatch.Groups[1].Value, out var start))
@@ -1007,6 +978,7 @@ internal class ImportContractFromDocumentHandler(
                 if (name.Length > 5) return name;
             }
         }
+
         return null;
     }
 
@@ -1025,10 +997,7 @@ internal class ImportContractFromDocumentHandler(
             var pattern = @"(?:Địa\s*chỉ|Address).*?[:：]\s*([^\r\n]+)";
             var match = Regex.Match(textAfterBenB, pattern, RegexOptions.IgnoreCase);
 
-            if (match.Success)
-            {
-                return match.Groups[1].Value.Trim();
-            }
+            if (match.Success) return match.Groups[1].Value.Trim();
         }
 
         // Fallback: tìm địa chỉ đầu tiên trong toàn bộ văn bản (nếu không tìm thấy Bên B)
@@ -1058,15 +1027,11 @@ internal class ImportContractFromDocumentHandler(
 
                 // Convert 0 đầu tiên thành +84
                 if (phone.StartsWith("0"))
-                {
                     phone = "+84" + phone.Substring(1);
-                }
                 // Nếu đã có +84 thì giữ nguyên
                 else if (!phone.StartsWith("+"))
-                {
                     // Nếu không có + và không bắt đầu bằng 0, thêm +84
                     phone = "+84" + phone;
-                }
 
                 return phone;
             }
@@ -1081,10 +1046,7 @@ internal class ImportContractFromDocumentHandler(
         var benBPattern = @"(?:BÊN\s*B|Bên\s*B)[\s\S]*?Email\s*[:：]\s*([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z]{2,})";
         var benBMatch = Regex.Match(text, benBPattern, RegexOptions.IgnoreCase);
 
-        if (benBMatch.Success)
-        {
-            return benBMatch.Groups[1].Value.Trim();
-        }
+        if (benBMatch.Success) return benBMatch.Groups[1].Value.Trim();
 
         // Fallback: tìm email đầu tiên sau "Bên B"
         var benBIndex = text.IndexOf("BÊN B", StringComparison.OrdinalIgnoreCase);
@@ -1096,10 +1058,7 @@ internal class ImportContractFromDocumentHandler(
             var textAfterBenB = text.Substring(benBIndex);
             var emailPattern = @"([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z]{2,})";
             var emailMatch = Regex.Match(textAfterBenB, emailPattern);
-            if (emailMatch.Success)
-            {
-                return emailMatch.Groups[1].Value;
-            }
+            if (emailMatch.Success) return emailMatch.Groups[1].Value;
         }
 
         return null;
@@ -1113,7 +1072,7 @@ internal class ImportContractFromDocumentHandler(
     }
 
     /// <summary>
-    /// Extract contact person name từ Bên B (sau chữ "Ông" hoặc "Bà")
+    ///     Extract contact person name từ Bên B (sau chữ "Ông" hoặc "Bà")
     /// </summary>
     private string? ExtractContactPersonName(string text)
     {
@@ -1136,10 +1095,7 @@ internal class ImportContractFromDocumentHandler(
             foreach (var pattern in patterns)
             {
                 var match = Regex.Match(textAfterBenB, pattern, RegexOptions.IgnoreCase);
-                if (match.Success)
-                {
-                    return match.Groups[1].Value.Trim();
-                }
+                if (match.Success) return match.Groups[1].Value.Trim();
             }
         }
 
@@ -1147,7 +1103,103 @@ internal class ImportContractFromDocumentHandler(
     }
 
     /// <summary>
-    /// Extract contact person title (chức vụ) từ Bên B
+    ///     Extract Gender từ Bên B dựa trên "Ông" hoặc "Bà"
+    /// </summary>
+    private string? ExtractGender(string text)
+    {
+        var benBIndex = text.IndexOf("BÊN B", StringComparison.OrdinalIgnoreCase);
+        if (benBIndex == -1)
+            benBIndex = text.IndexOf("Bên B", StringComparison.OrdinalIgnoreCase);
+
+        if (benBIndex >= 0)
+        {
+            var textAfterBenB = text.Substring(benBIndex, Math.Min(600, text.Length - benBIndex));
+
+            // Pattern: "Đại diện: Ông/Bà TÊN"
+            var patterns = new[]
+            {
+                @"Đại\s*diện\s*[:：]\s*(Ông|Bà)\s+[^\r\n–\-]+",
+                @"(?:Đại\s*diện|Người\s*đại\s*diện)\s*[:：]?\s*(Ông|Bà)",
+                @"(Ông|Bà)\s+[A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ][a-zàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]+(?:\s+[A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ][a-zàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]+)+"
+            };
+
+            foreach (var pattern in patterns)
+            {
+                var match = Regex.Match(textAfterBenB, pattern, RegexOptions.IgnoreCase);
+                if (match.Success)
+                {
+                    var prefix = match.Groups[1].Value.Trim();
+
+                    if (prefix.Equals("Ông", StringComparison.OrdinalIgnoreCase))
+                    {
+                        logger.LogInformation("✓ Extracted Gender: male (from 'Ông')");
+                        return "male";
+                    }
+
+                    if (prefix.Equals("Bà", StringComparison.OrdinalIgnoreCase))
+                    {
+                        logger.LogInformation("✓ Extracted Gender: female (from 'Bà')");
+                        return "female";
+                    }
+                }
+            }
+        }
+
+        logger.LogWarning("Gender not found in Bên B");
+        return null;
+    }
+
+
+    /// <summary>
+    ///     Extract Identity Number (CCCD/CMND) từ Bên B - đúng 12 số hoặc 9 số
+    /// </summary>
+    private string? ExtractIdentityNumber(string text)
+    {
+        // Tìm phần Bên B
+        var benBIndex = text.IndexOf("BÊN B", StringComparison.OrdinalIgnoreCase);
+        if (benBIndex == -1)
+            benBIndex = text.IndexOf("Bên B", StringComparison.OrdinalIgnoreCase);
+
+        if (benBIndex >= 0)
+        {
+            // Lấy khoảng 800 ký tự sau "Bên B"
+            var textAfterBenB = text.Substring(benBIndex, Math.Min(800, text.Length - benBIndex));
+
+            // Pattern: "Số CCCD: 082204000167" hoặc "CCCD: 082204000167"
+            var patterns = new[]
+            {
+                @"Số\s*CCCD\s*[:：]\s*(\d{12})",
+                @"CCCD\s*[:：]\s*(\d{12})",
+                @"Số\s*CMND\s*[:：]\s*(\d{9,12})",
+                @"CMND\s*[:：]\s*(\d{9,12})",
+                @"Số\s*giấy\s*tờ\s*tùy\s*thân\s*[:：]\s*(\d{9,12})"
+            };
+
+            foreach (var pattern in patterns)
+            {
+                var match = Regex.Match(textAfterBenB, pattern, RegexOptions.IgnoreCase);
+                if (match.Success)
+                {
+                    var idNumber = match.Groups[1].Value.Trim();
+
+                    // Validate: CCCD phải 12 số, CMND phải 9 hoặc 12 số
+                    if (idNumber.Length == 12 || idNumber.Length == 9)
+                    {
+                        logger.LogInformation("✓ Extracted Identity Number: {IdNumber} ({Length} digits)",
+                            idNumber, idNumber.Length);
+                        return idNumber;
+                    }
+                }
+            }
+        }
+
+        logger.LogWarning("Identity Number not found in Bên B");
+        return null;
+    }
+
+
+    /// <summary>
+    ///     Extract contact person title (chức vụ) từ Bên B
     /// </summary>
     private string? ExtractContactPersonTitle(string text)
     {
@@ -1161,38 +1213,32 @@ internal class ImportContractFromDocumentHandler(
             var textAfterBenB = text.Substring(benBIndex, Math.Min(600, text.Length - benBIndex));
 
             // Pattern 1: "Ông TÊN – Chức vụ"
-            var pattern1 = @"(?:Ông|Bà)\s+[A-ZÁÀẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÉÈẺẼẸÊẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÚÙỦŨỤƯỨỪỬỮỰÝỲỶỸỴ][a-záàảãạăắằẳẵặâấầẩẫậéèẻẽẹêếềểễệíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵ\s]+?\s*[-–]\s*([A-ZĐa-záàảãạăắằẳẵặâấầẩẫậéèẻẽẹêếềểễệíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵ\s]+?)(?:\n|$)";
+            var pattern1 =
+                @"(?:Ông|Bà)\s+[A-ZÁÀẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÉÈẺẼẸÊẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÚÙỦŨỤƯỨỪỬỮỰÝỲỶỸỴ][a-záàảãạăắằẳẵặâấầẩẫậéèẻẽẹêếềểễệíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵ\s]+?\s*[-–]\s*([A-ZĐa-záàảãạăắằẳẵặâấầẩẫậéèẻẽẹêếềểễệíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵ\s]+?)(?:\n|$)";
             var match1 = Regex.Match(textAfterBenB, pattern1, RegexOptions.IgnoreCase);
-            if (match1.Success)
-            {
-                return match1.Groups[1].Value.Trim();
-            }
+            if (match1.Success) return match1.Groups[1].Value.Trim();
 
             // Pattern 2: "Chức vụ: XXX"
-            var pattern2 = @"Chức\s*vụ\s*[:：]\s*([A-ZĐa-záàảãạăắằẳẵặâấầẩẫậéèẻẽẹêếềểễệíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵ\s]+?)(?:\n|$)";
+            var pattern2 =
+                @"Chức\s*vụ\s*[:：]\s*([A-ZĐa-záàảãạăắằẳẵặâấầẩẫậéèẻẽẹêếềểễệíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵ\s]+?)(?:\n|$)";
             var match2 = Regex.Match(textAfterBenB, pattern2, RegexOptions.IgnoreCase);
-            if (match2.Success)
-            {
-                return match2.Groups[1].Value.Trim();
-            }
+            if (match2.Success) return match2.Groups[1].Value.Trim();
         }
 
         return null;
     }
 
     /// <summary>
-    /// Extract location details từ ĐIỀU 1: ĐỐI TƯỢNG VÀ PHẠM VI HỢP ĐỒNG
+    ///     Extract location details từ ĐIỀU 1: ĐỐI TƯỢNG VÀ PHẠM VI HỢP ĐỒNG
     /// </summary>
     private (string? LocationName, string? LocationAddress) ExtractLocationDetails(string text)
     {
         // Tìm phần ĐIỀU 1
-        var dieu1Pattern = @"ĐIỀU\s*1\s*[:：]?\s*(?:ĐỐI\s*TƯỢNG\s*VÀ\s*PHẠM\s*VI\s*HỢP\s*ĐỒNG)?([\s\S]{0,800})(?:ĐIỀU\s*2|$)";
+        var dieu1Pattern =
+            @"ĐIỀU\s*1\s*[:：]?\s*(?:ĐỐI\s*TƯỢNG\s*VÀ\s*PHẠM\s*VI\s*HỢP\s*ĐỒNG)?([\s\S]{0,800})(?:ĐIỀU\s*2|$)";
         var dieu1Match = Regex.Match(text, dieu1Pattern, RegexOptions.IgnoreCase);
 
-        if (!dieu1Match.Success)
-        {
-            return (null, null);
-        }
+        if (!dieu1Match.Success) return (null, null);
 
         var dieu1Text = dieu1Match.Groups[1].Value;
 
@@ -1231,7 +1277,8 @@ internal class ImportContractFromDocumentHandler(
             {
                 locationAddress = match.Groups[1].Value.Trim();
                 // Clean up: remove "- Số lượng" and after
-                locationAddress = Regex.Replace(locationAddress, @"\s*[-–]\s*Số\s*lượng.*", "", RegexOptions.IgnoreCase);
+                locationAddress =
+                    Regex.Replace(locationAddress, @"\s*[-–]\s*Số\s*lượng.*", "", RegexOptions.IgnoreCase);
                 break;
             }
         }
@@ -1244,8 +1291,8 @@ internal class ImportContractFromDocumentHandler(
     }
 
     /// <summary>
-    /// Lấy GPS coordinates cho địa chỉ Việt Nam - Tối ưu độ chính xác với Nominatim
-    /// Strategy: Structured Query → Viewbox → Fallback
+    ///     Lấy GPS coordinates cho địa chỉ Việt Nam - Tối ưu độ chính xác với Nominatim
+    ///     Strategy: Structured Query → Viewbox → Fallback
     /// </summary>
     private async Task<(decimal? Latitude, decimal? Longitude)?> GetGpsCoordinatesAsync(string? address)
     {
@@ -1283,7 +1330,7 @@ internal class ImportContractFromDocumentHandler(
     }
 
     /// <summary>
-    /// Unified Nominatim query với 3 strategies
+    ///     Unified Nominatim query với 3 strategies
     /// </summary>
     private async Task<(decimal? Latitude, decimal? Longitude)?> QueryNominatim(
         HttpClient client, VietnameseAddress addr, string strategy)
@@ -1315,14 +1362,16 @@ internal class ImportContractFromDocumentHandler(
                 var viewbox = GetDistrictViewbox(addr.District, addr.City);
                 if (viewbox == null) return null;
                 var query = $"{streetFull}, {addr.District}, {addr.City}";
-                url = $"https://nominatim.openstreetmap.org/search?q={Uri.EscapeDataString(query)}&format=json&addressdetails=1&limit=10&countrycodes=vn&viewbox={viewbox}&bounded=1";
+                url =
+                    $"https://nominatim.openstreetmap.org/search?q={Uri.EscapeDataString(query)}&format=json&addressdetails=1&limit=10&countrycodes=vn&viewbox={viewbox}&bounded=1";
                 break;
 
             case "simple":
                 // Simple: street + district + city
                 if (string.IsNullOrEmpty(addr.Street)) return null;
                 var simpleQuery = $"{addr.Street}, {addr.District}, {addr.City}, Vietnam";
-                url = $"https://nominatim.openstreetmap.org/search?q={Uri.EscapeDataString(simpleQuery)}&format=json&addressdetails=1&limit=10&countrycodes=vn";
+                url =
+                    $"https://nominatim.openstreetmap.org/search?q={Uri.EscapeDataString(simpleQuery)}&format=json&addressdetails=1&limit=10&countrycodes=vn";
                 break;
 
             default:
@@ -1342,8 +1391,10 @@ internal class ImportContractFromDocumentHandler(
                     var lat = decimal.Parse(best.Value.GetProperty("lat").GetString()!);
                     var lon = decimal.Parse(best.Value.GetProperty("lon").GetString()!);
                     var type = best.Value.TryGetProperty("type", out var t) ? t.GetString() : "";
-                    var houseNum = best.Value.TryGetProperty("address", out var a) && a.TryGetProperty("house_number", out var hn)
-                        ? hn.GetString() : "N/A";
+                    var houseNum = best.Value.TryGetProperty("address", out var a) &&
+                                   a.TryGetProperty("house_number", out var hn)
+                        ? hn.GetString()
+                        : "N/A";
 
                     logger.LogInformation("  ✓ [{Strategy}] {Lat}, {Lon} (Type: {Type}, House#: {HouseNum})",
                         strategy.ToUpper(), lat, lon, type, houseNum);
@@ -1363,7 +1414,7 @@ internal class ImportContractFromDocumentHandler(
     }
 
     /// <summary>
-    /// Chọn kết quả tốt nhất - ưu tiên house_number
+    ///     Chọn kết quả tốt nhất - ưu tiên house_number
     /// </summary>
     private JsonElement? SelectBestResult(JsonElement results, VietnameseAddress addr)
     {
@@ -1372,7 +1423,7 @@ internal class ImportContractFromDocumentHandler(
 
         foreach (var r in results.EnumerateArray())
         {
-            double score = r.TryGetProperty("importance", out var imp) ? imp.GetDouble() * 100 : 0;
+            var score = r.TryGetProperty("importance", out var imp) ? imp.GetDouble() * 100 : 0;
             var type = r.TryGetProperty("type", out var t) ? t.GetString() : "";
             var osm_type = r.TryGetProperty("osm_type", out var ot) ? ot.GetString() : "";
 
@@ -1404,9 +1455,9 @@ internal class ImportContractFromDocumentHandler(
     // ================================================================
 
     /// <summary>
-    /// Tạo hoặc cập nhật Contract Period
-    /// - Lần đầu: tạo period với PeriodNumber = 1
-    /// - Gia hạn: tạo record mới với PeriodNumber tăng lên, đánh dấu period cũ là IsCurrentPeriod = false
+    ///     Tạo hoặc cập nhật Contract Period
+    ///     - Lần đầu: tạo period với PeriodNumber = 1
+    ///     - Gia hạn: tạo record mới với PeriodNumber tăng lên, đánh dấu period cũ là IsCurrentPeriod = false
     /// </summary>
     private async Task CreateOrUpdateContractPeriodAsync(
         IDbConnection connection,
@@ -1475,7 +1526,9 @@ internal class ImportContractFromDocumentHandler(
                         PeriodStartDate = startDate.Value,
                         PeriodEndDate = endDate.Value,
                         IsCurrentPeriod = true,
-                        Notes = duration != null ? $"Gia hạn lần {currentPeriod.PeriodNumber}. Thời hạn: {duration}" : $"Renewal {currentPeriod.PeriodNumber}",
+                        Notes = duration != null
+                            ? $"Gia hạn lần {currentPeriod.PeriodNumber}. Thời hạn: {duration}"
+                            : $"Renewal {currentPeriod.PeriodNumber}",
                         CreatedAt = DateTime.UtcNow
                     };
 
@@ -1486,7 +1539,8 @@ internal class ImportContractFromDocumentHandler(
                         endDate.Value.ToString("dd/MM/yyyy"));
 
                     // Log lịch sử gia hạn
-                    logger.LogInformation("📋 Contract period history: Old period {OldNumber} ({OldEnd}) → New period {NewNumber} ({NewEnd})",
+                    logger.LogInformation(
+                        "📋 Contract period history: Old period {OldNumber} ({OldEnd}) → New period {NewNumber} ({NewEnd})",
                         currentPeriod.PeriodNumber,
                         currentPeriod.PeriodEndDate.ToString("dd/MM/yyyy"),
                         renewalPeriod.PeriodNumber,
@@ -1495,20 +1549,19 @@ internal class ImportContractFromDocumentHandler(
                 else
                 {
                     // Update thời gian trong period hiện tại (không phải gia hạn)
-                    if (currentPeriod.PeriodEndDate != endDate.Value || currentPeriod.PeriodStartDate != startDate.Value)
+                    if (currentPeriod.PeriodEndDate != endDate.Value ||
+                        currentPeriod.PeriodStartDate != startDate.Value)
                     {
                         var oldStartDate = currentPeriod.PeriodStartDate;
                         var oldEndDate = currentPeriod.PeriodEndDate;
 
                         currentPeriod.PeriodStartDate = startDate.Value;
                         currentPeriod.PeriodEndDate = endDate.Value;
-                        if (duration != null)
-                        {
-                            currentPeriod.Notes = $"Thời hạn: {duration} (Updated)";
-                        }
+                        if (duration != null) currentPeriod.Notes = $"Thời hạn: {duration} (Updated)";
 
                         await connection.UpdateAsync(currentPeriod, transaction);
-                        logger.LogInformation("✓ Updated contract period {PeriodNumber}: {OldStart}-{OldEnd} → {NewStart}-{NewEnd}",
+                        logger.LogInformation(
+                            "✓ Updated contract period {PeriodNumber}: {OldStart}-{OldEnd} → {NewStart}-{NewEnd}",
                             currentPeriod.PeriodNumber,
                             oldStartDate.ToString("dd/MM/yyyy"),
                             oldEndDate.ToString("dd/MM/yyyy"),
@@ -1531,7 +1584,8 @@ internal class ImportContractFromDocumentHandler(
 
     private int ExtractGuardsRequired(string text)
     {
-        var patterns = new[] {
+        var patterns = new[]
+        {
             @"(\d+)\s*(?:bảo\s*vệ|guards?)",
             @"(?:Số\s*lượng).*?[:：]\s*(\d+)"
         };
@@ -1542,6 +1596,7 @@ internal class ImportContractFromDocumentHandler(
             if (match.Success && int.TryParse(match.Groups[1].Value, out var count))
                 return count;
         }
+
         return 0;
     }
 
@@ -1603,7 +1658,7 @@ internal class ImportContractFromDocumentHandler(
     }
 
     /// <summary>
-    /// Parse toàn bộ ĐIỀU 3: LỊCH LÀM VIỆC, CA TRỰC, NGÀY NGHỈ VÀ TĂNG CA
+    ///     Parse toàn bộ ĐIỀU 3: LỊCH LÀM VIỆC, CA TRỰC, NGÀY NGHỈ VÀ TĂNG CA
     /// </summary>
     private Dieu3ParsedInfo ParseDieu3(string fullText, DateTime? contractStartDate, DateTime? contractEndDate)
     {
@@ -1643,7 +1698,7 @@ internal class ImportContractFromDocumentHandler(
     }
 
     /// <summary>
-    /// Extract một section từ văn bản
+    ///     Extract một section từ văn bản
     /// </summary>
     private string ExtractSection(string text, string startMarker, string? endMarker = null)
     {
@@ -1654,10 +1709,7 @@ internal class ImportContractFromDocumentHandler(
         if (!string.IsNullOrEmpty(endMarker))
         {
             var endIndex = text.IndexOf(endMarker, startIndex + startMarker.Length, StringComparison.OrdinalIgnoreCase);
-            if (endIndex > startIndex)
-            {
-                return text.Substring(startIndex, endIndex - startIndex);
-            }
+            if (endIndex > startIndex) return text.Substring(startIndex, endIndex - startIndex);
         }
 
         // Nếu không có end marker, lấy 5000 ký tự
@@ -1665,7 +1717,7 @@ internal class ImportContractFromDocumentHandler(
     }
 
     /// <summary>
-    /// Parse 3.1 - Ca làm việc
+    ///     Parse 3.1 - Ca làm việc
     /// </summary>
     private List<Dieu3ShiftSchedule> ParseDieu3_1_ShiftSchedules(string dieu3Text)
     {
@@ -1689,9 +1741,13 @@ internal class ImportContractFromDocumentHandler(
             {
                 var shiftName = match.Groups[1].Value.Trim();
                 var startHour = match.Groups[2].Value;
-                var startMin = match.Groups[3].Success && !string.IsNullOrEmpty(match.Groups[3].Value) ? match.Groups[3].Value : "00";
+                var startMin = match.Groups[3].Success && !string.IsNullOrEmpty(match.Groups[3].Value)
+                    ? match.Groups[3].Value
+                    : "00";
                 var endHour = match.Groups[4].Value;
-                var endMin = match.Groups[5].Success && !string.IsNullOrEmpty(match.Groups[5].Value) ? match.Groups[5].Value : "00";
+                var endMin = match.Groups[5].Success && !string.IsNullOrEmpty(match.Groups[5].Value)
+                    ? match.Groups[5].Value
+                    : "00";
 
                 if (TimeSpan.TryParse($"{startHour}:{startMin}", out var start) &&
                     TimeSpan.TryParse($"{endHour}:{endMin}", out var end))
@@ -1717,13 +1773,13 @@ internal class ImportContractFromDocumentHandler(
     }
 
     /// <summary>
-    /// Parse 3.3 - Ca trực cuối tuần (Thứ Bảy và Chủ Nhật)
-    /// Logic:
-    /// - Nếu không có section 3.3 → KHÔNG làm cuối tuần (0, 0, 0)
-    /// - Nếu có "duy trì/bố trí như ngày làm việc bình thường" → LÀM cuối tuần (1, 1, 1)
-    /// - Nếu có "nghỉ riêng cho cuối tuần" → KHÔNG làm cuối tuần (0, 0, 0)
-    /// - Nếu mention "Thứ 7" và/hoặc "Chủ nhật" → Tùy theo ngày (1/0, 0/1, 1)
-    /// - Default nếu có section 3.3 → LÀM cuối tuần (1, 1, 1)
+    ///     Parse 3.3 - Ca trực cuối tuần (Thứ Bảy và Chủ Nhật)
+    ///     Logic:
+    ///     - Nếu không có section 3.3 → KHÔNG làm cuối tuần (0, 0, 0)
+    ///     - Nếu có "duy trì/bố trí như ngày làm việc bình thường" → LÀM cuối tuần (1, 1, 1)
+    ///     - Nếu có "nghỉ riêng cho cuối tuần" → KHÔNG làm cuối tuần (0, 0, 0)
+    ///     - Nếu mention "Thứ 7" và/hoặc "Chủ nhật" → Tùy theo ngày (1/0, 0/1, 1)
+    ///     - Default nếu có section 3.3 → LÀM cuối tuần (1, 1, 1)
     /// </summary>
     private void ParseDieu3_3_WeekendWork(string dieu3Text, Dieu3ParsedInfo info)
     {
@@ -1767,7 +1823,6 @@ internal class ImportContractFromDocumentHandler(
         };
 
         foreach (var pattern in workNormalPatterns)
-        {
             if (Regex.IsMatch(section33, pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline))
             {
                 info.AppliesSaturday = true;
@@ -1776,12 +1831,11 @@ internal class ImportContractFromDocumentHandler(
                 logger.LogInformation("  ✅ Section 3.3: 'DUY TRÌ NHƯ BÌNH THƯỜNG' → weekends ON (1, 1, 1)");
                 return;
             }
-        }
 
         // 2. Kiểm tra "KHÔNG áp dụng chế độ nghỉ riêng cho cuối tuần" (LÀM VIỆC cuối tuần)
         if (Regex.IsMatch(section33,
-            @"(?:Không|không)\s+áp\s+dụng\s+(?:chế\s+độ\s+)?nghỉ\s+riêng.*?cuối\s*tuần",
-            RegexOptions.IgnoreCase | RegexOptions.Singleline))
+                @"(?:Không|không)\s+áp\s+dụng\s+(?:chế\s+độ\s+)?nghỉ\s+riêng.*?cuối\s*tuần",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline))
         {
             info.AppliesSaturday = true;
             info.AppliesSunday = true;
@@ -1800,7 +1854,6 @@ internal class ImportContractFromDocumentHandler(
         };
 
         foreach (var pattern in offPatterns)
-        {
             if (Regex.IsMatch(section33, pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline))
             {
                 info.AppliesSaturday = false;
@@ -1809,10 +1862,10 @@ internal class ImportContractFromDocumentHandler(
                 logger.LogInformation("  ❌ Section 3.3: 'NGHỈ RIÊNG/KHÔNG LÀM VIỆC' → weekends OFF (0, 0, 0)");
                 return;
             }
-        }
 
         // 4. Kiểm tra mention cụ thể "Thứ 7" hoặc "Chủ nhật"
-        var hasSaturday = Regex.IsMatch(section33, @"(?:thứ\s*(?:7|bảy)|saturday)(?!\s*và\s*chủ\s*nhật.*?nghỉ)", RegexOptions.IgnoreCase);
+        var hasSaturday = Regex.IsMatch(section33, @"(?:thứ\s*(?:7|bảy)|saturday)(?!\s*và\s*chủ\s*nhật.*?nghỉ)",
+            RegexOptions.IgnoreCase);
         var hasSunday = Regex.IsMatch(section33, @"(?:chủ\s*nhật|sunday)(?!\s*nghỉ)", RegexOptions.IgnoreCase);
 
         if (hasSaturday && hasSunday)
@@ -1850,7 +1903,7 @@ internal class ImportContractFromDocumentHandler(
     }
 
     /// <summary>
-    /// Parse 3.4 - Ngày lễ, Tết
+    ///     Parse 3.4 - Ngày lễ, Tết
     /// </summary>
     private List<Dieu3PublicHoliday> ParseDieu3_4_PublicHolidays(string dieu3Text, int startYear, int endYear)
     {
@@ -1870,160 +1923,207 @@ internal class ImportContractFromDocumentHandler(
         logger.LogInformation("📋 Section 3.4 content preview (first 500 chars):\n{Preview}",
             section34.Length > 500 ? section34.Substring(0, 500) : section34);
 
-        // 1. Tết Nguyên Đán - Multiple patterns to handle various formats
-        // Pattern 1: "Tết Nguyên đán 2025: Từ Thứ Tư, 29/01/2025 đến hết Thứ Ba, 04/02/2025"
-        // Pattern 2: "Tết Nguyên Đán: 29/01/2025 - 04/02/2025"
-        // Pattern 3: Without year number but has date range
+
         var tetPatterns = new[]
         {
-            @"Tết\s+Nguy[eê]n\s+[ĐđDd][áaA]n\s+(\d{4})[:\s,]*.*?(\d{1,2}/\d{1,2}/\d{4}).*?(?:đến|[-–])\s*(?:hết\s+)?.*?(\d{1,2}/\d{1,2}/\d{4})",
-            @"Tết\s+Nguy[eê]n\s+[ĐđDd][áaA]n[:\s,]*.*?(\d{1,2}/01/\d{4}|(\d{1,2}/02/\d{4})).*?(?:đến|[-–])\s*(?:hết\s+)?.*?(\d{1,2}/01/\d{4}|(\d{1,2}/02/\d{4}))",
-            @"Tết\s+(?:âm\s+lịch|Nguy[eê]n\s+[ĐđDd][áaA]n)[:\s,]*.*?(\d{1,2}/\d{1,2}/\d{4}).*?(?:đến|[-–]).*?(\d{1,2}/\d{1,2}/\d{4})"
+            // Pattern 1: "Tết Nguyên đán 2025: Từ ... 29/01/2025 đến hết ... 04/02/2025"
+            @"Tết\s+Nguy[eê]n\s+[ĐđDd][áaA]n\s+(\d{4})[:\s,]+(?:Từ\s+)?[^0-9]*?(\d{1,2}/\d{1,2}/\d{4})\s+đến\s+(?:hết\s+)?[^0-9]*?(\d{1,2}/\d{1,2}/\d{4})",
+
+            // Pattern 2: "Tết Nguyên Đán: 29/01/2025 - 04/02/2025" (without year prefix)
+            @"Tết\s+Nguy[eê]n\s+[ĐđDd][áaA]n[:\s,]+[^0-9]*?(\d{1,2}/(?:01|02)/\d{4})\s*[-–]\s*(\d{1,2}/(?:01|02)/\d{4})",
+
+            // Pattern 3: "Tết âm lịch" với date range
+            @"Tết\s+âm\s+lịch[:\s,]+[^0-9]*?(\d{1,2}/(?:01|02)/\d{4})\s+đến\s+(?:hết\s+)?[^0-9]*?(\d{1,2}/(?:01|02)/\d{4})"
         };
 
-        bool tetFound = false;
+        var tetFound = false;
         foreach (var tetPattern in tetPatterns)
         {
+            if (tetFound) break; // Stop if already found
+
             var tetMatch = Regex.Match(section34, tetPattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
             if (tetMatch.Success)
             {
-                logger.LogInformation("  🎉 Tết pattern matched! Groups: {Count}", tetMatch.Groups.Count);
-                for (int i = 0; i < tetMatch.Groups.Count; i++)
-                {
-                    logger.LogInformation("    Group[{Index}]: {Value}", i, tetMatch.Groups[i].Value);
-                }
+                logger.LogInformation("Tết pattern matched! Groups: {Count}", tetMatch.Groups.Count);
 
-                // Extract dates from matched groups
-                List<DateTime> tetDates = new List<DateTime>();
-                for (int i = 1; i < tetMatch.Groups.Count; i++)
+                var tetDates = new List<DateTime>();
+
+                for (var i = 1; i < tetMatch.Groups.Count; i++)
                 {
-                    if (!string.IsNullOrEmpty(tetMatch.Groups[i].Value) &&
-                        DateTime.TryParse(tetMatch.Groups[i].Value, out var date))
+                    var groupValue = tetMatch.Groups[i].Value.Trim();
+
+                    if (string.IsNullOrEmpty(groupValue))
+                        continue;
+
+                    if (groupValue.Length == 4 && !groupValue.Contains("/"))
+                    {
+                        logger.LogInformation("Skipped Group[{Index}]: {Value} (year-only)", i, groupValue);
+                        continue;
+                    }
+
+                    if (DateTime.TryParseExact(groupValue,
+                            new[] { "d/M/yyyy", "dd/MM/yyyy", "d/MM/yyyy", "dd/M/yyyy" },
+                            CultureInfo.InvariantCulture,
+                            DateTimeStyles.None,
+                            out var date))
                     {
                         tetDates.Add(date);
+                        logger.LogInformation("Parsed date from Group[{Index}]: {Date:dd/MM/yyyy}", i, date);
                     }
                 }
 
-                if (tetDates.Count >= 2)
+                if (tetDates.Count == 2)
                 {
                     tetDates.Sort();
-                    var tetStart = tetDates.First();
-                    var tetEnd = tetDates.Last();
-                    var year = tetStart.Year;
+                    var tetStart = tetDates[0];
+                    var tetEnd = tetDates[1];
 
-                    int totalDays = (tetEnd - tetStart).Days + 1;
-                    int dayNumber = 1;
-                    for (var date = tetStart.Date; date <= tetEnd.Date; date = date.AddDays(1))
+                    var totalDays = (tetEnd - tetStart).Days + 1;
+
+                    if (totalDays < 3 || totalDays > 10)
                     {
-                        holidays.Add(new Dieu3PublicHoliday
-                        {
-                            HolidayDate = date,
-                            HolidayName = dayNumber == 1 ? "Tết Nguyên Đán" : $"Tết Nguyên Đán (Ngày {dayNumber})",
-                            HolidayNameEn = $"Lunar New Year (Day {dayNumber})",
-                            HolidayCategory = "tet",
-                            IsTetPeriod = true,
-                            IsTetHoliday = true,
-                            TetDayNumber = dayNumber,
-                            HolidayStartDate = tetStart,
-                            HolidayEndDate = tetEnd,
-                            TotalHolidayDays = totalDays,
-                            Year = year
-                        });
-                        dayNumber++;
+                        logger.LogWarning("Invalid Tết duration: {Days} days (expected 3-10)", totalDays);
+                        continue;
                     }
-                    logger.LogInformation("  ✓ Tết {Year}: {Days} days ({Start} - {End})",
-                        year, dayNumber - 1, tetStart.ToString("dd/MM/yyyy"), tetEnd.ToString("dd/MM/yyyy"));
+
+                    if (tetStart.Month > 2)
+                    {
+                        logger.LogWarning("Invalid Tết month: {Month} (expected Jan/Feb)", tetStart.Month);
+                        continue;
+                    }
+
+                    if (tetStart.Month == 1 && tetStart.Day == 1)
+                    {
+                        logger.LogWarning("Rejected: This is Tết Dương Lịch (01/01), not Tết Nguyên Đán");
+                        continue;
+                    }
+
+                    // ✅ CHỈ TẠO 1 RECORD DUY NHẤT cho toàn bộ kỳ nghỉ Tết
+                    holidays.Add(new Dieu3PublicHoliday
+                    {
+                        HolidayDate = tetStart, // Ngày bắt đầu
+                        HolidayName = "Tết Nguyên Đán",
+                        HolidayNameEn = "Lunar New Year",
+                        HolidayCategory = "tet",
+                        IsTetPeriod = true,
+                        IsTetHoliday = true,
+                        TetDayNumber = totalDays, // Tổng số ngày nghỉ
+                        HolidayStartDate = tetStart,
+                        HolidayEndDate = tetEnd,
+                        TotalHolidayDays = totalDays,
+                        Year = tetStart.Year
+                    });
+
+                    logger.LogInformation(
+                        "  ✓ Tết Nguyên Đán {Year}: {Days} days ({Start:dd/MM/yyyy} - {End:dd/MM/yyyy})",
+                        tetStart.Year, totalDays, tetStart, tetEnd);
+
                     tetFound = true;
                     break;
                 }
+
+                logger.LogWarning("Found {Count} dates, expected exactly 2 for Tết period", tetDates.Count);
             }
         }
 
-        if (!tetFound)
-        {
-            logger.LogWarning("  ⚠ Tết Nguyên Đán not found in section 3.4");
-        }
+        if (!tetFound) logger.LogWarning("Tết Nguyên Đán not found in section 3.4");
 
-        // 2. Giỗ Tổ Hùng Vương
-        var hungVuongPattern = @"Giỗ\s+Tổ\s+Hùng\s+Vương.*?(\d{1,2}/\d{1,2}/\d{4})";
-        var hungVuongMatch = Regex.Match(section34, hungVuongPattern, RegexOptions.IgnoreCase);
-        if (hungVuongMatch.Success && DateTime.TryParse(hungVuongMatch.Groups[1].Value, out var hungVuongDate))
-        {
-            holidays.Add(new Dieu3PublicHoliday
-            {
-                HolidayDate = hungVuongDate,
-                HolidayName = "Giỗ Tổ Hùng Vương",
-                HolidayNameEn = "Hung Kings' Festival",
-                HolidayCategory = "national",
-                Year = hungVuongDate.Year
-            });
-        }
 
-        // 3. Ngày 30/4 và 1/5
-        var liberationPattern = @"(?:30/4|Giải\s*phóng).*?(\d{1,2}/04/\d{4}).*?(?:01/5|1/5|Lao\s*động).*?(\d{1,2}/05/\d{4})";
-        var liberationMatch = Regex.Match(section34, liberationPattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
-        if (liberationMatch.Success)
-        {
-            if (DateTime.TryParse(liberationMatch.Groups[1].Value, out var day304))
-            {
-                holidays.Add(new Dieu3PublicHoliday
-                {
-                    HolidayDate = day304,
-                    HolidayName = "Ngày Giải phóng miền Nam",
-                    HolidayNameEn = "Reunification Day",
-                    HolidayCategory = "national",
-                    Year = day304.Year
-                });
-            }
+// 2. Giỗ Tổ Hùng Vương
+var hungVuongPattern = @"Giỗ\s+Tổ\s+Hùng\s+Vương.*?(\d{1,2}/\d{1,2}/\d{4})";
+var hungVuongMatch = Regex.Match(section34, hungVuongPattern, RegexOptions.IgnoreCase);
+if (hungVuongMatch.Success && DateTime.TryParse(hungVuongMatch.Groups[1].Value, out var hungVuongDate))
+    holidays.Add(new Dieu3PublicHoliday
+    {
+        HolidayDate = hungVuongDate,
+        HolidayName = "Giỗ Tổ Hùng Vương",
+        HolidayNameEn = "Hung Kings' Festival",
+        HolidayCategory = "national",
+        Year = hungVuongDate.Year,
+        HolidayStartDate = hungVuongDate,      
+        HolidayEndDate = hungVuongDate,       
+        TotalHolidayDays = (hungVuongDate - hungVuongDate).Days + 1                  
+    });
 
-            if (DateTime.TryParse(liberationMatch.Groups[2].Value, out var day015))
-            {
-                holidays.Add(new Dieu3PublicHoliday
-                {
-                    HolidayDate = day015,
-                    HolidayName = "Ngày Quốc tế Lao động",
-                    HolidayNameEn = "International Labor Day",
-                    HolidayCategory = "national",
-                    Year = day015.Year
-                });
-            }
-        }
+// 3. Ngày 30/4 - Giải phóng miền Nam
+var day304Pattern = @"(?:30/4|Giải\s*phóng\s*miền\s*Nam).*?(\d{1,2}/04/\d{4})";
+var day304Match = Regex.Match(section34, day304Pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+if (day304Match.Success && DateTime.TryParseExact(day304Match.Groups[1].Value,
+        new[] { "d/M/yyyy", "dd/MM/yyyy", "d/MM/yyyy", "dd/M/yyyy" },
+        CultureInfo.InvariantCulture, DateTimeStyles.None, out var day304))
+{
+    holidays.Add(new Dieu3PublicHoliday
+    {
+        HolidayDate = day304,
+        HolidayName = "Ngày Giải phóng miền Nam",
+        HolidayNameEn = "Reunification Day",
+        HolidayCategory = "national",
+        Year = day304.Year,
+        HolidayStartDate = day304,             
+        HolidayEndDate = day304,               
+        TotalHolidayDays = (day304 - day304).Days + 1  
+    });
+    logger.LogInformation("  ✓ Found 30/4: {Date:dd/MM/yyyy}", day304);
+}
 
-        // 4. Quốc khánh 2/9
-        var nationalDayPattern = @"Quốc\s*khánh.*?(\d{1,2}/09/\d{4})";
-        var nationalDayMatch = Regex.Match(section34, nationalDayPattern, RegexOptions.IgnoreCase);
-        if (nationalDayMatch.Success && DateTime.TryParse(nationalDayMatch.Groups[1].Value, out var nationalDay))
-        {
-            holidays.Add(new Dieu3PublicHoliday
-            {
-                HolidayDate = nationalDay,
-                HolidayName = "Ngày Quốc khánh",
-                HolidayNameEn = "National Day",
-                HolidayCategory = "national",
-                Year = nationalDay.Year
-            });
-        }
+// 4. Ngày 1/5 - Quốc tế Lao động
+var day015Pattern = @"(?:01/5|1/5|Quốc\s*tế\s*Lao\s*động|Lao\s*động).*?(\d{1,2}/05/\d{4})";
+var day015Match = Regex.Match(section34, day015Pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+if (day015Match.Success && DateTime.TryParseExact(day015Match.Groups[1].Value,
+        new[] { "d/M/yyyy", "dd/MM/yyyy", "d/MM/yyyy", "dd/M/yyyy" },
+        CultureInfo.InvariantCulture, DateTimeStyles.None, out var day015))
+{
+    holidays.Add(new Dieu3PublicHoliday
+    {
+        HolidayDate = day015,
+        HolidayName = "Ngày Quốc tế Lao động",
+        HolidayNameEn = "International Labor Day",
+        HolidayCategory = "national",
+        Year = day015.Year,
+        HolidayStartDate = day015,             
+        HolidayEndDate = day015,              
+        TotalHolidayDays = (day015 - day015).Days + 1                     
+    });
+    logger.LogInformation("  ✓ Found 1/5: {Date:dd/MM/yyyy}", day015);
+}
 
-        // 5. Tết Dương lịch
+// 6. Quốc khánh 2/9
+var nationalDayPattern = @"Quốc\s*khánh.*?(\d{1,2}/09/\d{4})";
+var nationalDayMatch = Regex.Match(section34, nationalDayPattern, RegexOptions.IgnoreCase);
+if (nationalDayMatch.Success && DateTime.TryParse(nationalDayMatch.Groups[1].Value, out var nationalDay))
+    holidays.Add(new Dieu3PublicHoliday
+    {
+        HolidayDate = nationalDay,
+        HolidayName = "Ngày Quốc khánh",
+        HolidayNameEn = "National Day",
+        HolidayCategory = "national",
+        Year = nationalDay.Year,
+        HolidayStartDate = nationalDay,        
+        HolidayEndDate = nationalDay,          
+        TotalHolidayDays = (nationalDay - nationalDay).Days + 1                 
+    });
+
+        // 7. Tết Dương lịch
         var newYearPattern = @"Tết\s+Dương\s+lịch.*?(\d{1,2}/01/\d{4})";
         var newYearMatch = Regex.Match(section34, newYearPattern, RegexOptions.IgnoreCase);
         if (newYearMatch.Success && DateTime.TryParse(newYearMatch.Groups[1].Value, out var newYearDay))
-        {
             holidays.Add(new Dieu3PublicHoliday
             {
                 HolidayDate = newYearDay,
                 HolidayName = "Tết Dương lịch",
                 HolidayNameEn = "New Year's Day",
                 HolidayCategory = "national",
-                Year = newYearDay.Year
+                Year = newYearDay.Year,
+                HolidayStartDate = newYearDay,
+                HolidayEndDate = newYearDay,
+                TotalHolidayDays = (newYearDay - newYearDay).Days + 1
             });
-        }
 
         return holidays;
     }
 
     /// <summary>
-    /// Parse ngày làm bù từ 3.4
+    ///     Parse ngày làm bù từ 3.4
     /// </summary>
     private List<Dieu3SubstituteWorkDay> ParseDieu3_4_SubstituteWorkDays(string dieu3Text, int startYear, int endYear)
     {
@@ -2033,30 +2133,27 @@ internal class ImportContractFromDocumentHandler(
         if (!section34Match.Success)
             return substitutes;
 
-        var section34 = dieu3Text.Substring(section34Match.Index, Math.Min(3000, dieu3Text.Length - section34Match.Index));
+        var section34 =
+            dieu3Text.Substring(section34Match.Index, Math.Min(3000, dieu3Text.Length - section34Match.Index));
 
         // Pattern: "nghỉ bù ngày 01/09/2025"
         var substitutePattern = @"nghỉ\s*bù\s*(?:ngày\s*)?(\d{1,2}/\d{1,2}/\d{4})";
         var matches = Regex.Matches(section34, substitutePattern, RegexOptions.IgnoreCase);
 
         foreach (Match match in matches)
-        {
             if (DateTime.TryParse(match.Groups[1].Value, out var subDate))
-            {
                 substitutes.Add(new Dieu3SubstituteWorkDay
                 {
                     SubstituteDate = subDate,
                     Reason = "Nghỉ bù theo quy định Nhà nước",
                     Year = subDate.Year
                 });
-            }
-        }
 
         return substitutes;
     }
 
     /// <summary>
-    /// Kiểm tra có làm việc vào ngày lễ không từ 3.4
+    ///     Kiểm tra có làm việc vào ngày lễ không từ 3.4
     /// </summary>
     private bool CheckDieu3_4_WorkOnHolidays(string dieu3Text)
     {
@@ -2064,7 +2161,8 @@ internal class ImportContractFromDocumentHandler(
         if (!section34Match.Success)
             return false;
 
-        var section34 = dieu3Text.Substring(section34Match.Index, Math.Min(2000, dieu3Text.Length - section34Match.Index));
+        var section34 =
+            dieu3Text.Substring(section34Match.Index, Math.Min(2000, dieu3Text.Length - section34Match.Index));
 
         // Kiểm tra "vẫn phải bố trí đủ nhân viên trực 24/24"
         var workPatterns = new[]
@@ -2075,13 +2173,11 @@ internal class ImportContractFromDocumentHandler(
         };
 
         foreach (var pattern in workPatterns)
-        {
             if (Regex.IsMatch(section34, pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline))
             {
                 logger.LogInformation("  ✓ Work on public holidays: TRUE");
                 return true;
             }
-        }
 
         return false;
     }
@@ -2107,13 +2203,17 @@ internal class ImportContractFromDocumentHandler(
         return shiftName;
     }
 
-    private bool? CheckWorkOnHolidays(string text) =>
-        Regex.IsMatch(text, @"làm\s*việc.*?ngày\s*lễ", RegexOptions.IgnoreCase) ? true :
-        Regex.IsMatch(text, @"nghỉ.*?ngày\s*lễ", RegexOptions.IgnoreCase) ? false : null;
+    private bool? CheckWorkOnHolidays(string text)
+    {
+        return Regex.IsMatch(text, @"làm\s*việc.*?ngày\s*lễ", RegexOptions.IgnoreCase) ? true :
+            Regex.IsMatch(text, @"nghỉ.*?ngày\s*lễ", RegexOptions.IgnoreCase) ? false : null;
+    }
 
-    private bool? CheckWorkOnWeekends(string text) =>
-        Regex.IsMatch(text, @"làm\s*việc.*?cuối\s*tuần", RegexOptions.IgnoreCase) ? true :
-        Regex.IsMatch(text, @"nghỉ.*?cuối\s*tuần", RegexOptions.IgnoreCase) ? false : null;
+    private bool? CheckWorkOnWeekends(string text)
+    {
+        return Regex.IsMatch(text, @"làm\s*việc.*?cuối\s*tuần", RegexOptions.IgnoreCase) ? true :
+            Regex.IsMatch(text, @"nghỉ.*?cuối\s*tuần", RegexOptions.IgnoreCase) ? false : null;
+    }
 
     private decimal CalculateDuration(TimeSpan start, TimeSpan end)
     {
@@ -2125,26 +2225,23 @@ internal class ImportContractFromDocumentHandler(
     private async Task<Guid> CreateOrFindCustomerAsync(
         IDbConnection connection, IDbTransaction transaction,
         string name, string? address, string? phone, string? email, string? taxCode,
-        string? contactPersonName = null, string? contactPersonTitle = null, Guid? userId = null)
+        string? contactPersonName = null, string? contactPersonTitle = null,
+        Guid? userId = null, string? identityNumber = null, string? gender = null)
     {
         // Tìm customer theo tên hoặc userId
-        Models.Customer? existing = null;
+        Customer? existing = null;
 
         if (userId.HasValue && userId.Value != Guid.Empty)
-        {
             // Ưu tiên tìm theo UserId nếu có
-            existing = await connection.QueryFirstOrDefaultAsync<Models.Customer>(
+            existing = await connection.QueryFirstOrDefaultAsync<Customer>(
                 "SELECT * FROM customers WHERE UserId = @UserId AND IsDeleted = 0 LIMIT 1",
                 new { UserId = userId.Value }, transaction);
-        }
 
         if (existing == null)
-        {
             // Tìm theo tên nếu không tìm thấy theo UserId
-            existing = await connection.QueryFirstOrDefaultAsync<Models.Customer>(
+            existing = await connection.QueryFirstOrDefaultAsync<Customer>(
                 "SELECT * FROM customers WHERE CompanyName = @Name AND IsDeleted = 0 LIMIT 1",
                 new { Name = name }, transaction);
-        }
 
         if (existing != null)
         {
@@ -2158,11 +2255,12 @@ internal class ImportContractFromDocumentHandler(
                     "Updated existing customer {CustomerId} with UserId: {UserId}",
                     existing.Id, userId);
             }
+
             return existing.Id;
         }
 
         // Tạo mới customer với UserId
-        var customer = new Models.Customer
+        var customer = new Customer
         {
             Id = Guid.NewGuid(),
             UserId = userId.HasValue && userId.Value != Guid.Empty ? userId : null, // Gán UserId từ Users.API
@@ -2173,6 +2271,8 @@ internal class ImportContractFromDocumentHandler(
             Email = email,
             ContactPersonName = contactPersonName,
             ContactPersonTitle = contactPersonTitle,
+            IdentityNumber = identityNumber,
+            Gender = gender,
             Status = "active",
             IsDeleted = false,
             CreatedAt = DateTime.UtcNow
@@ -2190,7 +2290,7 @@ internal class ImportContractFromDocumentHandler(
         DateTime? startDate, DateTime? endDate,
         int guardsRequired, int schedulesCount)
     {
-        int score = 0;
+        var score = 0;
         if (!string.IsNullOrEmpty(contractNumber)) score += 15;
         if (!string.IsNullOrEmpty(customerName)) score += 20;
         if (startDate.HasValue) score += 15;
@@ -2200,29 +2300,9 @@ internal class ImportContractFromDocumentHandler(
         return Math.Min(score, 100);
     }
 
-    private record ContractTypeInfo
-    {
-        public string ContractType { get; set; } = "long_term";
-        public string ServiceScope { get; set; } = "shift_based";
-        public int DurationMonths { get; set; }
-        public int TotalDays { get; set; }
-        public bool AutoGenerateShifts { get; set; } = true;
-        public int GenerateShiftsAdvanceDays { get; set; } = 30;
-        public bool IsRenewable { get; set; } = true;
-        public bool AutoRenewal { get; set; } = false;
-    }
-
-    private record ShiftInfo
-    {
-        public string? ShiftName { get; init; }
-        public TimeSpan? StartTime { get; init; }
-        public TimeSpan? EndTime { get; init; }
-        public int? GuardsPerShift { get; init; }
-    }
-
     /// <summary>
-    /// Generate password mạnh, dễ đọc cho customer
-    /// Format: Abc12345@ (chữ hoa + chữ thường + số + ký tự đặc biệt)
+    ///     Generate password mạnh, dễ đọc cho customer
+    ///     Format: Abc12345@ (chữ hoa + chữ thường + số + ký tự đặc biệt)
     /// </summary>
     private string GenerateStrongPassword()
     {
@@ -2253,7 +2333,7 @@ internal class ImportContractFromDocumentHandler(
     }
 
     /// <summary>
-    /// Parse địa chỉ Việt Nam thành các components chi tiết
+    ///     Parse địa chỉ Việt Nam thành các components chi tiết
     /// </summary>
     private VietnameseAddress ParseVietnameseAddressComponents(string address)
     {
@@ -2294,7 +2374,7 @@ internal class ImportContractFromDocumentHandler(
     }
 
     /// <summary>
-    /// Viewbox cho các quận TP.HCM phổ biến (minlon,minlat,maxlon,maxlat)
+    ///     Viewbox cho các quận TP.HCM phổ biến (minlon,minlat,maxlon,maxlat)
     /// </summary>
     private string? GetDistrictViewbox(string? district, string city)
     {
@@ -2321,33 +2401,30 @@ internal class ImportContractFromDocumentHandler(
     }
 
     /// <summary>
-    /// Bỏ dấu tiếng Việt
+    ///     Bỏ dấu tiếng Việt
     /// </summary>
     private string RemoveVietnameseDiacritics(string? text)
     {
         if (string.IsNullOrEmpty(text)) return "";
 
-        var withoutDiacritics = text.Normalize(System.Text.NormalizationForm.FormD);
+        var withoutDiacritics = text.Normalize(NormalizationForm.FormD);
         var sb = new StringBuilder();
 
         foreach (var c in withoutDiacritics)
         {
-            var category = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c);
-            if (category != System.Globalization.UnicodeCategory.NonSpacingMark)
-            {
-                sb.Append(c);
-            }
+            var category = CharUnicodeInfo.GetUnicodeCategory(c);
+            if (category != UnicodeCategory.NonSpacingMark) sb.Append(c);
         }
 
         // Replace đ -> d, Đ -> D
         return sb.ToString()
             .Replace("đ", "d")
             .Replace("Đ", "D")
-            .Normalize(System.Text.NormalizationForm.FormC);
+            .Normalize(NormalizationForm.FormC);
     }
 
     /// <summary>
-    /// Chuẩn hóa tên thành phố đơn giản (không thêm ", Vietnam")
+    ///     Chuẩn hóa tên thành phố đơn giản (không thêm ", Vietnam")
     /// </summary>
     private string NormalizeCityNameSimple(string? city)
     {
@@ -2375,8 +2452,28 @@ internal class ImportContractFromDocumentHandler(
         return normalized;
     }
 
+    private record ContractTypeInfo
+    {
+        public string ContractType { get; set; } = "long_term";
+        public string ServiceScope { get; set; } = "shift_based";
+        public int DurationMonths { get; set; }
+        public int TotalDays { get; set; }
+        public bool AutoGenerateShifts { get; set; } = true;
+        public int GenerateShiftsAdvanceDays { get; set; } = 30;
+        public bool IsRenewable { get; set; } = true;
+        public bool AutoRenewal { get; set; }
+    }
+
+    private record ShiftInfo
+    {
+        public string? ShiftName { get; init; }
+        public TimeSpan? StartTime { get; init; }
+        public TimeSpan? EndTime { get; init; }
+        public int? GuardsPerShift { get; init; }
+    }
+
     /// <summary>
-    /// Model cho địa chỉ Việt Nam
+    ///     Model cho địa chỉ Việt Nam
     /// </summary>
     private class VietnameseAddress
     {
@@ -2392,17 +2489,17 @@ internal class ImportContractFromDocumentHandler(
     // ============================================================================
 
     /// <summary>
-    /// Thông tin đã parse từ ĐIỀU 3
+    ///     Thông tin đã parse từ ĐIỀU 3
     /// </summary>
     private class Dieu3ParsedInfo
     {
         public List<Dieu3ShiftSchedule> ShiftSchedules { get; set; } = new();
-        public bool AppliesSaturday { get; set; } = false;
-        public bool AppliesSunday { get; set; } = false;
-        public bool AppliesOnWeekends { get; set; } = false;
+        public bool AppliesSaturday { get; set; }
+        public bool AppliesSunday { get; set; }
+        public bool AppliesOnWeekends { get; set; }
         public List<Dieu3PublicHoliday> PublicHolidays { get; set; } = new();
         public List<Dieu3SubstituteWorkDay> SubstituteWorkDays { get; set; } = new();
-        public bool WorkOnPublicHolidays { get; set; } = false;
+        public bool WorkOnPublicHolidays { get; set; }
     }
 
     private class Dieu3ShiftSchedule
@@ -2419,8 +2516,8 @@ internal class ImportContractFromDocumentHandler(
         public string HolidayName { get; set; } = string.Empty;
         public string? HolidayNameEn { get; set; }
         public string HolidayCategory { get; set; } = "national";
-        public bool IsTetPeriod { get; set; } = false;
-        public bool IsTetHoliday { get; set; } = false;
+        public bool IsTetPeriod { get; set; }
+        public bool IsTetHoliday { get; set; }
         public int? TetDayNumber { get; set; }
         public DateTime? HolidayStartDate { get; set; }
         public DateTime? HolidayEndDate { get; set; }
