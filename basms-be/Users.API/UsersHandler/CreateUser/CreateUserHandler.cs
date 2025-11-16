@@ -6,13 +6,15 @@ namespace Users.API.UsersHandler.CreateUser;
 // Command chứa dữ liệu để tạo user - được gửi từ Endpoint đến Handler
 public record CreateUserCommand(
     string IdentityNumber,
+    DateTime IdentityIssueDate,
+    string IdentityIssuePlace,
     string Email,
     string Password,
     string FullName,
     string? Phone = null,
     string? Gender = null,
     string? Address = null,
-    DateOnly? DateOfBirth = null,  // DateOnly để tính BirthDay/Month/Year
+    DateOnly? DateOfBirth = null,  
     int? BirthDay = null,
     int? BirthMonth = null,
     int? BirthYear = null,
@@ -97,6 +99,8 @@ public class CreateUserHandler(
                 Id = Guid.NewGuid(),
                 FirebaseUid = firebaseUser.Uid,
                 IdentityNumber = command.IdentityNumber,
+                IdentityIssueDate = command.IdentityIssueDate,
+                IdentityIssuePlace = command.IdentityIssuePlace,
                 Email = command.Email,
                 FullName = command.FullName,
                 Phone = command.Phone,

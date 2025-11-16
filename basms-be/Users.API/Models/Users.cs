@@ -7,6 +7,8 @@ public class Users
     public Guid Id { get; set; }
     public string FirebaseUid { get; set; } = string.Empty;
     public string? IdentityNumber { get; set; }
+    public DateTime IdentityIssueDate { get; set; }
+    public string IdentityIssuePlace { get; set; }
     public string Email { get; set; } = string.Empty;
     public bool EmailVerified { get; set; }
     public DateTime? EmailVerifiedAt { get; set; }

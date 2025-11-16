@@ -74,6 +74,8 @@ public class MySqlConnectionFactory : IDbConnectionFactory
 
                         -- Thông tin cơ bản
                         `IdentityNumber` VARCHAR(12) UNIQUE NOT NULL COMMENT 'CCCD',
+                        `IdentityIssueDate` DATETIME NULL COMMENT 'Ngày cấp CCCD',
+                        `IdentityIssuePlace` VARCHAR(255) NULL COMMENT 'Nơi cấp CCCD',
                         `EmployeeCode` VARCHAR(50) UNIQUE NOT NULL COMMENT 'Mã NV: MGR001',
                         `FullName` VARCHAR(200) NOT NULL COMMENT 'Họ tên đầy đủ',
                         `Email` VARCHAR(255) UNIQUE NOT NULL COMMENT 'Email đăng nhập',
@@ -148,6 +150,8 @@ public class MySqlConnectionFactory : IDbConnectionFactory
 
                         -- Thông tin cơ bản
                         `IdentityNumber` VARCHAR(12) UNIQUE NOT NULL COMMENT 'CCCD',
+                        `IdentityIssueDate` DATETIME NULL COMMENT 'Ngày cấp CCCD',
+                        `IdentityIssuePlace` VARCHAR(255) NULL COMMENT 'Nơi cấp CCCD',
                         `EmployeeCode` VARCHAR(50) UNIQUE NOT NULL COMMENT 'Mã NV: GRD001',
                         `FullName` VARCHAR(200) NOT NULL,
                         `Email` VARCHAR(255) NULL,

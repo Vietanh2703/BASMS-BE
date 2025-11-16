@@ -45,6 +45,16 @@ public class Customer
     /// </summary>
     public string IdentityNumber { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Ngày cấp CCCD
+    /// </summary>
+    public DateTime? IdentityIssueDate { get; set; }
+
+    /// <summary>
+    /// Nơi cấp CCCD
+    /// </summary>
+    public string? IdentityIssuePlace { get; set; }
+
     public string Email { get; set; } = string.Empty;
     public string Phone { get; set; } = string.Empty;
     

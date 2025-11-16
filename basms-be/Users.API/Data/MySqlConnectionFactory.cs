@@ -41,6 +41,8 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                         `Id` CHAR(36) PRIMARY KEY,
                         `FirebaseUid` VARCHAR(255) NOT NULL UNIQUE,
                         `IdentityNumber` VARCHAR(20) NOT NULL UNIQUE,
+                        `IdentityIssueDate` DATETIME NULL,
+                        `IdentityIssuePlace` VARCHAR(255) NULL,
                         `Email` VARCHAR(255) NOT NULL UNIQUE,
                         `EmailVerified` BOOLEAN DEFAULT FALSE,
                         `EmailVerifiedAt` DATETIME NULL,

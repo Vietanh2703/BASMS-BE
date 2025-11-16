@@ -22,17 +22,6 @@ public class UploadContractEndpoint : ICarterModule
 
                     var file = request.Form.Files[0];
 
-                    // Lấy ContractId (required)
-                    var contractIdStr = request.Form["contractId"].ToString();
-                    if (string.IsNullOrEmpty(contractIdStr) || !Guid.TryParse(contractIdStr, out var contractId))
-                    {
-                        return Results.BadRequest(new
-                        {
-                            success = false,
-                            error = "ContractId is required"
-                        });
-                    }
-
                     // Lấy thông tin từ form
                     var documentType = request.Form["documentType"].ToString();
                     if (string.IsNullOrEmpty(documentType))
@@ -61,7 +50,6 @@ public class UploadContractEndpoint : ICarterModule
                     // Tạo command
                     using var fileStream = file.OpenReadStream();
                     var command = new UploadContractCommand(
-                        ContractId: contractId,
                         FileStream: fileStream,
                         FileName: file.FileName,
                         ContentType: file.ContentType,
@@ -116,9 +104,9 @@ public class UploadContractEndpoint : ICarterModule
         .WithSummary("Upload contract document to S3")
         .WithDescription(@"
 Upload contract document (Word/PDF, max 10MB) to AWS S3.
+Document is created independently first, then contract will reference it later via DocumentId.
 
 **Form fields:**
-- `contractId` (required): GUID of the contract this document belongs to
 - `file` (required): The document file (.pdf, .doc, .docx)
 - `documentType` (optional): Type of document - contract, amendment, appendix, requirements, site_plan (default: contract)
 - `documentDate` (optional): Date of the document (ISO format: yyyy-MM-dd)
@@ -127,18 +115,18 @@ Upload contract document (Word/PDF, max 10MB) to AWS S3.
 **Example using curl:**
 ```bash
 curl -X POST http://localhost:5000/api/contracts/documents/upload \
-  -F 'contractId=3fa85f64-5717-4562-b3fc-2c963f66afa6' \
   -F 'file=@contract.pdf' \
-  -F 'documentType=contract' \
+  -F 'documentType=working_contract' \
   -F 'documentDate=2024-01-15' \
   -F 'uploadedBy=550e8400-e29b-41d4-a716-446655440000'
 ```
 
 **Validation:**
-- Contract must exist and not be deleted
 - File size must be ≤ 10MB
 - Only PDF and Word documents are allowed
 - Content type must match file extension
+
+**Note:** Save the returned `documentId` - you'll need it when importing the contract.
 ");
     }
 }

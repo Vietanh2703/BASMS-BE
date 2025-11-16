@@ -56,6 +56,8 @@ public class UserEventPublisher
                 UserId = user.Id,
                 FirebaseUid = user.FirebaseUid,
                 IdentityNumber = user.IdentityNumber,
+                IdentityIssueDate = user.IdentityIssueDate,
+                IdentityIssuePlace = user.IdentityIssuePlace,
                 Email = user.Email,
                 FullName = user.FullName,
                 Phone = user.Phone,

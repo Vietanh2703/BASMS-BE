@@ -21,7 +21,17 @@ public class Guards
     /// Số CCCD
     /// </summary>
     public string IdentityNumber { get; set; } = string.Empty;
-    
+
+    /// <summary>
+    /// Ngày cấp CCCD
+    /// </summary>
+    public DateTime? IdentityIssueDate { get; set; }
+
+    /// <summary>
+    /// Nơi cấp CCCD
+    /// </summary>
+    public string? IdentityIssuePlace { get; set; }
+
     /// <summary>
     /// Mã NV: GRD001
     /// </summary>
@@ -61,10 +71,6 @@ public class Guards
     /// </summary>
     public string? Gender { get; set; }
     
-    /// <summary>
-    /// GUARD
-    /// </summary>
-    public string Role { get; set; } = "GUARD";
     
     /// <summary>
     /// Địa chỉ hiện tại

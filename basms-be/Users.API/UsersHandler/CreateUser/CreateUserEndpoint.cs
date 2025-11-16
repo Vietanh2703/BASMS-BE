@@ -4,6 +4,8 @@
 // Chứa tất cả thông tin cần thiết để tạo tài khoản người dùng mới
 public record CreateUserRequest(
     string IdentityNumber,
+    DateTime IdentityIssueDate,
+    string IdentityIssuePlace,
     string Email,              // Email đăng nhập (bắt buộc)
     string Password,           // Mật khẩu (bắt buộc)
     string FullName,           // Họ và tên đầy đủ (bắt buộc)
@@ -47,7 +49,6 @@ public class CreateUserEndpoint : ICarterModule
             // Location header chứa URL để lấy thông tin user vừa tạo
             return Results.Created($"/users/{response.Id}", response);
         })
-        .RequireAuthorization()
         .WithTags("Users")  // Nhóm endpoint trong Swagger UI
         .WithName("CreateUser")  // Tên endpoint để reference
         // Định nghĩa các response codes có thể trả về

@@ -82,6 +82,8 @@ public class UserCreatedConsumer : IConsumer<UserCreatedEvent>
         {
             Id = @event.UserId,
             IdentityNumber = @event.IdentityNumber,
+            IdentityIssueDate = @event.IdentityIssueDate,
+            IdentityIssuePlace = @event.IdentityIssuePlace,
             EmployeeCode = @event.EmployeeCode ?? $"MGR-{@event.UserId.ToString()[..8]}",
             FullName = @event.FullName,
             Email = @event.Email,
@@ -130,6 +132,8 @@ public class UserCreatedConsumer : IConsumer<UserCreatedEvent>
         {
             Id = @event.UserId,
             IdentityNumber = @event.IdentityNumber,
+            IdentityIssueDate = @event.IdentityIssueDate,
+            IdentityIssuePlace = @event.IdentityIssuePlace,
             EmployeeCode = @event.EmployeeCode ?? $"GRD-{@event.UserId.ToString()[..8]}",
             FullName = @event.FullName,
             Email = @event.Email,

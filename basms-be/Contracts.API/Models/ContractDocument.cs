@@ -12,11 +12,6 @@ public class ContractDocument
     public Guid Id { get; set; }
 
     /// <summary>
-    /// Thuộc hợp đồng nào
-    /// </summary>
-    public Guid ContractId { get; set; }
-
-    /// <summary>
     /// Loại tài liệu: contract, amendment, appendix, requirements, site_plan
     /// </summary>
     public string DocumentType { get; set; } = string.Empty;

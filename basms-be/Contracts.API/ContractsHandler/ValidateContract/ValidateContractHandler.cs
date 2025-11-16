@@ -121,9 +121,13 @@ internal class ValidateContractHandler(
                 };
             }
 
-            var customer = await connection.QueryFirstOrDefaultAsync<Models.Customer>(
-                "SELECT * FROM customers WHERE Id = @CustomerId",
-                new { CustomerId = contract.CustomerId });
+            Models.Customer? customer = null;
+            if (contract.CustomerId.HasValue)
+            {
+                customer = await connection.QueryFirstOrDefaultAsync<Models.Customer>(
+                    "SELECT * FROM customers WHERE Id = @CustomerId",
+                    new { CustomerId = contract.CustomerId.Value });
+            }
 
             var contractLocations = (await connection.QueryAsync<dynamic>(
                 @"SELECT cl.*, loc.LocationName, loc.Address, loc.City, loc.District

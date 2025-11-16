@@ -7,6 +7,9 @@ namespace BuildingBlocks.Messaging.Events;
 public record UserUpdatedEvent
 {
     public Guid UserId { get; init; }
+    public string? IdentityNumber { get; init; }
+    public DateTime? IdentityIssueDate { get; init; }
+    public string? IdentityIssuePlace { get; init; }
     public string FullName { get; init; } = string.Empty;
     public string? Phone { get; init; }
     public string? AvatarUrl { get; init; }

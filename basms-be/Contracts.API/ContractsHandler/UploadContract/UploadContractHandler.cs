@@ -5,9 +5,9 @@ namespace Contracts.API.ContractsHandler.UploadContract;
 /// <summary>
 /// Command để upload contract document lên S3
 /// Chỉ chấp nhận Word/PDF, tối đa 10MB
+/// Không cần ContractId - document được tạo trước, contract sẽ link đến document sau
 /// </summary>
 public record UploadContractCommand(
-    Guid ContractId,
     Stream FileStream,
     string FileName,
     string ContentType,
@@ -53,8 +53,7 @@ internal class UploadContractHandler(
         try
         {
             logger.LogInformation(
-                "Uploading contract document for ContractId: {ContractId}, File: {FileName} ({FileSize} bytes)",
-                request.ContractId,
+                "Uploading contract document: File: {FileName} ({FileSize} bytes)",
                 request.FileName,
                 request.FileSize);
 
@@ -62,26 +61,7 @@ internal class UploadContractHandler(
             // VALIDATION
             // ================================================================
 
-            // 0. Validate Contract exists
             using var connection = await connectionFactory.CreateConnectionAsync();
-
-            var contractExists = await connection.QueryFirstOrDefaultAsync<Models.Contract>(
-                "SELECT * FROM contracts WHERE Id = @Id AND IsDeleted = 0",
-                new { Id = request.ContractId });
-
-            if (contractExists == null)
-            {
-                return new UploadContractResult
-                {
-                    Success = false,
-                    ErrorMessage = $"Contract with ID {request.ContractId} not found or has been deleted"
-                };
-            }
-
-            logger.LogInformation(
-                "Contract verified: {ContractNumber} - {ContractTitle}",
-                contractExists.ContractNumber,
-                contractExists.ContractTitle);
 
             // 1. Validate file size (≤ 10MB)
             if (request.FileSize > MaxFileSizeBytes)
@@ -155,7 +135,6 @@ internal class UploadContractHandler(
                 var document = new ContractDocument
                 {
                     Id = Guid.NewGuid(),
-                    ContractId = request.ContractId,
                     DocumentType = request.DocumentType.ToLowerInvariant(),
                     DocumentName = request.FileName,
                     FileUrl = fileUrl,
@@ -173,9 +152,8 @@ internal class UploadContractHandler(
                 transaction.Commit();
 
                 logger.LogInformation(
-                    "✓ Contract document uploaded successfully: DocumentId={DocumentId}, ContractId={ContractId}, File={FileName}",
+                    "✓ Contract document uploaded successfully: DocumentId={DocumentId}, File={FileName}",
                     document.Id,
-                    request.ContractId,
                     request.FileName);
 
                 return new UploadContractResult

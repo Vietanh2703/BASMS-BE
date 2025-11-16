@@ -12,9 +12,14 @@ public class Contract
     public Guid Id { get; set; }
 
     /// <summary>
-    /// Thuộc khách hàng nào
+    /// Thuộc khách hàng nào (NULL for working_contract, required for service contracts)
     /// </summary>
-    public Guid CustomerId { get; set; }
+    public Guid? CustomerId { get; set; }
+
+    /// <summary>
+    /// Tham chiếu đến document chính (working_contract document)
+    /// </summary>
+    public Guid? DocumentId { get; set; }
 
     /// <summary>
     /// Mã hợp đồng: CTR-2025-001

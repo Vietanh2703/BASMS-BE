@@ -95,6 +95,8 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     `ContactPersonName` VARCHAR(255) NOT NULL,
                     `ContactPersonTitle` VARCHAR(100) NULL,
                     `IdentityNumber` VARCHAR(12) NOT NULL UNIQUE,
+                    `IdentityIssueDate` DATETIME NULL COMMENT 'Ngày cấp CCCD',
+                    `IdentityIssuePlace` VARCHAR(255) NULL COMMENT 'Nơi cấp CCCD',
                     `Email` VARCHAR(255) NOT NULL,
                     `Phone` VARCHAR(20) NOT NULL,
                     `AvatarUrl` VARCHAR(500) NULL,
@@ -224,12 +226,34 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             ");
 
             // ====================================================================
-            // 5. CONTRACTS - Hợp đồng dịch vụ
+            // 5. CONTRACT_DOCUMENTS - Tài liệu hợp đồng (MOVED BEFORE CONTRACTS)
+            // ====================================================================
+            await connection.ExecuteAsync(@"
+                CREATE TABLE IF NOT EXISTS `contract_documents` (
+                    `Id` CHAR(36) PRIMARY KEY,
+                    `DocumentType` VARCHAR(50) NOT NULL,
+                    `DocumentName` VARCHAR(255) NOT NULL,
+                    `FileUrl` VARCHAR(500) NOT NULL,
+                    `FileSize` BIGINT NULL,
+                    `MimeType` VARCHAR(100) NULL,
+                    `Version` VARCHAR(20) NOT NULL DEFAULT '1.0',
+                    `DocumentDate` DATE NULL,
+                    `UploadedBy` CHAR(36) NULL,
+                    `IsDeleted` BOOLEAN NOT NULL DEFAULT FALSE,
+                    `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    INDEX `idx_doc_type` (`DocumentType`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                COMMENT='Tài liệu hợp đồng';
+             ");
+
+            // ====================================================================
+            // 6. CONTRACTS - Hợp đồng dịch vụ
             // ====================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `contracts` (
                     `Id` CHAR(36) PRIMARY KEY,
-                    `CustomerId` CHAR(36) NOT NULL,
+                    `CustomerId` CHAR(36) NULL COMMENT 'NULL for working_contract, required for service contracts',
+                    `DocumentId` CHAR(36) NULL COMMENT 'Link to contract_documents.Id',
                     `ContractNumber` VARCHAR(50) UNIQUE NOT NULL COMMENT 'CTR-2025-001',
                     `ContractTitle` VARCHAR(255) NOT NULL,
                     `ContractType` VARCHAR(50) NOT NULL COMMENT 'long_term, short_term...',
@@ -268,13 +292,15 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     INDEX `idx_contract_type_status` (`ContractType`, `Status`),
                     INDEX `idx_contract_dates` (`StartDate`, `EndDate`),
                     INDEX `idx_contract_active` (`Status`, `EndDate`),
-                    FOREIGN KEY (`CustomerId`) REFERENCES `customers`(`Id`) ON DELETE RESTRICT
+                    INDEX `idx_contract_document` (`DocumentId`),
+                    FOREIGN KEY (`CustomerId`) REFERENCES `customers`(`Id`) ON DELETE RESTRICT,
+                    FOREIGN KEY (`DocumentId`) REFERENCES `contract_documents`(`Id`) ON DELETE SET NULL
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 COMMENT='Hợp đồng dịch vụ bảo vệ';
             ");
 
             // ====================================================================
-            // 6. CONTRACT_LOCATIONS - Địa điểm trong hợp đồng
+            // 7. CONTRACT_LOCATIONS - Địa điểm trong hợp đồng
             // ====================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `contract_locations` (
@@ -302,7 +328,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             ");
 
             // ====================================================================
-            // 7. CONTRACT_SHIFT_SCHEDULES - Mẫu ca trong hợp đồng
+            // 8. CONTRACT_SHIFT_SCHEDULES - Mẫu ca trong hợp đồng
             // ====================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `contract_shift_schedules` (
@@ -354,7 +380,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             ");
 
             // ====================================================================
-            // 8. CONTRACT_SHIFT_EXCEPTIONS - Ngoại lệ ca
+            // 9. CONTRACT_SHIFT_EXCEPTIONS - Ngoại lệ ca
             // ====================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `contract_shift_exceptions` (
@@ -376,7 +402,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             ");
 
             // ====================================================================
-            // 9. CONTRACT_PERIODS - Kỳ hạn hợp đồng
+            // 10. CONTRACT_PERIODS - Kỳ hạn hợp đồng
             // ====================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `contract_periods` (
@@ -397,7 +423,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             ");
 
             // ====================================================================
-            // 10. CONTRACT_AMENDMENTS - Phụ lục hợp đồng
+            // 11. CONTRACT_AMENDMENTS - Phụ lục hợp đồng
             // ====================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `contract_amendments` (
@@ -424,30 +450,6 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             ");
 
             // ====================================================================
-            // 11. CONTRACT_DOCUMENTS - Tài liệu hợp đồng
-            // ====================================================================
-            await connection.ExecuteAsync(@"
-                CREATE TABLE IF NOT EXISTS `contract_documents` (
-                    `Id` CHAR(36) PRIMARY KEY,
-                    `ContractId` CHAR(36) NOT NULL,
-                    `DocumentType` VARCHAR(50) NOT NULL,
-                    `DocumentName` VARCHAR(255) NOT NULL,
-                    `FileUrl` VARCHAR(500) NOT NULL,
-                    `FileSize` BIGINT NULL,
-                    `MimeType` VARCHAR(100) NULL,
-                    `Version` VARCHAR(20) NOT NULL DEFAULT '1.0',
-                    `DocumentDate` DATE NULL,
-                    `UploadedBy` CHAR(36) NULL,
-                    `IsDeleted` BOOLEAN NOT NULL DEFAULT FALSE,
-                    `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    INDEX `idx_doc_type` (`DocumentType`),
-                    INDEX `idx_doc_contract` (`ContractId`),
-                    FOREIGN KEY (`ContractId`) REFERENCES `contracts`(`Id`) ON DELETE CASCADE
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-                COMMENT='Tài liệu hợp đồng';
-             ");
-
-            // ====================================================================
             // 12. SHIFT_GENERATION_LOG - Log tự động tạo ca
             // ====================================================================
             await connection.ExecuteAsync(@"
@@ -471,9 +473,8 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                 COMMENT='Log tự động tạo shifts - debugging và audit';
             ");
 
-            
             // ====================================================================
-            // 14. ATTENDANCE_SYNC_LOG - Log đồng bộ attendance
+            // 13. ATTENDANCE_SYNC_LOG - Log đồng bộ attendance
             // ====================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `attendance_sync_log` (
@@ -493,7 +494,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             ");
 
             // ====================================================================
-            // 15. CUSTOMER_SYNC_LOG - Log đồng bộ customer
+            // 14. CUSTOMER_SYNC_LOG - Log đồng bộ customer
             // ====================================================================
             Console.WriteLine("Creating table: customer_sync_log");
             await connection.ExecuteAsync(@"
@@ -523,7 +524,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             ");
 
                 _tablesCreated = true;
-                Console.WriteLine("✓ Created all 17 Contracts database tables successfully");
+                Console.WriteLine("✓ Created all 14 Contracts database tables successfully");
             }
             catch (Exception ex)
             {

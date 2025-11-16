@@ -34,6 +34,10 @@ awsOptions.Credentials = new BasicAWSCredentials(
 awsOptions.Region = RegionEndpoint.GetBySystemName(builder.Configuration["AWS:Region"]);
 builder.Services.AddDefaultAWSOptions(awsOptions);
 
+// Đăng ký Word Contract Service và Digital Signature Service
+builder.Services.AddScoped<Contracts.API.Extensions.IWordContractService, Contracts.API.Extensions.WordContractService>();
+builder.Services.AddScoped<Contracts.API.Extensions.IDigitalSignatureService, Contracts.API.Extensions.DigitalSignatureService>();
+
 // Đăng ký MassTransit with RabbitMQ
 builder.Services.AddMassTransit(x =>
 {
@@ -59,7 +63,29 @@ builder.Services.AddMassTransit(x =>
             h.Password(rabbitMqPassword);
         });
 
-        // Configure endpoints
+        // ✅ FIX: Configure endpoint với queue name riêng cho Contracts.API
+        // Mỗi service cần queue riêng để cùng nhận UserCreatedEvent (publish/subscribe pattern)
+        cfg.ReceiveEndpoint("contracts-api-user-created", e =>
+        {
+            e.ConfigureConsumer<Contracts.API.Consumers.UserCreatedConsumer>(context);
+        });
+
+        cfg.ReceiveEndpoint("contracts-api-user-updated", e =>
+        {
+            e.ConfigureConsumer<Contracts.API.Consumers.UserUpdatedConsumer>(context);
+        });
+
+        cfg.ReceiveEndpoint("contracts-api-user-deleted", e =>
+        {
+            e.ConfigureConsumer<Contracts.API.Consumers.UserDeletedConsumer>(context);
+        });
+
+        cfg.ReceiveEndpoint("contracts-api-shifts-generated", e =>
+        {
+            e.ConfigureConsumer<Contracts.API.Consumers.ShiftsGeneratedConsumer>(context);
+        });
+
+        // Configure other endpoints
         cfg.ConfigureEndpoints(context);
 
         // Configure retry policy

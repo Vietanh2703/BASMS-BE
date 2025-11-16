@@ -6,20 +6,30 @@ namespace BuildingBlocks.Messaging.Events;
 
 /// <summary>
 /// Request để tạo user mới qua MassTransit
-/// Used by Contracts.API to create customer account in Users.API
+/// Used by Contracts.API to create customer/guard account in Users.API
 /// </summary>
 public record CreateUserRequest
 {
     public string? IdentityNumber { get; init; }
+    public DateTime? IdentityIssueDate { get; init; }
+    public string? IdentityIssuePlace { get; init; }
     public string Email { get; init; } = string.Empty;
+    public bool EmailVerified { get; init; } = false;
     public string Password { get; init; } = string.Empty;
     public string FullName { get; init; } = string.Empty;
     public string? Phone { get; init; }
+    public bool PhoneVerified { get; init; } = false;
     public string? Address { get; init; }
-    public string Gender { get; init; }
-    public string RoleName { get; init; } = "customer";  // Default role
+    public string? Gender { get; init; }
+    public int? BirthDay { get; init; }
+    public int? BirthMonth { get; init; }
+    public int? BirthYear { get; init; }
+    public string RoleName { get; init; } = "customer";  // Default role: customer, guard, manager, admin
+    public Guid? RoleId { get; init; }  // Có thể dùng RoleId thay cho RoleName
     public string? AvatarUrl { get; init; }
-    public string AuthProvider { get; init; } = "email";
+    public string AuthProvider { get; init; } = "email";  // email, google, facebook
+    public string Status { get; init; } = "active";
+    public int LoginCount { get; init; } = 0;
 }
 
 /// <summary>

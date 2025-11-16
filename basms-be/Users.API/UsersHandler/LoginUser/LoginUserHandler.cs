@@ -176,7 +176,7 @@ public class LoginUserHandler(
         string email,
         string password)
     {
-        // Bước 1: Tìm user theo email và chưa bị xóa
+        // Bước 1: Tìm user theo email
         var users = await connection.GetAllAsync<Models.Users>(transaction);
         var user = users.FirstOrDefault(u => u.Email == email && !u.IsDeleted);
 
@@ -186,37 +186,34 @@ public class LoginUserHandler(
             throw new UnauthorizedAccessException("Invalid email or password");
         }
 
-        // Bước 2: Kiểm tra tài khoản có active không
+        // Bước 2: Kiểm tra account active
         if (!user.IsActive)
         {
             logger.LogWarning("Login failed: User account inactive for email {Email}", email);
-            throw new UnauthorizedAccessException("Account is inactive");
+            throw new UnauthorizedAccessException("Account is inactive. Please contact support.");
         }
 
         // Bước 3: Kiểm tra user có password không
-        // User đăng ký bằng Google sẽ không có password
         if (string.IsNullOrEmpty(user.Password))
         {
             logger.LogWarning("Login failed: No password set for user {Email}. User may have registered with Google.", email);
-            throw new UnauthorizedAccessException("Invalid email or password. Please use Google sign-in.");
+            throw new UnauthorizedAccessException("This account was registered with Google. Please use Google sign-in.");
         }
 
         // Bước 4: Verify password với BCrypt
-        // BCrypt tự động so sánh plaintext password với hashed password
         try
         {
             bool isPasswordValid = BCrypt.Net.BCrypt.Verify(password, user.Password);
             if (!isPasswordValid)
             {
                 logger.LogWarning("Login failed: Invalid password for user {Email}", email);
-                throw new UnauthorizedAccessException("Invalid email or password");
+                throw new UnauthorizedAccessException("Invalid password. Please check your password and try again.");
             }
         }
         catch (BCrypt.Net.SaltParseException ex)
         {
-            // Hash password không hợp lệ (có thể bị corrupt)
-            logger.LogError(ex, "Login failed: Password hash is invalid for user {Email}", email);
-            throw new UnauthorizedAccessException("Invalid email or password");
+            logger.LogError(ex, "Login failed: Password hash corrupted for user {Email}", email);
+            throw new UnauthorizedAccessException("Account error. Please contact support.");
         }
 
         logger.LogInformation("User authenticated successfully with email/password: {Email}", email);

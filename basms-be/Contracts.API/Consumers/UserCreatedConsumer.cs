@@ -116,12 +116,14 @@ public class UserCreatedConsumer : IConsumer<UserCreatedEvent>
             Id = Guid.NewGuid(),
             UserId = @event.UserId,
             CustomerCode = customerCode,
-            
+
             CompanyName = @event.FullName,
             ContactPersonName = @event.FullName,
             ContactPersonTitle = null,
 
             IdentityNumber = @event.IdentityNumber,
+            IdentityIssueDate = @event.IdentityIssueDate,
+            IdentityIssuePlace = @event.IdentityIssuePlace,
             Email = @event.Email,
             Phone = @event.Phone ?? "",
             AvatarUrl = @event.AvatarUrl,

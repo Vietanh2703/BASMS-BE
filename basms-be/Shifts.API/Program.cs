@@ -60,8 +60,29 @@ builder.Services.AddMassTransit(x =>
             h.Username(rabbitMqUsername);
             h.Password(rabbitMqPassword);
         });
+        
+        // Mỗi service cần queue riêng để cùng nhận UserCreatedEvent (publish/subscribe pattern)
+        cfg.ReceiveEndpoint("shifts-api-user-created", e =>
+        {
+            e.ConfigureConsumer<Shifts.API.Consumers.UserCreatedConsumer>(context);
+        });
 
-        // Configure endpoints
+        cfg.ReceiveEndpoint("shifts-api-user-updated", e =>
+        {
+            e.ConfigureConsumer<Shifts.API.Consumers.UserUpdatedConsumer>(context);
+        });
+
+        cfg.ReceiveEndpoint("shifts-api-user-deleted", e =>
+        {
+            e.ConfigureConsumer<Shifts.API.Consumers.UserDeletedConsumer>(context);
+        });
+
+        cfg.ReceiveEndpoint("shifts-api-contract-activated", e =>
+        {
+            e.ConfigureConsumer<Shifts.API.Consumers.ContractActivatedConsumer>(context);
+        });
+
+        // Configure other endpoints
         cfg.ConfigureEndpoints(context);
 
         // Configure retry policy

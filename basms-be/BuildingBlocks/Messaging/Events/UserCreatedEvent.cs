@@ -9,6 +9,8 @@ public record UserCreatedEvent
     public Guid UserId { get; init; }
     public string FirebaseUid { get; init; } = string.Empty;
     public string IdentityNumber { get; set; }
+    public DateTime? IdentityIssueDate { get; init; }
+    public string? IdentityIssuePlace { get; init; }
     public string Email { get; init; } = string.Empty;
     public string FullName { get; init; } = string.Empty;
     public string? Phone { get; init; }

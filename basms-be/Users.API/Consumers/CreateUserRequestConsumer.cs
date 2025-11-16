@@ -10,7 +10,8 @@ namespace Users.API.Consumers;
 public class CreateUserRequestConsumer(
     IDbConnectionFactory connectionFactory,
     ILogger<CreateUserRequestConsumer> logger,
-    Users.API.Extensions.EmailHandler emailHandler)
+    Users.API.Extensions.EmailHandler emailHandler,
+    Users.API.Messaging.UserEventPublisher eventPublisher)
     : IConsumer<CreateUserRequest>
 {
     public async Task Consume(ConsumeContext<CreateUserRequest> context)
@@ -117,12 +118,17 @@ public class CreateUserRequestConsumer(
                 {
                     Id = Guid.NewGuid(),
                     IdentityNumber = request.IdentityNumber,
+                    IdentityIssueDate = request.IdentityIssueDate ?? DateTime.UtcNow,
+                    IdentityIssuePlace = request.IdentityIssuePlace ?? string.Empty, 
                     FirebaseUid = firebaseUser.Uid,
                     Email = request.Email,
                     FullName = request.FullName,
                     Phone = request.Phone,
                     Gender = request.Gender,
                     Address = request.Address,
+                    BirthDay = request.BirthDay, 
+                    BirthMonth = request.BirthMonth, 
+                    BirthYear = request.BirthYear,
                     RoleId = role.Id,
                     AvatarUrl = request.AvatarUrl,
                     AuthProvider = request.AuthProvider,
@@ -167,7 +173,27 @@ public class CreateUserRequestConsumer(
                     user.Email, request.RoleName);
 
                 // ================================================================
-                // BƯỚC 5: TRẢ VỀ RESPONSE THÀNH CÔNG
+                // BƯỚC 5: PUBLISH UserCreatedEvent
+                // ================================================================
+                // ✅ FIX: Publish event để Shifts.API tạo Guard/Manager record
+                try
+                {
+                    await eventPublisher.PublishUserCreatedAsync(user, role, context.CancellationToken);
+                    logger.LogInformation(
+                        "✓ Published UserCreatedEvent for User {UserId} with Role {RoleName}",
+                        user.Id, role.Name);
+                }
+                catch (Exception publishEx)
+                {
+                    logger.LogError(publishEx,
+                        "Failed to publish UserCreatedEvent for User {UserId}. " +
+                        "User was created but downstream services may not be notified.",
+                        user.Id);
+                    // Don't fail the request - user was created successfully
+                }
+
+                // ================================================================
+                // BƯỚC 6: TRẢ VỀ RESPONSE THÀNH CÔNG
                 // ================================================================
                 await context.RespondAsync(new CreateUserResponse
                 {

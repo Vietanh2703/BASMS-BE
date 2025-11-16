@@ -296,18 +296,28 @@ internal class GetContractByIdHandler(
             }
 
             // ================================================================
-            // 2. LẤY CUSTOMER
+            // 2. LẤY CUSTOMER (null for working_contract)
             // ================================================================
-            var customer = await connection.QueryFirstOrDefaultAsync<Models.Customer>(
-                "SELECT * FROM customers WHERE Id = @CustomerId AND IsDeleted = 0",
-                new { CustomerId = contract.CustomerId });
+            Models.Customer? customer = null;
+            if (contract.CustomerId.HasValue)
+            {
+                customer = await connection.QueryFirstOrDefaultAsync<Models.Customer>(
+                    "SELECT * FROM customers WHERE Id = @CustomerId AND IsDeleted = 0",
+                    new { CustomerId = contract.CustomerId.Value });
+            }
 
             // ================================================================
-            // 3. LẤY CONTRACT DOCUMENTS
+            // 3. LẤY CONTRACT DOCUMENT (chỉ 1 document chính)
             // ================================================================
-            var documents = await connection.QueryAsync<Models.ContractDocument>(
-                "SELECT * FROM contract_documents WHERE ContractId = @ContractId AND IsDeleted = 0 ORDER BY CreatedAt DESC",
-                new { ContractId = contract.Id });
+            Models.ContractDocument? document = null;
+            if (contract.DocumentId.HasValue)
+            {
+                document = await connection.QueryFirstOrDefaultAsync<Models.ContractDocument>(
+                    "SELECT * FROM contract_documents WHERE Id = @Id AND IsDeleted = 0",
+                    new { Id = contract.DocumentId.Value });
+            }
+
+            var documents = document != null ? new[] { document } : Array.Empty<Models.ContractDocument>();
 
             // ================================================================
             // 4. LẤY CONTRACT LOCATIONS + CUSTOMER LOCATION DETAILS
