@@ -1,5 +1,3 @@
-using System.Globalization;
-
 namespace Contracts.API.ContractsHandler.ImportContractFromDocument;
 
 // ================================================================
@@ -7,13 +5,11 @@ namespace Contracts.API.ContractsHandler.ImportContractFromDocument;
 // ================================================================
 
 /// <summary>
-///     Command để import contract từ file Word/PDF
-///     Upload document file, parse information, and save to database
+///     Command để import contract từ document đã upload trên S3
+///     Lấy file từ S3, parse information, and save to database
 /// </summary>
 public record ImportContractFromDocumentCommand(
-    Stream FileStream,
-    string FileName,
-    Guid CreatedBy
+    Guid DocumentId
 ) : ICommand<ImportContractFromDocumentResult>;
 
 /// <summary>
@@ -44,6 +40,7 @@ public record ImportContractFromDocumentResult
 
 internal class ImportContractFromDocumentHandler(
     IDbConnectionFactory connectionFactory,
+    IS3Service s3Service,
     ILogger<ImportContractFromDocumentHandler> logger,
     IRequestClient<CreateUserRequest> createUserClient,
     EmailHandler emailHandler,
@@ -58,24 +55,58 @@ internal class ImportContractFromDocumentHandler(
 
         try
         {
-            logger.LogInformation("Importing contract from document: {FileName}", request.FileName);
+            logger.LogInformation("Importing contract from DocumentId: {DocumentId}", request.DocumentId);
 
             // ================================================================
-            // BƯỚC 1: EXTRACT TEXT TỪ FILE
+            // BƯỚC 0: LẤY DOCUMENT TỪ DATABASE
             // ================================================================
+            var connection = await connectionFactory.CreateConnectionAsync();
+
+            var document = await connection.QueryFirstOrDefaultAsync<ContractDocument>(
+                "SELECT * FROM contract_documents WHERE Id = @Id AND IsDeleted = 0",
+                new { Id = request.DocumentId });
+
+            if (document == null)
+                return new ImportContractFromDocumentResult
+                {
+                    Success = false,
+                    ErrorMessage = $"Document with ID {request.DocumentId} not found"
+                };
+
+            logger.LogInformation("Found document: {DocumentName} at {FileUrl}", document.DocumentName, document.FileUrl);
+
+            // ================================================================
+            // BƯỚC 1: DOWNLOAD FILE TỪ S3 VÀ EXTRACT TEXT
+            // ================================================================
+            var (downloadSuccess, fileStream, downloadError) = await s3Service.DownloadFileAsync(
+                document.FileUrl,
+                cancellationToken);
+
+            if (!downloadSuccess || fileStream == null)
+                return new ImportContractFromDocumentResult
+                {
+                    Success = false,
+                    ErrorMessage = downloadError ?? "Failed to download file from S3"
+                };
+
             string rawText;
-            var fileExtension = Path.GetExtension(request.FileName).ToLower();
+            var fileExtension = Path.GetExtension(document.DocumentName).ToLower();
 
             if (fileExtension == ".docx")
-                rawText = await ExtractTextFromWordAsync(request.FileStream);
+                rawText = await ExtractTextFromWordAsync(fileStream);
             else if (fileExtension == ".pdf")
-                rawText = await ExtractTextFromPdfAsync(request.FileStream);
+                rawText = await ExtractTextFromPdfAsync(fileStream);
             else
+            {
+                fileStream.Dispose();
                 return new ImportContractFromDocumentResult
                 {
                     Success = false,
                     ErrorMessage = $"File type không được hỗ trợ: {fileExtension}. Chỉ hỗ trợ .docx và .pdf"
                 };
+            }
+
+            fileStream.Dispose();
 
             if (string.IsNullOrWhiteSpace(rawText))
                 return new ImportContractFromDocumentResult
@@ -96,8 +127,10 @@ internal class ImportContractFromDocumentHandler(
             var customerPhone = ExtractPhoneNumber(rawText);
             var customerEmail = ExtractEmail(rawText);
             var taxCode = ExtractTaxCode(rawText);
-            var contactPersonName = ExtractContactPersonName(rawText);
-            var contactPersonTitle = ExtractContactPersonTitle(rawText);
+
+            // Extract contact person info (name + title) cùng lúc
+            var (contactPersonName, contactPersonTitle) = ExtractContactPersonInfo(rawText);
+
             var identityNumber = ExtractIdentityNumber(rawText);
             var gender = ExtractGender(rawText);
             var guardsRequired = ExtractGuardsRequired(rawText);
@@ -141,6 +174,12 @@ internal class ImportContractFromDocumentHandler(
                 startDate ??= DateTime.Now.Date;
                 endDate ??= startDate.Value.AddMonths(12);
             }
+
+            if (string.IsNullOrEmpty(contactPersonName))
+                warnings.Add("Không tìm thấy tên người đại diện - sẽ sử dụng giá trị mặc định");
+
+            if (string.IsNullOrEmpty(contactPersonTitle))
+                warnings.Add("Không tìm thấy chức vụ người đại diện - sẽ sử dụng giá trị mặc định");
 
             // ================================================================
             // BƯỚC 3: TẠO USER ACCOUNT CHO CUSTOMER (VIA USERS.API)
@@ -203,7 +242,6 @@ internal class ImportContractFromDocumentHandler(
             // ================================================================
             // BƯỚC 4: LƯU VÀO DATABASE
             // ================================================================
-            using var connection = await connectionFactory.CreateConnectionAsync();
             using var transaction = connection.BeginTransaction();
 
             try
@@ -258,6 +296,7 @@ internal class ImportContractFromDocumentHandler(
                 var contract = new Contract
                 {
                     Id = Guid.NewGuid(),
+                    DocumentId = request.DocumentId, // Link đến document đã upload
                     ContractNumber = contractNumber,
                     ContractTitle = $"Hợp đồng bảo vệ - {customerName}",
                     CustomerId = customerId,
@@ -268,6 +307,7 @@ internal class ImportContractFromDocumentHandler(
                     EndDate = endDate.Value,
                     DurationMonths = contractTypeInfo.DurationMonths,
                     Status = "draft", // Draft để manager review trước khi activate
+                    ContractFileUrl = document.FileUrl, // Link đến file trên S3
                     FollowsCustomerCalendar = true,
                     WorkOnPublicHolidays = dieu3Info.WorkOnPublicHolidays,
                     WorkOnCustomerClosedDays = false,
@@ -279,7 +319,7 @@ internal class ImportContractFromDocumentHandler(
                     RenewalCount = 0,
                     IsDeleted = false,
                     CreatedAt = DateTime.UtcNow,
-                    CreatedBy = request.CreatedBy
+                    CreatedBy = document.UploadedBy // Use UploadedBy from document
                 };
 
                 await connection.InsertAsync(contract, transaction);
@@ -427,7 +467,7 @@ internal class ImportContractFromDocumentHandler(
                             IsActive = true,
                             IsDeleted = false,
                             CreatedAt = DateTime.UtcNow,
-                            CreatedBy = request.CreatedBy
+                            CreatedBy = document.UploadedBy
                         };
 
                         await connection.InsertAsync(schedule, transaction);
@@ -464,6 +504,7 @@ internal class ImportContractFromDocumentHandler(
                         var holiday = new PublicHoliday
                         {
                             Id = Guid.NewGuid(),
+                            ContractId = contract.Id, // Link với hợp đồng
                             HolidayDate = holidayInfo.HolidayDate,
                             HolidayName = holidayInfo.HolidayName,
                             HolidayNameEn = holidayInfo.HolidayNameEn,
@@ -484,8 +525,8 @@ internal class ImportContractFromDocumentHandler(
                         };
 
                         await connection.InsertAsync(holiday, transaction);
-                        logger.LogInformation("✓ Public holiday created: {Name} on {Date}",
-                            holiday.HolidayName, holiday.HolidayDate.ToShortDateString());
+                        logger.LogInformation("✓ Public holiday created: {Name} on {Date} for Contract {ContractId}",
+                            holiday.HolidayName, holiday.HolidayDate.ToShortDateString(), contract.Id);
                     }
                     else
                     {
@@ -805,6 +846,9 @@ internal class ImportContractFromDocumentHandler(
     {
         var patterns = new[]
         {
+            // Pattern 0: Định dạng mới DDMMYYYY/CTANCH hoặc DDMMYYYY/CTANCH/HDDVBV
+            @"(\d{8}/CTANCH(?:/HDDVBV)?)",
+
             // Pattern 1: Số thứ tự/năm/HĐDV-BV/HCM/tên đối tác (001/2025/HDDV-BV/HCM/NVHSV)
             @"(?:Số\s*HĐ|Hợp\s*đồng\s*số|Contract\s*No\.?)\s*[:：]?\s*(\d{3,4}/\d{4}/[A-Z\-]+/[A-Z]+/[A-Z]+)",
 
@@ -813,28 +857,35 @@ internal class ImportContractFromDocumentHandler(
 
             // Pattern 3: Format cũ - HĐ số hoặc Contract No
             @"(?:Số\s*HĐ|Hợp\s*đồng\s*số|Contract\s*No\.?)\s*[:：]\s*([A-Z0-9\-/]+)",
-
-            // Pattern 4: HĐ với mã
-            @"HĐ\s*[-:]?\s*([A-Z0-9\-/]{5,})",
-
-            // Pattern 5: CTR format
-            @"CTR[-\s]?(\d{4})[-\s]?(\d{3})"
         };
+
 
         foreach (var pattern in patterns)
         {
             var match = Regex.Match(text, pattern, RegexOptions.IgnoreCase);
-            if (match.Success)
-            {
-                // Với pattern 5 (CTR), cần ghép groups
-                if (match.Groups.Count > 2 && !string.IsNullOrEmpty(match.Groups[2].Value))
-                    return $"{match.Groups[1].Value}-{match.Groups[2].Value}".Trim();
+            if (!match.Success)
+                continue;
 
-                return match.Groups[1].Value.Trim();
+            // Với pattern 5 (CTR), cần ghép groups
+            if (match.Groups.Count > 2 && !string.IsNullOrEmpty(match.Groups[2].Value))
+            {
+                // VD: CTR2025-001
+                return $"{match.Groups[1].Value}-{match.Groups[2].Value}".Trim();
             }
+
+            var value = match.Groups[1].Value.Trim();
+
+            // Nếu là dạng mới DDMMYYYY/CTANCH thì tự động thêm /HDDVBV
+            if (Regex.IsMatch(value, @"^\d{8}/CTANCH$", RegexOptions.IgnoreCase))
+            {
+                value += "/HDDVBV";
+            }
+
+            return value;
         }
 
-        return null;
+        return string.Empty;
+        
     }
 
 
@@ -1072,34 +1123,99 @@ internal class ImportContractFromDocumentHandler(
     }
 
     /// <summary>
-    ///     Extract contact person name từ Bên B (sau chữ "Ông" hoặc "Bà")
+    ///     Extract contact person name từ Bên B - Thông minh hơn với named groups
+    ///     Hỗ trợ parse cả Name và Title cùng lúc
     /// </summary>
-    private string? ExtractContactPersonName(string text)
+    private (string? name, string? title) ExtractContactPersonInfo(string text)
     {
         // Tìm phần Bên B
         var benBIndex = text.IndexOf("BÊN B", StringComparison.OrdinalIgnoreCase);
         if (benBIndex == -1)
             benBIndex = text.IndexOf("Bên B", StringComparison.OrdinalIgnoreCase);
 
-        if (benBIndex >= 0)
+        if (benBIndex < 0)
         {
-            var textAfterBenB = text.Substring(benBIndex, Math.Min(600, text.Length - benBIndex));
-
-            // Pattern: "Đại diện: Ông/Bà TÊN – Chức vụ"
-            var patterns = new[]
-            {
-                @"(?:Đại\s*diện|Đ/D).*?[:：]\s*(?:Ông|Bà)\s+([A-ZÁÀẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÉÈẺẼẸÊẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÚÙỦŨỤƯỨỪỬỮỰÝỲỶỸỴ][a-záàảãạăắằẳẵặâấầẩẫậéèẻẽẹêếềểễệíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵ\s]+?)(?:\s*[-–]\s*|\s*\n)",
-                @"(?:Ông|Bà)\s+([A-ZÁÀẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÉÈẺẼẸÊẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÚÙỦŨỤƯỨỪỬỮỰÝỲỶỸỴ][a-záàảãạăắằẳẵặâấầẩẫậéèẻẽẹêếềểễệíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵ\s]+?)(?:\s*[-–]\s*)"
-            };
-
-            foreach (var pattern in patterns)
-            {
-                var match = Regex.Match(textAfterBenB, pattern, RegexOptions.IgnoreCase);
-                if (match.Success) return match.Groups[1].Value.Trim();
-            }
+            logger.LogWarning("Could not find 'Bên B' section in document");
+            return (null, null);
         }
 
-        return null;
+        var textAfterBenB = text.Substring(benBIndex, Math.Min(1000, text.Length - benBIndex));
+
+        // PATTERN 1: "Đại diện: Ông/Bà [TÊN ĐẦY ĐỦ] – [Chức vụ]"
+        // Sử dụng named groups để extract cả name và title
+        var pattern1 = @"(?:Đại\s*diện|Đ/D|Người\s*đại\s*diện)\s*[:：]?\s*" +
+                       @"(?<gender>Ông|Bà)\s+" +
+                       @"(?<name>[A-ZÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÉÈẺẼẸÊẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÚÙỦŨỤƯỨỪỬỮỰÝỲỶỸỴĐ]" +
+                       @"[a-zàáảãạăắằẳẵặâấầẩẫậéèẻẽẹêếềểễệíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵđ]+" +
+                       @"(?:\s+[A-ZÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÉÈẺẼẸÊẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÚÙỦŨỤƯỨỪỬỮỰÝỲỶỸỴĐ]" +
+                       @"[a-zàáảãạăắằẳẵặâấầẩẫậéèẻẽẹêếềểễệíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵđ]+)*)" +
+                       @"\s*[-–—]\s*" +
+                       @"(?<title>[A-ZÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÉÈẺẼẸÊẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÚÙỦŨỤƯỨỪỬỮỰÝỲỶỸỴĐ]" +
+                       @"[a-zàáảãạăắằẳẵặâấầẩẫậéèẻẽẹêếềểễệíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵđ]+" +
+                       @"(?:\s+(?!Số\s|CCCD|CMND|Điện\s*thoại|Email|Địa\s*chỉ|Căn\s*cước)[a-zàáảãạăắằẳẵặâấầẩẫậéèẻẽẹêếềểễệíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵđ]+)*)";
+
+        var match1 = Regex.Match(textAfterBenB, pattern1, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        if (match1.Success)
+        {
+            var name = match1.Groups["name"].Value.Trim();
+            var title = match1.Groups["title"].Value.Trim();
+
+            logger.LogInformation("✓ Extracted from Pattern 1: Name='{Name}', Title='{Title}'", name, title);
+            return (name, title);
+        }
+
+        // PATTERN 2: "Ông/Bà [TÊN] – [Chức vụ]" (không có "Đại diện:")
+        var pattern2 = @"(?<gender>Ông|Bà)\s+" +
+                       @"(?<name>[A-ZÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÉÈẺẼẸÊẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÚÙỦŨỤƯỨỪỬỮỰÝỲỶỸỴĐ]" +
+                       @"[a-zàáảãạăắằẳẵặâấầẩẫậéèẻẽẹêếềểễệíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵđ]+" +
+                       @"(?:\s+[A-ZÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÉÈẺẼẸÊẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÚÙỦŨỤƯỨỪỬỮỰÝỲỶỸỴĐ]" +
+                       @"[a-zàáảãạăắằẳẵặâấầẩẫậéèẻẽẹêếềểễệíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵđ]+)*)" +
+                       @"\s*[-–—]\s*" +
+                       @"(?<title>[A-ZÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÉÈẺẼẸÊẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÚÙỦŨỤƯỨỪỬỮỰÝỲỶỸỴĐ]" +
+                       @"[a-zàáảãạăắằẳẵặâấầẩẫậéèẻẽẹêếềểễệíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵđ]+" +
+                       @"(?:\s+(?!Số\s|CCCD|CMND|Điện\s*thoại|Email|Địa\s*chỉ|Căn\s*cước)[a-zàáảãạăắằẳẵặâấầẩẫậéèẻẽẹêếềểễệíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵđ]+)*)";
+
+        var match2 = Regex.Match(textAfterBenB, pattern2, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        if (match2.Success)
+        {
+            var name = match2.Groups["name"].Value.Trim();
+            var title = match2.Groups["title"].Value.Trim();
+
+            logger.LogInformation("✓ Extracted from Pattern 2: Name='{Name}', Title='{Title}'", name, title);
+            return (name, title);
+        }
+
+        // PATTERN 3: Chỉ có tên, không có chức vụ: "Đại diện: Ông/Bà [TÊN]" (không có dấu –)
+        var pattern3 = @"(?:Đại\s*diện|Đ/D|Người\s*đại\s*diện)\s*[:：]?\s*" +
+                       @"(?<gender>Ông|Bà)\s+" +
+                       @"(?<name>[A-ZÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÉÈẺẼẸÊẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÚÙỦŨỤƯỨỪỬỮỰÝỲỶỸỴĐ]" +
+                       @"[a-zàáảãạăắằẳẵặâấầẩẫậéèẻẽẹêếềểễệíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵđ]+" +
+                       @"(?:\s+[A-ZÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÉÈẺẼẸÊẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÚÙỦŨỤƯỨỪỬỮỰÝỲỶỸỴĐ]" +
+                       @"[a-zàáảãạăắằẳẵặâấầẩẫậéèẻẽẹêếềểễệíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵđ]+)*)";
+
+        var match3 = Regex.Match(textAfterBenB, pattern3, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        if (match3.Success)
+        {
+            var name = match3.Groups["name"].Value.Trim();
+
+            logger.LogInformation("✓ Extracted from Pattern 3 (name only): Name='{Name}'", name);
+            return (name, null);
+        }
+
+        // Fallback: Log để debug
+        logger.LogWarning("Could not extract contact person info from Bên B. Preview: {Text}",
+            textAfterBenB.Substring(0, Math.Min(300, textAfterBenB.Length)));
+
+        return (null, null);
+    }
+
+    /// <summary>
+    ///     Wrapper method để giữ tương thích với code cũ
+    /// </summary>
+    private string? ExtractContactPersonName(string text)
+    {
+        var (name, _) = ExtractContactPersonInfo(text);
+        return name;
     }
 
     /// <summary>
@@ -2228,61 +2344,213 @@ if (nationalDayMatch.Success && DateTime.TryParse(nationalDayMatch.Groups[1].Val
         string? contactPersonName = null, string? contactPersonTitle = null,
         Guid? userId = null, string? identityNumber = null, string? gender = null)
     {
-        // Tìm customer theo tên hoặc userId
+        // Tìm customer theo UserId, Email, hoặc Tên
         Customer? existing = null;
 
+        // 1. Ưu tiên tìm theo UserId nếu có
         if (userId.HasValue && userId.Value != Guid.Empty)
-            // Ưu tiên tìm theo UserId nếu có
+        {
             existing = await connection.QueryFirstOrDefaultAsync<Customer>(
                 "SELECT * FROM customers WHERE UserId = @UserId AND IsDeleted = 0 LIMIT 1",
                 new { UserId = userId.Value }, transaction);
 
-        if (existing == null)
-            // Tìm theo tên nếu không tìm thấy theo UserId
+            if (existing != null)
+            {
+                logger.LogInformation(
+                    "Found existing customer by UserId: {CustomerId} - {CompanyName}",
+                    existing.Id, existing.CompanyName);
+
+                // Update thông tin nếu cần (merge data từ contract document)
+                var updated = false;
+                if (string.IsNullOrEmpty(existing.ContactPersonName) && !string.IsNullOrEmpty(contactPersonName))
+                {
+                    existing.ContactPersonName = contactPersonName;
+                    updated = true;
+                }
+                if (string.IsNullOrEmpty(existing.ContactPersonTitle) && !string.IsNullOrEmpty(contactPersonTitle))
+                {
+                    existing.ContactPersonTitle = contactPersonTitle;
+                    updated = true;
+                }
+                if (string.IsNullOrEmpty(existing.IdentityNumber) && !string.IsNullOrEmpty(identityNumber))
+                {
+                    existing.IdentityNumber = identityNumber;
+                    updated = true;
+                }
+                if (string.IsNullOrEmpty(existing.Gender) && !string.IsNullOrEmpty(gender))
+                {
+                    existing.Gender = gender;
+                    updated = true;
+                }
+                if (string.IsNullOrEmpty(existing.Address) && !string.IsNullOrEmpty(address))
+                {
+                    existing.Address = address;
+                    updated = true;
+                }
+
+                if (updated)
+                {
+                    existing.UpdatedAt = DateTime.UtcNow;
+                    await connection.UpdateAsync(existing, transaction);
+                    logger.LogInformation(
+                        "Updated customer {CustomerId} with additional info from contract document",
+                        existing.Id);
+                }
+
+                return existing.Id;
+            }
+        }
+
+        // 2. Tìm theo Email nếu không tìm thấy theo UserId
+        if (!string.IsNullOrEmpty(email))
+        {
             existing = await connection.QueryFirstOrDefaultAsync<Customer>(
-                "SELECT * FROM customers WHERE CompanyName = @Name AND IsDeleted = 0 LIMIT 1",
-                new { Name = name }, transaction);
+                "SELECT * FROM customers WHERE Email = @Email AND IsDeleted = 0 LIMIT 1",
+                new { Email = email }, transaction);
+
+            if (existing != null)
+            {
+                logger.LogInformation(
+                    "Found existing customer by Email: {CustomerId} - {Email}",
+                    existing.Id, existing.Email);
+
+                // Update UserId nếu chưa có VÀ UserId chưa được dùng bởi customer khác
+                if (!existing.UserId.HasValue && userId.HasValue && userId.Value != Guid.Empty)
+                {
+                    // Kiểm tra UserId đã được dùng chưa
+                    var userIdTaken = await connection.QueryFirstOrDefaultAsync<Customer>(
+                        "SELECT * FROM customers WHERE UserId = @UserId AND IsDeleted = 0 LIMIT 1",
+                        new { UserId = userId.Value }, transaction);
+
+                    if (userIdTaken != null)
+                    {
+                        logger.LogWarning(
+                            "UserId {UserId} already used by another customer {CustomerId}. Cannot link.",
+                            userId, userIdTaken.Id);
+                    }
+                    else
+                    {
+                        existing.UserId = userId;
+                        existing.UpdatedAt = DateTime.UtcNow;
+                        await connection.UpdateAsync(existing, transaction);
+                        logger.LogInformation(
+                            "Linked customer {CustomerId} with UserId: {UserId}",
+                            existing.Id, userId);
+                    }
+                }
+
+                return existing.Id;
+            }
+        }
+
+        // 3. Tìm theo CompanyName nếu không tìm thấy theo UserId và Email
+        existing = await connection.QueryFirstOrDefaultAsync<Customer>(
+            "SELECT * FROM customers WHERE CompanyName = @Name AND IsDeleted = 0 LIMIT 1",
+            new { Name = name }, transaction);
 
         if (existing != null)
         {
-            // Nếu tìm thấy customer nhưng chưa có UserId, update UserId
+            logger.LogInformation(
+                "Found existing customer by CompanyName: {CustomerId} - {CompanyName}",
+                existing.Id, existing.CompanyName);
+
+            // Update UserId nếu chưa có VÀ UserId chưa được dùng bởi customer khác
             if (!existing.UserId.HasValue && userId.HasValue && userId.Value != Guid.Empty)
             {
-                existing.UserId = userId;
-                existing.UpdatedAt = DateTime.UtcNow;
-                await connection.UpdateAsync(existing, transaction);
-                logger.LogInformation(
-                    "Updated existing customer {CustomerId} with UserId: {UserId}",
-                    existing.Id, userId);
+                // Kiểm tra UserId đã được dùng chưa
+                var userIdTaken = await connection.QueryFirstOrDefaultAsync<Customer>(
+                    "SELECT * FROM customers WHERE UserId = @UserId AND IsDeleted = 0 LIMIT 1",
+                    new { UserId = userId.Value }, transaction);
+
+                if (userIdTaken != null)
+                {
+                    logger.LogWarning(
+                        "UserId {UserId} already used by another customer {CustomerId}. Cannot link.",
+                        userId, userIdTaken.Id);
+                }
+                else
+                {
+                    existing.UserId = userId;
+                    existing.UpdatedAt = DateTime.UtcNow;
+                    await connection.UpdateAsync(existing, transaction);
+                    logger.LogInformation(
+                        "Linked customer {CustomerId} with UserId: {UserId}",
+                        existing.Id, userId);
+                }
             }
 
             return existing.Id;
         }
 
-        // Tạo mới customer với UserId
-        var customer = new Customer
+        // 4. Tạo mới customer - wrap trong try-catch để handle duplicate key
+        try
         {
-            Id = Guid.NewGuid(),
-            UserId = userId.HasValue && userId.Value != Guid.Empty ? userId : null, // Gán UserId từ Users.API
-            CustomerCode = $"CUST-{DateTime.Now:yyyyMMdd}-{Guid.NewGuid().ToString().Substring(0, 4).ToUpper()}",
-            CompanyName = name,
-            Address = address,
-            Phone = phone,
-            Email = email,
-            ContactPersonName = contactPersonName,
-            ContactPersonTitle = contactPersonTitle,
-            IdentityNumber = identityNumber,
-            Gender = gender,
-            Status = "active",
-            IsDeleted = false,
-            CreatedAt = DateTime.UtcNow
-        };
+            var customer = new Customer
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId.HasValue && userId.Value != Guid.Empty ? userId : null,
+                CustomerCode = $"CUST-{DateTime.Now:yyyyMMdd}-{Guid.NewGuid().ToString().Substring(0, 4).ToUpper()}",
+                CompanyName = name,
+                Address = address,
+                Phone = phone,
+                Email = email,
+                ContactPersonName = contactPersonName ?? "Chưa cập nhật",
+                ContactPersonTitle = contactPersonTitle ?? "Chưa cập nhật",
+                IdentityNumber = identityNumber,
+                Gender = gender,
+                Status = "active",
+                IsDeleted = false,
+                CreatedAt = DateTime.UtcNow
+            };
 
-        await connection.InsertAsync(customer, transaction);
-        logger.LogInformation(
-            "✓ Created new customer {CustomerCode} with UserId: {UserId}",
-            customer.CustomerCode, userId);
-        return customer.Id;
+            await connection.InsertAsync(customer, transaction);
+            logger.LogInformation(
+                "✓ Created new customer {CustomerCode} with UserId: {UserId}",
+                customer.CustomerCode, userId);
+            return customer.Id;
+        }
+        catch (MySqlException ex) when (ex.Number == 1062) // Duplicate entry error
+        {
+            logger.LogWarning(
+                "Duplicate key detected when creating customer. Re-querying to find existing customer. Error: {Error}",
+                ex.Message);
+
+            // Race condition: Customer được tạo bởi thread khác (UserCreatedConsumer)
+            // Thử tìm lại một lần nữa
+            if (userId.HasValue && userId.Value != Guid.Empty)
+            {
+                existing = await connection.QueryFirstOrDefaultAsync<Customer>(
+                    "SELECT * FROM customers WHERE UserId = @UserId AND IsDeleted = 0 LIMIT 1",
+                    new { UserId = userId.Value }, transaction);
+
+                if (existing != null)
+                {
+                    logger.LogInformation(
+                        "Found customer after duplicate error: {CustomerId} - {CompanyName}",
+                        existing.Id, existing.CompanyName);
+                    return existing.Id;
+                }
+            }
+
+            if (!string.IsNullOrEmpty(email))
+            {
+                existing = await connection.QueryFirstOrDefaultAsync<Customer>(
+                    "SELECT * FROM customers WHERE Email = @Email AND IsDeleted = 0 LIMIT 1",
+                    new { Email = email }, transaction);
+
+                if (existing != null)
+                {
+                    logger.LogInformation(
+                        "Found customer by Email after duplicate error: {CustomerId}",
+                        existing.Id);
+                    return existing.Id;
+                }
+            }
+
+            // Nếu vẫn không tìm thấy, throw lại exception
+            logger.LogError("Could not find customer even after duplicate key error. Re-throwing exception.");
+            throw;
+        }
     }
 
     private int CalculateConfidenceScore(

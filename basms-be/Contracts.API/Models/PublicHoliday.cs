@@ -11,6 +11,8 @@ public class PublicHoliday
     [ExplicitKey]
     public Guid Id { get; set; }
 
+    public Guid? ContractId { get; set; }
+    
     /// <summary>
     /// Ngày lễ: 2025-01-01
     /// </summary>

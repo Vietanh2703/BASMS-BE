@@ -16,6 +16,15 @@ public interface IS3Service
         string contentType,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Upload file với custom S3 key (không thêm prefix/timestamp tự động)
+    /// </summary>
+    Task<(bool Success, string? FileUrl, string? ErrorMessage)> UploadFileWithCustomKeyAsync(
+        Stream fileStream,
+        string s3Key,
+        string contentType,
+        CancellationToken cancellationToken = default);
+
     Task<bool> DeleteFileAsync(string fileUrl, CancellationToken cancellationToken = default);
 
     Task<(bool Success, Stream? FileStream, string? ErrorMessage)> DownloadFileAsync(
@@ -83,6 +92,51 @@ public class S3Service : IS3Service
         }
     }
 
+    /// <summary>
+    /// Upload file với custom S3 key - KHÔNG thêm prefix/timestamp
+    /// Sử dụng khi muốn kiểm soát hoàn toàn đường dẫn file trên S3
+    /// </summary>
+    public async Task<(bool Success, string? FileUrl, string? ErrorMessage)> UploadFileWithCustomKeyAsync(
+        Stream fileStream,
+        string s3Key,
+        string contentType,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            _logger.LogInformation("Uploading file to S3 with custom key: {S3Key}", s3Key);
+
+            var uploadRequest = new TransferUtilityUploadRequest
+            {
+                InputStream = fileStream,
+                Key = s3Key,  // Sử dụng key trực tiếp, không thêm prefix
+                BucketName = _settings.BucketName,
+                ContentType = contentType,
+                CannedACL = S3CannedACL.Private
+            };
+
+            var transferUtility = new TransferUtility(_s3Client);
+            await transferUtility.UploadAsync(uploadRequest, cancellationToken);
+
+            // Tạo file URL từ custom key
+            var fileUrl = $"https://{_settings.BucketName}.s3.{_settings.Region}.amazonaws.com/{s3Key}";
+
+            _logger.LogInformation("✓ File uploaded successfully to S3: {FileUrl}", fileUrl);
+
+            return (true, fileUrl, null);
+        }
+        catch (AmazonS3Exception s3Ex)
+        {
+            _logger.LogError(s3Ex, "S3 error uploading file with custom key {S3Key}: {ErrorCode}", s3Key, s3Ex.ErrorCode);
+            return (false, null, $"S3 upload failed: {s3Ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error uploading file with custom key {S3Key} to S3", s3Key);
+            return (false, null, $"Upload failed: {ex.Message}");
+        }
+    }
+
     public async Task<bool> DeleteFileAsync(string fileUrl, CancellationToken cancellationToken = default)
     {
         try
@@ -112,14 +166,24 @@ public class S3Service : IS3Service
     }
 
     public async Task<(bool Success, Stream? FileStream, string? ErrorMessage)> DownloadFileAsync(
-        string fileUrl,
+        string fileUrlOrKey,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            // Extract key from URL
-            var uri = new Uri(fileUrl);
-            var fileKey = uri.AbsolutePath.TrimStart('/');
+            // Extract key: support both full URL and S3 key
+            string fileKey;
+            if (fileUrlOrKey.StartsWith("http://") || fileUrlOrKey.StartsWith("https://"))
+            {
+                // Full URL: extract key from URL
+                var uri = new Uri(fileUrlOrKey);
+                fileKey = uri.AbsolutePath.TrimStart('/');
+            }
+            else
+            {
+                // Already an S3 key
+                fileKey = fileUrlOrKey;
+            }
 
             _logger.LogInformation("Downloading file from S3: {FileKey}", fileKey);
 
@@ -142,12 +206,12 @@ public class S3Service : IS3Service
         }
         catch (AmazonS3Exception s3Ex)
         {
-            _logger.LogError(s3Ex, "S3 error downloading file {FileUrl}: {ErrorCode}", fileUrl, s3Ex.ErrorCode);
+            _logger.LogError(s3Ex, "S3 error downloading file {FileUrlOrKey}: {ErrorCode}", fileUrlOrKey, s3Ex.ErrorCode);
             return (false, null, $"S3 download failed: {s3Ex.Message}");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error downloading file from S3: {FileUrl}", fileUrl);
+            _logger.LogError(ex, "Error downloading file from S3: {FileUrlOrKey}", fileUrlOrKey);
             return (false, null, $"Download failed: {ex.Message}");
         }
     }

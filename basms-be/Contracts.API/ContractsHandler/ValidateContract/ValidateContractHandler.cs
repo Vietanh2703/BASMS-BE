@@ -1,9 +1,3 @@
-using DocumentFormat.OpenXml.Packaging;
-using DocumentFormat.OpenXml.Wordprocessing;
-using UglyToad.PdfPig;
-using System.Text;
-using System.Text.RegularExpressions;
-
 namespace Contracts.API.ContractsHandler.ValidateContract;
 
 // ================================================================
@@ -246,24 +240,12 @@ internal class ValidateContractHandler(
 
         return extension switch
         {
-            ".pdf" => ExtractFromPdf(stream),
             ".docx" or ".doc" => ExtractFromDocx(stream),
             _ => throw new NotSupportedException($"File type {extension} is not supported. Only PDF and DOCX are allowed.")
         };
     }
 
-    private string ExtractFromPdf(Stream stream)
-    {
-        var sb = new StringBuilder();
-        using var pdfDocument = UglyToad.PdfPig.PdfDocument.Open(stream);
-
-        foreach (var page in pdfDocument.GetPages())
-        {
-            sb.AppendLine(page.Text);
-        }
-
-        return sb.ToString();
-    }
+    
 
     private string ExtractFromDocx(Stream stream)
     {

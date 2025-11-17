@@ -1,5 +1,3 @@
-using Contracts.API.Extensions;
-
 namespace Contracts.API.ContractsHandler.CheckContractSignatures;
 
 /// <summary>

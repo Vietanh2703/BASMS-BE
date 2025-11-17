@@ -169,64 +169,9 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 COMMENT='Địa điểm khách hàng - nơi triển khai bảo vệ';
             ");
-            
-            // ====================================================================
-            // 3. PUBLIC_HOLIDAYS - Ngày lễ quốc gia
-            // ====================================================================
-            await connection.ExecuteAsync(@"
-                CREATE TABLE IF NOT EXISTS `public_holidays` (
-                    `Id` CHAR(36) PRIMARY KEY,
-                    `HolidayDate` DATE UNIQUE NOT NULL,
-                    `HolidayName` VARCHAR(200) NOT NULL,
-                    `HolidayNameEn` VARCHAR(200) NULL,
-                    `HolidayCategory` VARCHAR(50) NOT NULL COMMENT 'national, tet, regional, substitute',
-                    `IsTetPeriod` BOOLEAN NOT NULL DEFAULT FALSE COMMENT 'Có phải ngày Tết không?',
-                    `IsTetHoliday` BOOLEAN NOT NULL DEFAULT FALSE COMMENT 'Có phải kỳ nghỉ Tết chính (Tết Nguyên Đán) không?',
-                    `TetDayNumber` INT NULL COMMENT '1=Mùng 1, 2=Mùng 2... (thường 1-5)',
-                    `HolidayStartDate` DATE NULL COMMENT 'Ngày bắt đầu nghỉ (cho kỳ nghỉ dài ngày như Tết)',
-                    `HolidayEndDate` DATE NULL COMMENT 'Ngày kết thúc nghỉ (cho kỳ nghỉ dài ngày như Tết)',
-                    `TotalHolidayDays` INT NULL COMMENT 'Tổng số ngày nghỉ (bao gồm cả ngày nghỉ bù)',
-                    `IsOfficialHoliday` BOOLEAN NOT NULL DEFAULT TRUE COMMENT 'Ngày nghỉ chính thức theo luật',
-                    `IsObserved` BOOLEAN NOT NULL DEFAULT TRUE COMMENT 'Có được thực tế nghỉ không?',
-                    `OriginalDate` DATE NULL COMMENT 'Ngày gốc (nếu bị dời do trùng cuối tuần)',
-                    `ObservedDate` DATE NULL COMMENT 'Ngày thực tế nghỉ (sau khi dời)',
-                    `AppliesNationwide` BOOLEAN NOT NULL DEFAULT TRUE,
-                    `AppliesToRegions` VARCHAR(255) NULL COMMENT 'JSON array: [""TP.HCM"", ""Hà Nội""]',
-                    `StandardWorkplacesClosed` BOOLEAN NOT NULL DEFAULT TRUE COMMENT 'Các công sở thường đóng cửa không?',
-                    `EssentialServicesOperating` BOOLEAN NOT NULL DEFAULT TRUE COMMENT 'Dịch vụ thiết yếu vẫn hoạt động?',
-                    `Description` TEXT NULL,
-                    `Year` INT NOT NULL,
-                    `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    `UpdatedAt` DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
-                    INDEX `idx_holiday_date` (`HolidayDate`),
-                    INDEX `idx_holiday_year_cat` (`Year`, `HolidayCategory`),
-                    INDEX `idx_holiday_tet` (`IsTetPeriod`, `Year`),
-                    INDEX `idx_holiday_tet_main` (`IsTetHoliday`, `Year`),
-                    INDEX `idx_holiday_date_range` (`HolidayStartDate`, `HolidayEndDate`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-                COMMENT='Ngày lễ quốc gia Việt Nam - bao gồm Tết và các ngày lễ khác';
-            ");
 
             // ====================================================================
-            // 4. HOLIDAY_SUBSTITUTE_WORK_DAYS - Ngày làm bù
-            // ====================================================================
-            await connection.ExecuteAsync(@"
-                CREATE TABLE IF NOT EXISTS `holiday_substitute_work_days` (
-                    `Id` CHAR(36) PRIMARY KEY,
-                    `HolidayId` CHAR(36) NOT NULL,
-                    `SubstituteDate` DATE NOT NULL,
-                    `Reason` TEXT NULL,
-                    `Year` INT NOT NULL,
-                    `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    INDEX `idx_substitute_holiday` (`HolidayId`),
-                    INDEX `idx_substitute_date` (`SubstituteDate`),
-                    FOREIGN KEY (`HolidayId`) REFERENCES `public_holidays`(`Id`) ON DELETE CASCADE
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-                COMMENT='Ngày làm bù cho ngày lễ';
-            ");
-
-            // ====================================================================
-            // 5. CONTRACT_DOCUMENTS - Tài liệu hợp đồng (MOVED BEFORE CONTRACTS)
+            // 3. CONTRACT_DOCUMENTS - Tài liệu hợp đồng (MOVED BEFORE CONTRACTS)
             // ====================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `contract_documents` (
@@ -297,6 +242,64 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     FOREIGN KEY (`DocumentId`) REFERENCES `contract_documents`(`Id`) ON DELETE SET NULL
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 COMMENT='Hợp đồng dịch vụ bảo vệ';
+            ");
+
+            // ====================================================================
+            // 5. PUBLIC_HOLIDAYS - Ngày lễ quốc gia (MOVED AFTER CONTRACTS)
+            // ====================================================================
+            await connection.ExecuteAsync(@"
+                CREATE TABLE IF NOT EXISTS `public_holidays` (
+                    `Id` CHAR(36) PRIMARY KEY,
+                    `ContractId` CHAR(36) NULL COMMENT 'Hợp đồng quy định ngày lễ này (nếu có)',
+                    `HolidayDate` DATE UNIQUE NOT NULL,
+                    `HolidayName` VARCHAR(200) NOT NULL,
+                    `HolidayNameEn` VARCHAR(200) NULL,
+                    `HolidayCategory` VARCHAR(50) NOT NULL COMMENT 'national, tet, regional, substitute',
+                    `IsTetPeriod` BOOLEAN NOT NULL DEFAULT FALSE COMMENT 'Có phải ngày Tết không?',
+                    `IsTetHoliday` BOOLEAN NOT NULL DEFAULT FALSE COMMENT 'Có phải kỳ nghỉ Tết chính (Tết Nguyên Đán) không?',
+                    `TetDayNumber` INT NULL COMMENT '1=Mùng 1, 2=Mùng 2... (thường 1-5)',
+                    `HolidayStartDate` DATE NULL COMMENT 'Ngày bắt đầu nghỉ (cho kỳ nghỉ dài ngày như Tết)',
+                    `HolidayEndDate` DATE NULL COMMENT 'Ngày kết thúc nghỉ (cho kỳ nghỉ dài ngày như Tết)',
+                    `TotalHolidayDays` INT NULL COMMENT 'Tổng số ngày nghỉ (bao gồm cả ngày nghỉ bù)',
+                    `IsOfficialHoliday` BOOLEAN NOT NULL DEFAULT TRUE COMMENT 'Ngày nghỉ chính thức theo luật',
+                    `IsObserved` BOOLEAN NOT NULL DEFAULT TRUE COMMENT 'Có được thực tế nghỉ không?',
+                    `OriginalDate` DATE NULL COMMENT 'Ngày gốc (nếu bị dời do trùng cuối tuần)',
+                    `ObservedDate` DATE NULL COMMENT 'Ngày thực tế nghỉ (sau khi dời)',
+                    `AppliesNationwide` BOOLEAN NOT NULL DEFAULT TRUE,
+                    `AppliesToRegions` VARCHAR(255) NULL COMMENT 'JSON array: [""TP.HCM"", ""Hà Nội""]',
+                    `StandardWorkplacesClosed` BOOLEAN NOT NULL DEFAULT TRUE COMMENT 'Các công sở thường đóng cửa không?',
+                    `EssentialServicesOperating` BOOLEAN NOT NULL DEFAULT TRUE COMMENT 'Dịch vụ thiết yếu vẫn hoạt động?',
+                    `Description` TEXT NULL,
+                    `Year` INT NOT NULL,
+                    `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    `UpdatedAt` DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
+                    INDEX `idx_holiday_contract` (`ContractId`),
+                    INDEX `idx_holiday_date` (`HolidayDate`),
+                    INDEX `idx_holiday_year_cat` (`Year`, `HolidayCategory`),
+                    INDEX `idx_holiday_tet` (`IsTetPeriod`, `Year`),
+                    INDEX `idx_holiday_tet_main` (`IsTetHoliday`, `Year`),
+                    INDEX `idx_holiday_date_range` (`HolidayStartDate`, `HolidayEndDate`),
+                    FOREIGN KEY (`ContractId`) REFERENCES `contracts`(`Id`) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                COMMENT='Ngày lễ quốc gia Việt Nam - bao gồm Tết và các ngày lễ khác';
+            ");
+
+            // ====================================================================
+            // 6. HOLIDAY_SUBSTITUTE_WORK_DAYS - Ngày làm bù
+            // ====================================================================
+            await connection.ExecuteAsync(@"
+                CREATE TABLE IF NOT EXISTS `holiday_substitute_work_days` (
+                    `Id` CHAR(36) PRIMARY KEY,
+                    `HolidayId` CHAR(36) NOT NULL,
+                    `SubstituteDate` DATE NOT NULL,
+                    `Reason` TEXT NULL,
+                    `Year` INT NOT NULL,
+                    `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    INDEX `idx_substitute_holiday` (`HolidayId`),
+                    INDEX `idx_substitute_date` (`SubstituteDate`),
+                    FOREIGN KEY (`HolidayId`) REFERENCES `public_holidays`(`Id`) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                COMMENT='Ngày làm bù cho ngày lễ';
             ");
 
             // ====================================================================

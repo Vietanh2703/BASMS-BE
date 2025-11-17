@@ -25,3 +25,5 @@ global using Amazon;
 global using Amazon.Runtime;
 global using Microsoft.AspNetCore.Authentication.JwtBearer;
 global using Microsoft.IdentityModel.Tokens;
+global using System.Globalization;
+global using MySql.Data.MySqlClient;
