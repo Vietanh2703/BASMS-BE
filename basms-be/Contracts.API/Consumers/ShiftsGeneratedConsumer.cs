@@ -1,4 +1,5 @@
 using BuildingBlocks.Messaging.Events;
+using System.Text.Json;
 
 namespace Contracts.API.Consumers;
 
@@ -42,7 +43,9 @@ public class ShiftsGeneratedConsumer : IConsumer<ShiftsGeneratedEvent>
                 GeneratedAt = @event.GeneratedAt,
                 ShiftsCreatedCount = @event.ShiftsCreatedCount,
                 ShiftsSkippedCount = @event.ShiftsSkippedCount,
-                SkipReasons = @event.SkipReasons.ToString(),
+                SkipReasons = @event.SkipReasons.Any()
+                    ? JsonSerializer.Serialize(@event.SkipReasons)
+                    : null,
                 Status = @event.Status,
                 ErrorMessage = @event.ErrorMessage,
                 GeneratedByJob = @event.GeneratedByJob

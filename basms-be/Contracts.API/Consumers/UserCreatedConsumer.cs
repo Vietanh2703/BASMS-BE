@@ -1,4 +1,5 @@
 using BuildingBlocks.Messaging.Events;
+using MySql.Data.MySqlClient;
 
 namespace Contracts.API.Consumers;
 
@@ -96,9 +97,10 @@ public class UserCreatedConsumer : IConsumer<UserCreatedEvent>
 
     private async Task CreateCustomerAsync(IDbConnection connection, UserCreatedEvent @event)
     {
-        // Check if customer already exists
-        var existingCustomers = await connection.GetAllAsync<Customer>();
-        var existingCustomer = existingCustomers.FirstOrDefault(c => c.UserId == @event.UserId && !c.IsDeleted);
+        // OPTIMIZED: Check if customer already exists với direct query thay vì GetAllAsync
+        var existingCustomer = await connection.QueryFirstOrDefaultAsync<Customer>(
+            "SELECT * FROM customers WHERE UserId = @UserId AND IsDeleted = 0 LIMIT 1",
+            new { UserId = @event.UserId });
 
         if (existingCustomer != null)
         {
@@ -108,51 +110,83 @@ public class UserCreatedConsumer : IConsumer<UserCreatedEvent>
             return;
         }
 
-        // Generate CustomerCode (CUST-001, CUST-002...)
-        var customerCode = await GenerateCustomerCodeAsync(connection);
-
-        var customer = new Customer
+        // Wrap INSERT trong try-catch để handle race condition với ImportContractFromDocumentHandler
+        try
         {
-            Id = Guid.NewGuid(),
-            UserId = @event.UserId,
-            CustomerCode = customerCode,
+            // Generate CustomerCode (CUST-001, CUST-002...)
+            var customerCode = await GenerateCustomerCodeAsync(connection);
 
-            CompanyName = @event.FullName,
-            ContactPersonName = @event.FullName,
-            ContactPersonTitle = null,
+            var customer = new Customer
+            {
+                Id = Guid.NewGuid(),
+                UserId = @event.UserId,
+                CustomerCode = customerCode,
 
-            IdentityNumber = @event.IdentityNumber,
-            IdentityIssueDate = @event.IdentityIssueDate,
-            IdentityIssuePlace = @event.IdentityIssuePlace,
-            Email = @event.Email,
-            Phone = @event.Phone ?? "",
-            AvatarUrl = @event.AvatarUrl,
-            Gender = @event.Gender,
-            DateOfBirth = @event.DateOfBirth,
-            Address = @event.Address ?? "",
-            City = null,
-            District = null,
-            Industry = null,
-            CompanySize = null,
+                CompanyName = @event.FullName,
+                ContactPersonName = @event.FullName,
+                ContactPersonTitle = null,
 
-            CustomerSince = DateTime.UtcNow,
-            Status = "active",
-            FollowsNationalHolidays = true,
-            Notes = "Auto-created from Users Service",
+                IdentityNumber = @event.IdentityNumber,
+                IdentityIssueDate = @event.IdentityIssueDate,
+                IdentityIssuePlace = @event.IdentityIssuePlace,
+                Email = @event.Email,
+                Phone = @event.Phone ?? "",
+                AvatarUrl = @event.AvatarUrl,
+                Gender = @event.Gender,
+                DateOfBirth = @event.DateOfBirth,
+                Address = @event.Address ?? "",
+                City = null,
+                District = null,
+                Industry = null,
+                CompanySize = null,
 
-            IsDeleted = false,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = null,
-            CreatedBy = null,
-            UpdatedBy = null
-        };
+                CustomerSince = DateTime.UtcNow,
+                Status = "active",
+                FollowsNationalHolidays = true,
+                Notes = "Auto-created from Users Service",
 
-        await connection.InsertAsync(customer);
+                IsDeleted = false,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = null,
+                CreatedBy = null,
+                UpdatedBy = null
+            };
 
-        _logger.LogInformation(
-            "✓ Created customer record {CustomerCode} for User {UserId}",
-            customerCode,
-            @event.UserId);
+            await connection.InsertAsync(customer);
+
+            _logger.LogInformation(
+                "✓ Created customer record {CustomerCode} for User {UserId}",
+                customerCode,
+                @event.UserId);
+        }
+        catch (MySqlException ex) when (ex.Number == 1062) // Duplicate entry error
+        {
+            // Race condition: ImportContractFromDocumentHandler đã tạo customer trước
+            _logger.LogWarning(
+                "Duplicate key when creating customer for User {UserId}. " +
+                "Customer was already created by ImportContractFromDocumentHandler. This is expected in race conditions.",
+                @event.UserId);
+
+            // Verify customer exists
+            var justCreated = await connection.QueryFirstOrDefaultAsync<Customer>(
+                "SELECT * FROM customers WHERE UserId = @UserId AND IsDeleted = 0 LIMIT 1",
+                new { UserId = @event.UserId });
+
+            if (justCreated != null)
+            {
+                _logger.LogInformation(
+                    "✓ Customer already created by another process: {CustomerCode} for User {UserId}",
+                    justCreated.CustomerCode,
+                    @event.UserId);
+            }
+            else
+            {
+                _logger.LogError(
+                    "Duplicate key error but customer not found for User {UserId}. Re-throwing exception.",
+                    @event.UserId);
+                throw;
+            }
+        }
     }
 
     private async Task<string> GenerateCustomerCodeAsync(IDbConnection connection)

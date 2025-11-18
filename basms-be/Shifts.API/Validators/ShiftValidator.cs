@@ -1,6 +1,6 @@
 using Dapper;
 using MassTransit;
-using Shifts.API.Messages;
+using BuildingBlocks.Messaging.Events;
 
 namespace Shifts.API.Validators;
 

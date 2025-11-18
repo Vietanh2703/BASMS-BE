@@ -1,18 +1,18 @@
 namespace Shifts.API.ShiftsHandler.GenerateShifts;
 
 /// <summary>
-/// Command để tự động tạo ca làm từ mẫu lịch trong hợp đồng
-/// Auto-generate shifts from contract shift schedules
+/// Command để tự động tạo ca làm từ nhiều ShiftTemplates
+/// Generate shifts from multiple shift templates
 /// </summary>
-/// <param name="ContractId">ID hợp đồng</param>
+/// <param name="ManagerId">ID của Manager tạo ca (REQUIRED)</param>
+/// <param name="ShiftTemplateIds">Danh sách ID của ShiftTemplates (REQUIRED)</param>
 /// <param name="GenerateFromDate">Tạo ca từ ngày nào (default: hôm nay)</param>
 /// <param name="GenerateDays">Tạo trước bao nhiêu ngày (default: 30)</param>
-/// <param name="CreatedBy">Người trigger (có thể là system)</param>
 public record GenerateShiftsCommand(
-    Guid ContractId,
-    DateTime? GenerateFromDate,
-    int GenerateDays,
-    Guid? CreatedBy
+    Guid ManagerId,
+    List<Guid> ShiftTemplateIds,
+    DateTime? GenerateFromDate = null,
+    int GenerateDays = 30
 ) : ICommand<GenerateShiftsResult>;
 
 /// <summary>

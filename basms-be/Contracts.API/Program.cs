@@ -49,6 +49,7 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<Contracts.API.Consumers.UserUpdatedConsumer>();
     x.AddConsumer<Contracts.API.Consumers.UserDeletedConsumer>();
     x.AddConsumer<Contracts.API.Consumers.ShiftsGeneratedConsumer>();
+    x.AddConsumer<Contracts.API.Consumers.GetContractShiftSchedulesConsumer>(); // Request/Response consumer
 
     // Register Request Clients for calling other services
     x.AddRequestClient<CreateUserRequest>();

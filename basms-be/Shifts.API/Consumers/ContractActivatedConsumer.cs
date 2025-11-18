@@ -1,3 +1,5 @@
+using Shifts.API.ShiftsHandler.ImportShiftTemplates;
+
 namespace Shifts.API.Consumers;
 
 /// <summary>
@@ -55,66 +57,55 @@ public class ContractActivatedConsumer : IConsumer<ContractActivatedEvent>
                 @event.AutoGenerateShifts ? "YES" : "NO");
 
             // ================================================================
-            // TỰ ĐỘNG TẠO CA NẾU ĐƯỢC BẬT
+            // BƯỚC 1: IMPORT SHIFT TEMPLATES TỪ CONTRACT SCHEDULES
             // ================================================================
-            if (@event.AutoGenerateShifts)
+            _logger.LogInformation(
+                "Importing {Count} shift templates from Contract {ContractNumber}",
+                @event.ShiftSchedules.Count,
+                @event.ContractNumber);
+
+            var importCommand = new ImportShiftTemplatesCommand(
+                ContractId: @event.ContractId,
+                ContractNumber: @event.ContractNumber,
+                ShiftSchedules: @event.ShiftSchedules,
+                Locations: @event.Locations,
+                ImportedBy: @event.ActivatedBy
+            );
+
+            var importResult = await _sender.Send(importCommand);
+
+            _logger.LogInformation(
+                @"✓ Template import completed for Contract {ContractNumber}:
+                  - Created: {Created} templates
+                  - Updated: {Updated} templates
+                  - Skipped: {Skipped} templates
+                  - Errors: {Errors}",
+                @event.ContractNumber,
+                importResult.TemplatesCreatedCount,
+                importResult.TemplatesUpdatedCount,
+                importResult.TemplatesSkippedCount,
+                importResult.Errors.Count);
+
+            if (importResult.Errors.Any())
             {
-                _logger.LogInformation(
-                    "Auto-generating shifts for Contract {ContractNumber} - {Days} days in advance",
-                    @event.ContractNumber,
-                    @event.GenerateShiftsAdvanceDays);
-
-                var command = new GenerateShiftsCommand(
-                    ContractId: @event.ContractId,
-                    GenerateFromDate: DateTime.UtcNow.Date,
-                    GenerateDays: @event.GenerateShiftsAdvanceDays,
-                    CreatedBy: @event.ActivatedBy
-                );
-
-                var result = await _sender.Send(command);
-
-                _logger.LogInformation(
-                    @"✓ Shift generation completed for Contract {ContractNumber}:
-                      - Shifts Created: {CreatedCount}
-                      - Shifts Skipped: {SkippedCount}
-                      - Errors: {ErrorCount}
-                      - Date Range: {From:yyyy-MM-dd} to {To:yyyy-MM-dd}",
-                    @event.ContractNumber,
-                    result.ShiftsCreatedCount,
-                    result.ShiftsSkippedCount,
-                    result.Errors.Count,
-                    result.GeneratedFrom,
-                    result.GeneratedTo);
-
-                if (result.SkipReasons.Any())
+                _logger.LogWarning("Template import errors:");
+                foreach (var error in importResult.Errors)
                 {
-                    _logger.LogInformation("Skip reasons summary:");
-                    var groupedReasons = result.SkipReasons
-                        .GroupBy(r => r.Reason)
-                        .Select(g => new { Reason = g.Key, Count = g.Count() });
-
-                    foreach (var reason in groupedReasons)
-                    {
-                        _logger.LogInformation("  - {Reason}: {Count} times", reason.Reason, reason.Count);
-                    }
-                }
-
-                if (result.Errors.Any())
-                {
-                    _logger.LogWarning("Errors during shift generation:");
-                    foreach (var error in result.Errors)
-                    {
-                        _logger.LogWarning("  - {Error}", error);
-                    }
+                    _logger.LogWarning("  - {Error}", error);
                 }
             }
-            else
-            {
-                _logger.LogInformation(
-                    "Contract {ContractNumber} does not have auto-generate enabled. " +
-                    "Manager can manually create shifts via API.",
-                    @event.ContractNumber);
-            }
+
+            // ================================================================
+            // BƯỚC 2: TỰ ĐỘNG TẠO CA - DISABLED (Use manual API endpoint)
+            // ================================================================
+            // NOTE: Auto-generate now requires Manager to manually trigger via API
+            // with specific ManagerId and ShiftTemplateId
+            // See: POST /api/shifts/generate
+            _logger.LogInformation(
+                "Contract {ContractNumber} activated. " +
+                "Manager can now create shifts using POST /api/shifts/generate " +
+                "with ManagerId and ShiftTemplateId from imported templates.",
+                @event.ContractNumber);
 
             //Send notification to managers about new contract
             // await _notificationService.NotifyManagersAboutNewContract(@event);

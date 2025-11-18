@@ -38,11 +38,6 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<Shifts.API.Consumers.UserDeletedConsumer>();
     x.AddConsumer<Shifts.API.Consumers.ContractActivatedConsumer>();
 
-    // Register Request Clients for RabbitMQ Request/Response pattern
-    x.AddRequestClient<Shifts.API.Messages.GetContractRequest>();
-    x.AddRequestClient<Shifts.API.Messages.GetLocationRequest>();
-    x.AddRequestClient<Shifts.API.Messages.GetCustomerRequest>();
-
     // Request Clients for Auto-Generate Shifts feature (from BuildingBlocks.Messaging.Contracts)
     x.AddRequestClient<CheckPublicHolidayRequest>();
     x.AddRequestClient<CheckLocationClosedRequest>();
@@ -127,6 +122,13 @@ builder.Services.AddAuthentication(options =>
     });
 
 builder.Services.AddAuthorization();
+
+// ================================================================
+// BACKGROUND JOBS
+// ================================================================
+// Auto-generate shifts job - chạy daily lúc 2:00 AM để check và tạo shifts
+// OPTIMIZED version: không query shifts_db.contracts, mà query Contracts.API qua RabbitMQ
+builder.Services.AddHostedService<Shifts.API.BackgroundJobs.AutoGenerateShiftsJob>();
 
 var app = builder.Build();
 

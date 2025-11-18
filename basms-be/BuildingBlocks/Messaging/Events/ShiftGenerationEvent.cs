@@ -62,13 +62,33 @@ public record ShiftScheduleInfo
 }
 
 /// <summary>
-/// Thông tin location
+/// Thông tin location với địa chỉ và tọa độ GPS
 /// </summary>
 public record LocationInfo
 {
     public Guid LocationId { get; init; }
     public string LocationName { get; init; } = string.Empty;
     public string LocationCode { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Địa chỉ đầy đủ của location
+    /// </summary>
+    public string? Address { get; init; }
+
+    /// <summary>
+    /// Vĩ độ GPS
+    /// </summary>
+    public decimal? Latitude { get; init; }
+
+    /// <summary>
+    /// Kinh độ GPS
+    /// </summary>
+    public decimal? Longitude { get; init; }
+
+    /// <summary>
+    /// Số lượng guards yêu cầu cho location này (từ contract_locations)
+    /// </summary>
+    public int GuardsRequired { get; init; }
 }
 
 // ================================================================

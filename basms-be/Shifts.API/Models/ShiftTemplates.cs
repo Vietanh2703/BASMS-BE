@@ -14,6 +14,16 @@ public class ShiftTemplates
     public Guid Id { get; set; }
 
     // ============================================================================
+    // FOREIGN KEYS
+    // ============================================================================
+
+    /// <summary>
+    /// Contract ID từ Contracts.API
+    /// Link template với contract để tracking và auto-generation
+    /// </summary>
+    public Guid? ContractId { get; set; }
+
+    // ============================================================================
     // IDENTITY
     // ============================================================================
 
@@ -143,6 +153,35 @@ public class ShiftTemplates
     /// Số guards tối ưu (gợi ý)
     /// </summary>
     public int? OptimalGuards { get; set; }
+
+    // ============================================================================
+    // THÔNG TIN LOCATION (Từ Contract)
+    // ============================================================================
+
+    /// <summary>
+    /// LocationId từ customer_locations (để generate shifts cho location cụ thể)
+    /// </summary>
+    public Guid? LocationId { get; set; }
+
+    /// <summary>
+    /// Tên location (cached từ customer_locations để dễ query)
+    /// </summary>
+    public string? LocationName { get; set; }
+
+    /// <summary>
+    /// Địa chỉ location
+    /// </summary>
+    public string? LocationAddress { get; set; }
+
+    /// <summary>
+    /// Vĩ độ GPS (để check-in/check-out)
+    /// </summary>
+    public decimal? LocationLatitude { get; set; }
+
+    /// <summary>
+    /// Kinh độ GPS (để check-in/check-out)
+    /// </summary>
+    public decimal? LocationLongitude { get; set; }
 
     public bool IsActive { get; set; } = true;
 

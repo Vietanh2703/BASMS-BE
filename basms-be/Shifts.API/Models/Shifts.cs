@@ -26,9 +26,34 @@ public class Shifts
     public Guid LocationId { get; set; }
 
     /// <summary>
+    /// Tên location (cached from template/contract)
+    /// </summary>
+    public string? LocationName { get; set; }
+
+    /// <summary>
+    /// Địa chỉ location (cached from template/contract)
+    /// </summary>
+    public string? LocationAddress { get; set; }
+
+    /// <summary>
+    /// Vĩ độ GPS (cho check-in/check-out geofencing)
+    /// </summary>
+    public decimal? LocationLatitude { get; set; }
+
+    /// <summary>
+    /// Kinh độ GPS (cho check-in/check-out geofencing)
+    /// </summary>
+    public decimal? LocationLongitude { get; set; }
+
+    /// <summary>
     /// Hợp đồng khách hàng (optional)
     /// </summary>
     public Guid? ContractId { get; set; }
+
+    /// <summary>
+    /// Manager phụ trách ca này
+    /// </summary>
+    public Guid? ManagerId { get; set; }
 
     // ============================================================================
     // DATE SPLITTING - CỰC KỲ QUAN TRỌNG!

@@ -119,6 +119,7 @@ public record ContractLocationDto
 {
     public Guid LocationId { get; init; }
     public string LocationName { get; init; } = string.Empty;
+    public string LocationAddress { get; init; } = string.Empty;
     public string LocationCode { get; init; } = string.Empty;
     public int GuardsRequired { get; init; }
     public string CoverageType { get; init; } = string.Empty;

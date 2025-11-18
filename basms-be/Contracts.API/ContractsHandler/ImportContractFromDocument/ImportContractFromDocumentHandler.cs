@@ -60,7 +60,7 @@ internal class ImportContractFromDocumentHandler(
             // ================================================================
             // BƯỚC 0: LẤY DOCUMENT TỪ DATABASE
             // ================================================================
-            var connection = await connectionFactory.CreateConnectionAsync();
+            using var connection = await connectionFactory.CreateConnectionAsync();
 
             var document = await connection.QueryFirstOrDefaultAsync<ContractDocument>(
                 "SELECT * FROM contract_documents WHERE Id = @Id AND IsDeleted = 0",
@@ -2485,6 +2485,22 @@ if (nationalDayMatch.Success && DateTime.TryParse(nationalDayMatch.Groups[1].Val
         // 4. Tạo mới customer - wrap trong try-catch để handle duplicate key
         try
         {
+            // CRITICAL: Double-check UserId right before INSERT to prevent race condition
+            if (userId.HasValue && userId.Value != Guid.Empty)
+            {
+                var lastMinuteCheck = await connection.QueryFirstOrDefaultAsync<Customer>(
+                    "SELECT * FROM customers WHERE UserId = @UserId AND IsDeleted = 0 LIMIT 1",
+                    new { UserId = userId.Value }, transaction);
+
+                if (lastMinuteCheck != null)
+                {
+                    logger.LogWarning(
+                        "Race condition detected: Customer with UserId {UserId} was just created. Using existing customer {CustomerId}",
+                        userId, lastMinuteCheck.Id);
+                    return lastMinuteCheck.Id;
+                }
+            }
+
             var customer = new Customer
             {
                 Id = Guid.NewGuid(),
@@ -2516,39 +2532,61 @@ if (nationalDayMatch.Success && DateTime.TryParse(nationalDayMatch.Groups[1].Val
                 ex.Message);
 
             // Race condition: Customer được tạo bởi thread khác (UserCreatedConsumer)
-            // Thử tìm lại một lần nữa
-            if (userId.HasValue && userId.Value != Guid.Empty)
-            {
-                existing = await connection.QueryFirstOrDefaultAsync<Customer>(
-                    "SELECT * FROM customers WHERE UserId = @UserId AND IsDeleted = 0 LIMIT 1",
-                    new { UserId = userId.Value }, transaction);
+            // CRITICAL FIX: Query OUTSIDE transaction để thấy committed data từ UserCreatedConsumer
+            // Retry với exponential backoff để đợi UserCreatedConsumer commit
 
-                if (existing != null)
+            for (int retry = 0; retry < 5; retry++)
+            {
+                // Wait với exponential backoff: 100ms, 200ms, 400ms, 800ms, 1600ms
+                if (retry > 0)
                 {
+                    var delayMs = 100 * (int)Math.Pow(2, retry - 1);
                     logger.LogInformation(
-                        "Found customer after duplicate error: {CustomerId} - {CompanyName}",
-                        existing.Id, existing.CompanyName);
-                    return existing.Id;
+                        "Retry {Retry}/5: Waiting {DelayMs}ms for UserCreatedConsumer to commit...",
+                        retry, delayMs);
+                    await Task.Delay(delayMs);
+                }
+
+                // Query OUTSIDE transaction bằng cách tạo connection mới
+                using var freshConnection = await connectionFactory.CreateConnectionAsync();
+
+                // Thử tìm theo UserId
+                if (userId.HasValue && userId.Value != Guid.Empty)
+                {
+                    existing = await freshConnection.QueryFirstOrDefaultAsync<Customer>(
+                        "SELECT * FROM customers WHERE UserId = @UserId AND IsDeleted = 0 LIMIT 1",
+                        new { UserId = userId.Value });
+
+                    if (existing != null)
+                    {
+                        logger.LogInformation(
+                            "✓ Found customer after duplicate error (retry {Retry}): {CustomerId} - {CompanyName}",
+                            retry, existing.Id, existing.CompanyName);
+                        return existing.Id;
+                    }
+                }
+
+                // Thử tìm theo Email
+                if (!string.IsNullOrEmpty(email))
+                {
+                    existing = await freshConnection.QueryFirstOrDefaultAsync<Customer>(
+                        "SELECT * FROM customers WHERE Email = @Email AND IsDeleted = 0 LIMIT 1",
+                        new { Email = email });
+
+                    if (existing != null)
+                    {
+                        logger.LogInformation(
+                            "✓ Found customer by Email after duplicate error (retry {Retry}): {CustomerId}",
+                            retry, existing.Id);
+                        return existing.Id;
+                    }
                 }
             }
 
-            if (!string.IsNullOrEmpty(email))
-            {
-                existing = await connection.QueryFirstOrDefaultAsync<Customer>(
-                    "SELECT * FROM customers WHERE Email = @Email AND IsDeleted = 0 LIMIT 1",
-                    new { Email = email }, transaction);
-
-                if (existing != null)
-                {
-                    logger.LogInformation(
-                        "Found customer by Email after duplicate error: {CustomerId}",
-                        existing.Id);
-                    return existing.Id;
-                }
-            }
-
-            // Nếu vẫn không tìm thấy, throw lại exception
-            logger.LogError("Could not find customer even after duplicate key error. Re-throwing exception.");
+            // Nếu sau 5 retries vẫn không tìm thấy, throw lại exception
+            logger.LogError(
+                "Could not find customer even after 5 retries and duplicate key error. " +
+                "This indicates a serious race condition or data inconsistency. Re-throwing exception.");
             throw;
         }
     }
@@ -2759,6 +2797,193 @@ if (nationalDayMatch.Success && DateTime.TryParse(nationalDayMatch.Groups[1].Val
     /// <summary>
     ///     Thông tin đã parse từ ĐIỀU 3
     /// </summary>
+    // ================================================================
+    // HELPER METHODS - Code Deduplication
+    // ================================================================
+
+    /// <summary>
+    /// Helper: Query customer by UserId (replaces 5 duplicate queries)
+    /// </summary>
+    private async Task<Customer?> FindCustomerByUserIdAsync(
+        IDbConnection connection,
+        Guid userId,
+        IDbTransaction? transaction = null)
+    {
+        if (userId == Guid.Empty)
+            return null;
+
+        return await connection.QueryFirstOrDefaultAsync<Customer>(
+            "SELECT * FROM customers WHERE UserId = @UserId AND IsDeleted = 0 LIMIT 1",
+            new { UserId = userId },
+            transaction);
+    }
+
+    /// <summary>
+    /// Helper: Query customer by Email
+    /// </summary>
+    private async Task<Customer?> FindCustomerByEmailAsync(
+        IDbConnection connection,
+        string? email,
+        IDbTransaction? transaction = null)
+    {
+        if (string.IsNullOrEmpty(email))
+            return null;
+
+        return await connection.QueryFirstOrDefaultAsync<Customer>(
+            "SELECT * FROM customers WHERE Email = @Email AND IsDeleted = 0 LIMIT 1",
+            new { Email = email },
+            transaction);
+    }
+
+    /// <summary>
+    /// Helper: Query customer by CompanyName
+    /// </summary>
+    private async Task<Customer?> FindCustomerByCompanyNameAsync(
+        IDbConnection connection,
+        string? companyName,
+        IDbTransaction? transaction = null)
+    {
+        if (string.IsNullOrEmpty(companyName))
+            return null;
+
+        return await connection.QueryFirstOrDefaultAsync<Customer>(
+            "SELECT * FROM customers WHERE CompanyName = @Name AND IsDeleted = 0 LIMIT 1",
+            new { Name = companyName },
+            transaction);
+    }
+
+    /// <summary>
+    /// Helper: Extract "Bên B" section from contract (replaces 7 duplicate extractions)
+    /// </summary>
+    private string? ExtractBenBSection(string text, int maxLength = 1000)
+    {
+        var benBIndex = text.IndexOf("BÊN B", StringComparison.OrdinalIgnoreCase);
+        if (benBIndex == -1)
+            benBIndex = text.IndexOf("Bên B", StringComparison.OrdinalIgnoreCase);
+
+        if (benBIndex < 0)
+            return null;
+
+        var length = Math.Min(maxLength, text.Length - benBIndex);
+        return text.Substring(benBIndex, length);
+    }
+
+    /// <summary>
+    /// Helper: Merge customer info from contract document (replaces 3 duplicate update blocks)
+    /// Updates customer fields only if they are currently empty
+    /// </summary>
+    private async Task<bool> MergeCustomerInfoAsync(
+        IDbConnection connection,
+        IDbTransaction transaction,
+        Customer customer,
+        string? contactPersonName,
+        string? contactPersonTitle,
+        string? identityNumber,
+        string? gender,
+        string? address)
+    {
+        var updated = false;
+
+        if (string.IsNullOrEmpty(customer.ContactPersonName) && !string.IsNullOrEmpty(contactPersonName))
+        {
+            customer.ContactPersonName = contactPersonName;
+            updated = true;
+        }
+
+        if (string.IsNullOrEmpty(customer.ContactPersonTitle) && !string.IsNullOrEmpty(contactPersonTitle))
+        {
+            customer.ContactPersonTitle = contactPersonTitle;
+            updated = true;
+        }
+
+        if (string.IsNullOrEmpty(customer.IdentityNumber) && !string.IsNullOrEmpty(identityNumber))
+        {
+            customer.IdentityNumber = identityNumber;
+            updated = true;
+        }
+
+        if (string.IsNullOrEmpty(customer.Gender) && !string.IsNullOrEmpty(gender))
+        {
+            customer.Gender = gender;
+            updated = true;
+        }
+
+        if (string.IsNullOrEmpty(customer.Address) && !string.IsNullOrEmpty(address))
+        {
+            customer.Address = address;
+            updated = true;
+        }
+
+        if (updated)
+        {
+            customer.UpdatedAt = DateTime.UtcNow;
+            await connection.UpdateAsync(customer, transaction);
+            logger.LogInformation(
+                "Updated customer {CustomerId} with additional info from contract document",
+                customer.Id);
+        }
+
+        return updated;
+    }
+
+    /// <summary>
+    /// Helper: Parse Vietnamese date formats (replaces 10+ duplicate parsing)
+    /// </summary>
+    private bool TryParseVietnameseDate(string? dateString, out DateTime result)
+    {
+        result = DateTime.MinValue;
+
+        if (string.IsNullOrWhiteSpace(dateString))
+            return false;
+
+        var formats = new[]
+        {
+            "d/M/yyyy", "dd/MM/yyyy", "d/MM/yyyy", "dd/M/yyyy",
+            "dd-MM-yyyy", "d-M-yyyy", "yyyy-MM-dd"
+        };
+
+        return DateTime.TryParseExact(
+            dateString.Trim(),
+            formats,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out result);
+    }
+
+    /// <summary>
+    /// Helper: Factory method for creating public holidays (replaces 7 duplicate object creations)
+    /// </summary>
+    private Dieu3PublicHoliday CreatePublicHoliday(
+        DateTime date,
+        string name,
+        string nameEn,
+        string category = "national",
+        DateTime? startDate = null,
+        DateTime? endDate = null,
+        int? totalDays = null,
+        bool isTet = false,
+        int? tetDayNumber = null)
+    {
+        return new Dieu3PublicHoliday
+        {
+            HolidayDate = date,
+            HolidayName = name,
+            HolidayNameEn = nameEn,
+            HolidayCategory = category,
+            Year = date.Year,
+            HolidayStartDate = startDate ?? date,
+            HolidayEndDate = endDate ?? date,
+            TotalHolidayDays = totalDays ?? 1,
+            IsTetPeriod = isTet,
+            IsTetHoliday = isTet,
+            TetDayNumber = tetDayNumber
+        };
+    }
+
+    // ================================================================
+    // PRIVATE CLASSES
+    // ================================================================
+
     private class Dieu3ParsedInfo
     {
         public List<Dieu3ShiftSchedule> ShiftSchedules { get; set; } = new();
