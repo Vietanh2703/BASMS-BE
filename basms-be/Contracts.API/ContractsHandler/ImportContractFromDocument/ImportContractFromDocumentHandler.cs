@@ -620,6 +620,58 @@ internal class ImportContractFromDocumentHandler(
                     "Contract import completed: {ContractNumber} - {Locations} locations, {Schedules} schedules, User created: {UserCreated}",
                     contractNumber, locationIds.Count, scheduleIds.Count, userId.HasValue);
 
+                // ================================================================
+                // CLEANUP: Xóa file FILLED và SIGNED tạm thời sau khi import thành công
+                // ================================================================
+                try
+                {
+                    // Tìm tất cả documents liên quan đến document hiện tại
+                    // (filled_contract và signed_contract có thể cùng folder/contract type)
+                    var tempDocuments = await connection.QueryAsync<ContractDocument>(
+                        @"SELECT * FROM contract_documents
+                          WHERE DocumentType IN ('filled_contract', 'signed_contract')
+                          AND IsDeleted = 0
+                          AND CreatedAt >= DATE_SUB(NOW(), INTERVAL 1 DAY)
+                          ORDER BY CreatedAt DESC",
+                        transaction: transaction);
+
+                    var docsToDelete = tempDocuments.ToList();
+
+                    logger.LogInformation("Found {Count} temporary documents to cleanup", docsToDelete.Count);
+
+                    foreach (var tempDoc in docsToDelete)
+                    {
+                        // Xóa file từ S3
+                        logger.LogInformation("Deleting temporary file from S3: {FileUrl}", tempDoc.FileUrl);
+                        var deleteSuccess = await s3Service.DeleteFileAsync(tempDoc.FileUrl, cancellationToken);
+
+                        if (deleteSuccess)
+                        {
+                            // Xóa record từ database
+                            await connection.ExecuteAsync(
+                                "DELETE FROM contract_documents WHERE Id = @Id",
+                                new { Id = tempDoc.Id },
+                                transaction);
+
+                            logger.LogInformation(
+                                "✓ Deleted temporary {Type} document: {Id} - {Name}",
+                                tempDoc.DocumentType, tempDoc.Id, tempDoc.DocumentName);
+                        }
+                        else
+                        {
+                            logger.LogWarning(
+                                "Failed to delete temporary file from S3, keeping database record: {FileUrl}",
+                                tempDoc.FileUrl);
+                        }
+                    }
+                }
+                catch (Exception cleanupEx)
+                {
+                    // Log warning nhưng không fail import - cleanup không critical
+                    logger.LogWarning(cleanupEx, "Failed to cleanup temporary files, but import was successful");
+                    warnings.Add("Không thể xóa file tạm thời (filled/signed), cần xóa thủ công");
+                }
+
                 return result;
             }
             catch (Exception ex)
@@ -1407,8 +1459,8 @@ internal class ImportContractFromDocumentHandler(
     }
 
     /// <summary>
-    ///     Lấy GPS coordinates cho địa chỉ Việt Nam - Tối ưu độ chính xác với Nominatim
-    ///     Strategy: Structured Query → Viewbox → Fallback
+    ///     Lấy GPS coordinates cho địa chỉ Việt Nam - Sử dụng Goong API
+    ///     Goong API được tối ưu cho địa chỉ Việt Nam
     /// </summary>
     private async Task<(decimal? Latitude, decimal? Longitude)?> GetGpsCoordinatesAsync(string? address)
     {
@@ -1418,24 +1470,83 @@ internal class ImportContractFromDocumentHandler(
         {
             logger.LogInformation("🌍 Getting GPS for: {Address}", address);
 
+            // Lấy Goong API key từ configuration
+            var goongApiKey = configuration["GoongSettings:ApiKey"];
+            var goongEndpoint = configuration["GoongSettings:GeocodingEndpoint"] ?? "https://rsapi.goong.io/geocode";
+
+            if (string.IsNullOrWhiteSpace(goongApiKey))
+            {
+                logger.LogWarning("Goong API key not configured");
+                return null;
+            }
+
             using var httpClient = new HttpClient();
             httpClient.DefaultRequestHeaders.Add("User-Agent", "BASMS-Contracts-API/1.0");
 
-            var addr = ParseVietnameseAddressComponents(address);
+            // Tạo URL cho Goong Geocoding API
+            var encodedAddress = Uri.EscapeDataString(address);
+            var url = $"{goongEndpoint}?address={encodedAddress}&api_key={goongApiKey}";
 
-            // TRY 1: Structured query (chính xác cao nhất)
-            var result = await QueryNominatim(httpClient, addr, "structured");
-            if (result.HasValue) return result;
+            logger.LogInformation("  🔍 Querying Goong API...");
 
-            // TRY 2: Viewbox query (giới hạn khu vực)
-            result = await QueryNominatim(httpClient, addr, "viewbox");
-            if (result.HasValue) return result;
+            var response = await httpClient.GetStringAsync(url);
+            var json = JsonDocument.Parse(response);
 
-            // TRY 3: Simple fallback
-            result = await QueryNominatim(httpClient, addr, "simple");
-            if (result.HasValue) return result;
+            // Kiểm tra status
+            if (!json.RootElement.TryGetProperty("status", out var status) ||
+                status.GetString() != "OK")
+            {
+                var statusMsg = status.GetString() ?? "UNKNOWN";
+                logger.LogWarning("  ✗ Goong API returned status: {Status}", statusMsg);
+                return null;
+            }
 
-            logger.LogWarning("No GPS found for: {Address}", address);
+            // Lấy results array
+            if (!json.RootElement.TryGetProperty("results", out var results) ||
+                results.GetArrayLength() == 0)
+            {
+                logger.LogWarning("  ✗ No results found for address: {Address}", address);
+                return null;
+            }
+
+            // Lấy kết quả đầu tiên (best match)
+            var firstResult = results[0];
+
+            if (!firstResult.TryGetProperty("geometry", out var geometry) ||
+                !geometry.TryGetProperty("location", out var location))
+            {
+                logger.LogWarning("  ✗ No geometry/location in result");
+                return null;
+            }
+
+            // Parse latitude và longitude
+            if (!location.TryGetProperty("lat", out var latProp) ||
+                !location.TryGetProperty("lng", out var lngProp))
+            {
+                logger.LogWarning("  ✗ Missing lat/lng in location");
+                return null;
+            }
+
+            var lat = latProp.GetDecimal();
+            var lng = lngProp.GetDecimal();
+
+            // Lấy thêm thông tin để log
+            var formattedAddress = firstResult.TryGetProperty("formatted_address", out var fa)
+                ? fa.GetString()
+                : "N/A";
+            var placeId = firstResult.TryGetProperty("place_id", out var pid)
+                ? pid.GetString()
+                : "N/A";
+
+            logger.LogInformation("  ✓ [GOONG] {Lat}, {Lng}", lat, lng);
+            logger.LogInformation("    Formatted: {FormattedAddress}", formattedAddress);
+            logger.LogInformation("    PlaceID: {PlaceId}", placeId);
+
+            return (lat, lng);
+        }
+        catch (HttpRequestException httpEx)
+        {
+            logger.LogError(httpEx, "HTTP error when calling Goong API for address: {Address}", address);
             return null;
         }
         catch (Exception ex)
@@ -1443,127 +1554,6 @@ internal class ImportContractFromDocumentHandler(
             logger.LogError(ex, "GPS lookup error: {Address}", address);
             return null;
         }
-    }
-
-    /// <summary>
-    ///     Unified Nominatim query với 3 strategies
-    /// </summary>
-    private async Task<(decimal? Latitude, decimal? Longitude)?> QueryNominatim(
-        HttpClient client, VietnameseAddress addr, string strategy)
-    {
-        string url;
-        var streetFull = string.IsNullOrEmpty(addr.HouseNumber) ? addr.Street : $"{addr.HouseNumber} {addr.Street}";
-
-        switch (strategy)
-        {
-            case "structured":
-                // Structured: street=X&city=Y&state=Z (cao nhất)
-                if (string.IsNullOrEmpty(addr.Street)) return null;
-                var parts = new List<string>
-                {
-                    $"street={Uri.EscapeDataString(streetFull)}",
-                    $"city={Uri.EscapeDataString(addr.District)}",
-                    $"state={Uri.EscapeDataString(addr.City)}",
-                    "country=Vietnam",
-                    "format=json",
-                    "addressdetails=1",
-                    "limit=5"
-                };
-                url = $"https://nominatim.openstreetmap.org/search?{string.Join("&", parts)}";
-                break;
-
-            case "viewbox":
-                // Viewbox: giới hạn tìm kiếm trong quận
-                if (string.IsNullOrEmpty(addr.Street)) return null;
-                var viewbox = GetDistrictViewbox(addr.District, addr.City);
-                if (viewbox == null) return null;
-                var query = $"{streetFull}, {addr.District}, {addr.City}";
-                url =
-                    $"https://nominatim.openstreetmap.org/search?q={Uri.EscapeDataString(query)}&format=json&addressdetails=1&limit=10&countrycodes=vn&viewbox={viewbox}&bounded=1";
-                break;
-
-            case "simple":
-                // Simple: street + district + city
-                if (string.IsNullOrEmpty(addr.Street)) return null;
-                var simpleQuery = $"{addr.Street}, {addr.District}, {addr.City}, Vietnam";
-                url =
-                    $"https://nominatim.openstreetmap.org/search?q={Uri.EscapeDataString(simpleQuery)}&format=json&addressdetails=1&limit=10&countrycodes=vn";
-                break;
-
-            default:
-                return null;
-        }
-
-        try
-        {
-            var response = await client.GetStringAsync(url);
-            var results = JsonDocument.Parse(response).RootElement;
-
-            if (results.GetArrayLength() > 0)
-            {
-                var best = SelectBestResult(results, addr);
-                if (best.HasValue)
-                {
-                    var lat = decimal.Parse(best.Value.GetProperty("lat").GetString()!);
-                    var lon = decimal.Parse(best.Value.GetProperty("lon").GetString()!);
-                    var type = best.Value.TryGetProperty("type", out var t) ? t.GetString() : "";
-                    var houseNum = best.Value.TryGetProperty("address", out var a) &&
-                                   a.TryGetProperty("house_number", out var hn)
-                        ? hn.GetString()
-                        : "N/A";
-
-                    logger.LogInformation("  ✓ [{Strategy}] {Lat}, {Lon} (Type: {Type}, House#: {HouseNum})",
-                        strategy.ToUpper(), lat, lon, type, houseNum);
-
-                    await Task.Delay(1100); // Rate limit
-                    return (lat, lon);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning("  ✗ {Strategy} failed: {Error}", strategy, ex.Message);
-        }
-
-        await Task.Delay(1100);
-        return null;
-    }
-
-    /// <summary>
-    ///     Chọn kết quả tốt nhất - ưu tiên house_number
-    /// </summary>
-    private JsonElement? SelectBestResult(JsonElement results, VietnameseAddress addr)
-    {
-        JsonElement? best = null;
-        double bestScore = 0;
-
-        foreach (var r in results.EnumerateArray())
-        {
-            var score = r.TryGetProperty("importance", out var imp) ? imp.GetDouble() * 100 : 0;
-            var type = r.TryGetProperty("type", out var t) ? t.GetString() : "";
-            var osm_type = r.TryGetProperty("osm_type", out var ot) ? ot.GetString() : "";
-
-            // CRITICAL: +300 cho house_number
-            if (r.TryGetProperty("address", out var addrObj) && addrObj.TryGetProperty("house_number", out _))
-                score += 300;
-
-            // Type bonuses
-            if (type == "house" || type == "building") score += 150;
-            if (type == "amenity" || type == "office") score += 120;
-            if (osm_type == "node") score += 50;
-
-            // Penalty cho road nếu có số nhà
-            if (!string.IsNullOrEmpty(addr.HouseNumber) && (type == "road" || type == "highway"))
-                score -= 100;
-
-            if (score > bestScore)
-            {
-                bestScore = score;
-                best = r;
-            }
-        }
-
-        return best;
     }
 
     // ================================================================

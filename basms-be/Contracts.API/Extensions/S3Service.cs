@@ -137,13 +137,44 @@ public class S3Service : IS3Service
         }
     }
 
-    public async Task<bool> DeleteFileAsync(string fileUrl, CancellationToken cancellationToken = default)
+    public async Task<bool> DeleteFileAsync(string fileUrlOrKey, CancellationToken cancellationToken = default)
     {
         try
         {
-            // Extract key from URL
-            var uri = new Uri(fileUrl);
-            var fileKey = uri.AbsolutePath.TrimStart('/');
+            // Extract key: support both full URL and S3 key
+            string fileKey;
+            if (fileUrlOrKey.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                fileUrlOrKey.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                // Full URL: extract key from URL
+                try
+                {
+                    // Decode URL-encoded characters first
+                    var decodedUrl = Uri.UnescapeDataString(fileUrlOrKey);
+                    var uri = new Uri(decodedUrl);
+                    fileKey = uri.AbsolutePath.TrimStart('/');
+                }
+                catch (UriFormatException)
+                {
+                    // If URL parsing fails, try to extract key manually
+                    // Format: https://bucket.s3.region.amazonaws.com/key/path/file.ext
+                    var parts = fileUrlOrKey.Split(new[] { ".amazonaws.com/" }, StringSplitOptions.None);
+                    if (parts.Length >= 2)
+                    {
+                        fileKey = Uri.UnescapeDataString(parts[1]);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Failed to parse S3 URL, using as-is: {FileUrl}", fileUrlOrKey);
+                        fileKey = fileUrlOrKey;
+                    }
+                }
+            }
+            else
+            {
+                // Already an S3 key - use directly
+                fileKey = fileUrlOrKey;
+            }
 
             _logger.LogInformation("Deleting file from S3: {FileKey}", fileKey);
 
@@ -160,7 +191,7 @@ public class S3Service : IS3Service
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error deleting file from S3: {FileUrl}", fileUrl);
+            _logger.LogError(ex, "Error deleting file from S3: {FileUrlOrKey}", fileUrlOrKey);
             return false;
         }
     }

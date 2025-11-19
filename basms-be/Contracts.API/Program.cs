@@ -21,6 +21,10 @@ builder.Services.Configure<Contracts.API.Extensions.EmailSettings>(
     builder.Configuration.GetSection("EmailSettings"));
 builder.Services.AddScoped<Contracts.API.Extensions.EmailHandler>();
 
+// Đăng ký GoongSettings cho geocoding API
+builder.Services.Configure<Contracts.API.Extensions.GoongSettings>(
+    builder.Configuration.GetSection("GoongSettings"));
+
 // Đăng ký AWS S3
 builder.Services.Configure<Contracts.API.Extensions.AwsS3Settings>(
     builder.Configuration.GetSection("AWS"));

@@ -10,7 +10,7 @@ public class VerifyOtpEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        app.MapPost("/otp/verify", async ([FromBody] VerifyOtpRequest request, ISender sender) =>
+        app.MapPost("/api/otp/verify", async ([FromBody] VerifyOtpRequest request, ISender sender) =>
             {
                 var command = new VerifyOtpCommand(
                     Email: request.Email,

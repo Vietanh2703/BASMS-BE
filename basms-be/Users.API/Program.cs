@@ -22,6 +22,9 @@ builder.Services.AddScoped<VerifyOtpValidator>();
 builder.Services.AddScoped<UpdateOtpValidator>();
 builder.Services.AddScoped<UpdatePasswordValidator>();
 builder.Services.AddScoped<ConfirmPasswordChangeValidator>();
+builder.Services.AddScoped<RequestResetPasswordValidator>();
+builder.Services.AddScoped<VerifyResetPasswordOtpValidator>();
+builder.Services.AddScoped<CompleteResetPasswordValidator>();
 
 // Đăng ký Dapper connection factory cho MySQL
 // Singleton vì connection factory có thể tái sử dụng

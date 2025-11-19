@@ -98,8 +98,8 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     // Insert default roles
                     await connection.ExecuteAsync(@"
                         INSERT INTO `roles` (`Id`, `Name`, `DisplayName`, `Description`, `IsDeleted`, `CreatedAt`)
-                        VALUES 
-                            ('ddbd5bad-ba6e-11f0-bcac-00155dca8f48!', 'admin', 'Administrator', 'System administrator with full access', FALSE, NOW()),
+                        VALUES
+                            ('ddbd5bad-ba6e-11f0-bcac-00155dca8f48', 'admin', 'Administrator', 'System administrator with full access', FALSE, NOW()),
                             ('ddbd5fad-ba6e-11f0-bcac-00155dca8f48', 'director', 'Director', 'Giám đốc công ty bảo vệ với quyền quản lý toàn bộ hệ thống', FALSE, NOW()),
                             ('ddbd612f-ba6e-11f0-bcac-00155dca8f48', 'manager', 'Manager', 'Quản lý công ty bảo vệ với quyền điều hành nhân sự và dự án', FALSE, NOW()),
                             ('ddbd6230-ba6e-11f0-bcac-00155dca8f48', 'guard', 'Guard', 'Nhân viên bảo vệ thực hiện nhiệm vụ bảo vệ', FALSE, NOW()),
