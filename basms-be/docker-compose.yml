@@ -1,174 +1,127 @@
+version: '3.8'
+
 services:
-  # ============================================================================
-  # MYSQL - Shared Database for microservices
-  # ============================================================================
+  # MySQL Database
   mysql:
     image: mysql:8.0
     container_name: basms-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     ports:
       - "3306:3306"
-    environment:
-      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:-12345}"
-      MYSQL_DATABASE: users_db
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
     networks:
       - basms-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-12345}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    command: --default-authentication-plugin=mysql_native_password
 
-  # ============================================================================
-  # RABBITMQ - Message Broker for inter-service communication
-  # ============================================================================
+  # RabbitMQ
   rabbitmq:
     image: rabbitmq:3-management
     container_name: basms-rabbitmq
-    ports:
-      - "5672:5672"   # AMQP port
-      - "15672:15672" # Management UI
+    restart: unless-stopped
     environment:
-      RABBITMQ_DEFAULT_USER: "${RABBITMQ_USERNAME:-guest}"
-      RABBITMQ_DEFAULT_PASS: "${RABBITMQ_PASSWORD:-guest}"
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
     networks:
       - basms-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
 
-  # ============================================================================
-  # USERS.API - User Management Service
-  # ============================================================================
+  # Users API
   users-api:
-    image: basms-users-api
+    build:
+      context: ./Users.API
+      dockerfile: Dockerfile
     container_name: basms-users-api
-    build:
-      context: .
-      dockerfile: Users.API/Dockerfile
+    restart: unless-stopped
     ports:
-      - "5001:8080"
+      - "5001:80"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
-      - ASPNETCORE_URLS=http://+:8080
-      - AllowedOrigins=${ALLOWED_ORIGINS}
-      - ConnectionStrings__Database=${DB_CONNECTION_STRING_USERS}
-      - JwtSettings__SecretKey=${JWT_SECRET_KEY}
-      - JwtSettings__Issuer=${JWT_ISSUER}
-      - JwtSettings__Audience=${JWT_AUDIENCE}
-      - EmailSettings__Sender=${EMAIL_SENDER}
-      - EmailSettings__Password=${EMAIL_PASSWORD}
-      - RabbitMQ__Host=${RABBITMQ_HOST}
-      - RabbitMQ__Username=${RABBITMQ_USERNAME}
-      - RabbitMQ__Password=${RABBITMQ_PASSWORD}
-      - Firebase__ApiKey=${FIREBASE_API_KEY}
-      - Firebase__Url=${FIREBASE_URL}
-      - FIREBASE_CREDENTIALS_BASE64=${FIREBASE_CREDENTIALS_BASE64}
+      - DB_CONNECTION_STRING_USERS=${DB_CONNECTION_STRING_USERS}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_ISSUER=${JWT_ISSUER}
+      - JWT_AUDIENCE=${JWT_AUDIENCE}
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - RABBITMQ_USERNAME=${RABBITMQ_USERNAME}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      - FIREBASE_API_KEY=${FIREBASE_API_KEY}
+      - FIREBASE_URL=${FIREBASE_URL}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}
+      - EMAIL_SENDER=${EMAIL_SENDER}
+      - EMAIL_PASSWORD=${EMAIL_PASSWORD}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+    volumes:
+      # Mount Firebase credentials từ VPS vào container
+      - ~/basms/config/firebase-credentials.json:/app/config/firebase-credentials.json:ro
     depends_on:
-      mysql:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
+      - mysql
+      - rabbitmq
     networks:
       - basms-network
-    restart: unless-stopped
 
-  # ============================================================================
-  # CONTRACTS.API - Contract & Customer Management Service
-  # ============================================================================
+  # Contracts API
   contracts-api:
-    image: basms-contracts-api
+    build:
+      context: ./Contracts.API
+      dockerfile: Dockerfile
     container_name: basms-contracts-api
-    build:
-      context: .
-      dockerfile: Contracts.API/Dockerfile
+    restart: unless-stopped
     ports:
-      - "5002:8080"
+      - "5002:80"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
-      - ASPNETCORE_URLS=http://+:8080
-      - AllowedOrigins=${ALLOWED_ORIGINS}
-      - ConnectionStrings__Database=${DB_CONNECTION_STRING_CONTRACTS}
-      - Jwt__Key=${JWT_SECRET_KEY}
-      - Jwt__Issuer=${JWT_ISSUER}
-      - Jwt__Audience=${JWT_AUDIENCE}
-      - EmailSettings__Sender=${EMAIL_SENDER}
-      - EmailSettings__Password=${EMAIL_PASSWORD}
-      - RabbitMQ__Host=${RABBITMQ_HOST}
-      - RabbitMQ__Username=${RABBITMQ_USERNAME}
-      - RabbitMQ__Password=${RABBITMQ_PASSWORD}
-      - AWS__BucketName=${AWS_BUCKET_NAME}
-      - AWS__Region=${AWS_REGION}
-      - AWS__AccessKey=${AWS_ACCESS_KEY}
-      - AWS__SecretKey=${AWS_SECRET_KEY}
-      - SignatureCertificate__Path=${SIGNATURE_CERT_PATH}
-      - SignatureCertificate__Password=${SIGNATURE_CERT_PASSWORD}
-      - GoongSettings__ApiKey=${GOONG_API_KEY}
+      - DB_CONNECTION_STRING_CONTRACTS=${DB_CONNECTION_STRING_CONTRACTS}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_ISSUER=${JWT_ISSUER}
+      - JWT_AUDIENCE=${JWT_AUDIENCE}
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - RABBITMQ_USERNAME=${RABBITMQ_USERNAME}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      - AWS_BUCKET_NAME=${AWS_BUCKET_NAME}
+      - AWS_REGION=${AWS_REGION}
+      - AWS_ACCESS_KEY=${AWS_ACCESS_KEY}
+      - AWS_SECRET_KEY=${AWS_SECRET_KEY}
+      - SIGNATURE_CERT_PATH=${SIGNATURE_CERT_PATH}
+      - SIGNATURE_CERT_PASSWORD=${SIGNATURE_CERT_PASSWORD}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
     depends_on:
-      mysql:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
+      - mysql
+      - rabbitmq
     networks:
       - basms-network
-    restart: unless-stopped
 
-  # ============================================================================
-  # SHIFTS.API - Shift & Team Management Service
-  # ============================================================================
+  # Shifts API
   shifts-api:
-    image: basms-shifts-api
-    container_name: basms-shifts-api
     build:
-      context: .
-      dockerfile: Shifts.API/Dockerfile
+      context: ./Shifts.API
+      dockerfile: Dockerfile
+    container_name: basms-shifts-api
+    restart: unless-stopped
     ports:
-      - "5003:8080"
+      - "5003:80"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
-      - ASPNETCORE_URLS=http://+:8080
-      - AllowedOrigins=${ALLOWED_ORIGINS}
-      - ConnectionStrings__Database=${DB_CONNECTION_STRING_SHIFTS}
-      - Jwt__Key=${JWT_SECRET_KEY}
-      - Jwt__Issuer=${JWT_ISSUER}
-      - Jwt__Audience=${JWT_AUDIENCE}
-      - EmailSettings__Sender=${EMAIL_SENDER}
-      - EmailSettings__Password=${EMAIL_PASSWORD}
-      - RabbitMQ__Host=${RABBITMQ_HOST}
-      - RabbitMQ__Username=${RABBITMQ_USERNAME}
-      - RabbitMQ__Password=${RABBITMQ_PASSWORD}
+      - DB_CONNECTION_STRING_SHIFTS=${DB_CONNECTION_STRING_SHIFTS}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_ISSUER=${JWT_ISSUER}
+      - JWT_AUDIENCE=${JWT_AUDIENCE}
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - RABBITMQ_USERNAME=${RABBITMQ_USERNAME}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      - GOONG_API_KEY=${GOONG_API_KEY}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
     depends_on:
-      mysql:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-      contracts-api:
-        condition: service_started
+      - mysql
+      - rabbitmq
     networks:
       - basms-network
-    restart: unless-stopped
 
-# ============================================================================
-# NETWORKS
-# ============================================================================
+volumes:
+  mysql_data:
+
 networks:
   basms-network:
     driver: bridge
-
-# ============================================================================
-# VOLUMES
-# ============================================================================
-volumes:
-  mysql_data:
-    driver: local
-  rabbitmq_data:
-    driver: local

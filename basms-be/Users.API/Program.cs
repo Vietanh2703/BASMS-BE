@@ -35,48 +35,38 @@ builder.Services.AddSingleton<IDbConnectionFactory>(sp =>
     return new MySqlConnectionFactory(connectionString);
 });
 
-// Cấu hình Firebase Authentication
-GoogleCredential credential;
-
-// Ưu tiên đọc từ FIREBASE_CREDENTIALS_BASE64 (cho production/Docker)
-var firebaseCredsBase64 = builder.Configuration["FIREBASE_CREDENTIALS_BASE64"];
-if (!string.IsNullOrEmpty(firebaseCredsBase64))
+try
 {
-    try
+    var credentialsPath = builder.Configuration["GOOGLE_APPLICATION_CREDENTIALS"];
+    
+    if (string.IsNullOrEmpty(credentialsPath))
     {
-        // Decode base64 thành JSON string
-        var jsonBytes = Convert.FromBase64String(firebaseCredsBase64);
-        var jsonConfig = System.Text.Encoding.UTF8.GetString(jsonBytes);
-        credential = GoogleCredential.FromJson(jsonConfig);
-        Console.WriteLine("✓ Firebase credentials loaded from FIREBASE_CREDENTIALS_BASE64");
+        credentialsPath = Path.Combine(Directory.GetCurrentDirectory(), "config", "firebase-credentials.json");
     }
-    catch (Exception ex)
+
+    Console.WriteLine($"Loading Firebase credentials from: {credentialsPath}");
+
+    if (File.Exists(credentialsPath))
     {
-        Console.WriteLine($"✗ Failed to decode FIREBASE_CREDENTIALS_BASE64: {ex.Message}");
-        throw;
+        var credential = GoogleCredential.FromFile(credentialsPath);
+        
+        FirebaseApp.Create(new AppOptions()
+        {
+            Credential = credential,
+        });
+
+        Console.WriteLine("✅ Firebase initialized successfully");
+    }
+    else
+    {
+        throw new Exception($"Firebase credentials file not found at: {credentialsPath}");
     }
 }
-else
+catch (Exception ex)
 {
-    // Fallback: đọc từ FIREBASE_CONFIG section (cho development)
-    var firebaseConfig = builder.Configuration.GetSection("FIREBASE_CONFIG").Get<Dictionary<string, string>>();
-
-    // Fix private key newlines nếu cần
-    if (firebaseConfig != null && firebaseConfig.ContainsKey("private_key"))
-    {
-        firebaseConfig["private_key"] = firebaseConfig["private_key"].Replace("\\n", "\n");
-    }
-
-    var jsonConfig = JsonSerializer.Serialize(firebaseConfig);
-    credential = GoogleCredential.FromJson(jsonConfig);
-    Console.WriteLine("✓ Firebase credentials loaded from FIREBASE_CONFIG section");
+    Console.WriteLine($"❌ ERROR initializing Firebase: {ex.Message}");
+    throw;
 }
-
-// Khởi tạo Firebase App với credential
-FirebaseApp.Create(new AppOptions
-{
-    Credential = credential
-});
 
 // Đăng ký MassTransit with RabbitMQ
 builder.Services.AddMassTransit(x =>
