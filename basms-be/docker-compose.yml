@@ -1,54 +1,136 @@
 version: '3.8'
 
 services:
+  # ============================================================================
+  # MYSQL - Shared Database for microservices
+  # ============================================================================
+  mysql:
+    image: mysql:8.0
+    container_name: basms-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:-12345}"
+      MYSQL_DATABASE: users_db
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    networks:
+      - basms-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-12345}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: --default-authentication-plugin=mysql_native_password
+
+  # ============================================================================
+  # RABBITMQ - Message Broker for inter-service communication
+  # ============================================================================
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: basms-rabbitmq
+    ports:
+      - "5672:5672"   # AMQP port
+      - "15672:15672" # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: "${RABBITMQ_USERNAME:-guest}"
+      RABBITMQ_DEFAULT_PASS: "${RABBITMQ_PASSWORD:-guest}"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - basms-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ============================================================================
+  # USERS.API - User Management Service
+  # ============================================================================
   users-api:
+    image: basms-users-api
+    container_name: basms-users-api
     build:
       context: .
       dockerfile: Users.API/Dockerfile
-    container_name: basms-users-api
     ports:
       - "5001:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:8080
-    volumes:
-      - ./Users.API/appsettings.json:/app/appsettings.json:ro
-    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     networks:
       - basms-network
+    restart: unless-stopped
 
+  # ============================================================================
+  # CONTRACTS.API - Contract & Customer Management Service
+  # ============================================================================
   contracts-api:
+    image: basms-contracts-api
+    container_name: basms-contracts-api
     build:
       context: .
       dockerfile: Contracts.API/Dockerfile
-    container_name: basms-contracts-api
     ports:
       - "5002:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:8080
-    volumes:
-      - ./Contracts.API/appsettings.json:/app/appsettings.json:ro
-    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     networks:
       - basms-network
+    restart: unless-stopped
 
+  # ============================================================================
+  # SHIFTS.API - Shift & Team Management Service
+  # ============================================================================
   shifts-api:
+    image: basms-shifts-api
+    container_name: basms-shifts-api
     build:
       context: .
       dockerfile: Shifts.API/Dockerfile
-    container_name: basms-shifts-api
     ports:
       - "5003:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:8080
-    volumes:
-      - ./Shifts.API/appsettings.json:/app/appsettings.json:ro
-    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      contracts-api:
+        condition: service_started
     networks:
       - basms-network
+    restart: unless-stopped
 
+# ============================================================================
+# NETWORKS
+# ============================================================================
 networks:
   basms-network:
     driver: bridge
+
+# ============================================================================
+# VOLUMES
+# ============================================================================
+volumes:
+  mysql_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
