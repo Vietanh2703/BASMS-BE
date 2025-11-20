@@ -16,6 +16,24 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Validate required secrets
+      run: |
+        echo "Validating required secrets..."
+        MISSING_SECRETS=""
+
+        [ -z "${{ secrets.ALLOWED_ORIGINS }}" ] && MISSING_SECRETS="$MISSING_SECRETS ALLOWED_ORIGINS"
+        [ -z "${{ secrets.DB_CONNECTION_STRING_USERS }}" ] && MISSING_SECRETS="$MISSING_SECRETS DB_CONNECTION_STRING_USERS"
+        [ -z "${{ secrets.JWT_SECRET_KEY }}" ] && MISSING_SECRETS="$MISSING_SECRETS JWT_SECRET_KEY"
+        [ -z "${{ secrets.RABBITMQ_HOST }}" ] && MISSING_SECRETS="$MISSING_SECRETS RABBITMQ_HOST"
+
+        if [ -n "$MISSING_SECRETS" ]; then
+          echo "ERROR: Missing required secrets:$MISSING_SECRETS"
+          echo "Please set these secrets in GitHub repository settings"
+          exit 1
+        fi
+
+        echo "✓ All required secrets are set"
+
     - name: Create .env file for Docker Compose
       run: |
         cd basms-be
@@ -54,9 +72,18 @@ jobs:
         echo ".env.production file created"
         echo "Verifying .env.production file..."
         if [ -f .env.production ]; then
-          echo "File exists, size: $(wc -c < .env.production) bytes"
+          FILE_SIZE=$(wc -c < .env.production)
+          echo "File exists, size: $FILE_SIZE bytes"
+
+          if [ "$FILE_SIZE" -lt 100 ]; then
+            echo "WARNING: File size is too small! Secrets might be empty."
+            echo "Content preview:"
+            cat .env.production | sed 's/=.*/=***/'
+            exit 1
+          fi
+
           echo "First few lines (masked):"
-          head -3 .env.production | sed 's/=.*/=***/'
+          head -5 .env.production | sed 's/=.*/=***/'
         else
           echo "ERROR: .env.production file not created!"
           exit 1
@@ -144,13 +171,22 @@ jobs:
           echo "Cleaning up old Docker images..."
           docker image prune -af --filter "until=24h" || true
 
+          # Debug: Show .env file content (masked)
+          echo "=== DEBUG: .env file content (first 5 lines, values masked) ==="
+          if [ -f .env ]; then
+            head -5 .env | sed 's/=.*/=***/'
+          else
+            echo "ERROR: .env file not found!"
+            exit 1
+          fi
+
           # Build Docker images
           echo "Building Docker images..."
           docker compose build --no-cache
 
           # Start services with Docker Compose
           echo "Starting services with Docker Compose..."
-          docker compose up -d
+          docker compose --env-file .env up -d
 
           # Wait for services to be healthy
           echo "Waiting for services to start..."
