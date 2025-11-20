@@ -1,0 +1,180 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [ feature ]
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: '8.0.x'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Install envsubst
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gettext-base
+
+    - name: Replace environment variables in appsettings.json
+      env:
+        ALLOWED_ORIGINS: ${{ secrets.ALLOWED_ORIGINS }}
+        DB_CONNECTION_STRING_USERS: ${{ secrets.DB_CONNECTION_STRING_USERS }}
+        DB_CONNECTION_STRING_CONTRACTS: ${{ secrets.DB_CONNECTION_STRING_CONTRACTS }}
+        DB_CONNECTION_STRING_SHIFTS: ${{ secrets.DB_CONNECTION_STRING_SHIFTS }}
+        FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+        FIREBASE_URL: ${{ secrets.FIREBASE_URL }}
+        FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+        FIREBASE_PRIVATE_KEY_ID: ${{ secrets.FIREBASE_PRIVATE_KEY_ID }}
+        FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+        FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+        FIREBASE_CLIENT_ID: ${{ secrets.FIREBASE_CLIENT_ID }}
+        FIREBASE_CLIENT_CERT_URL: ${{ secrets.FIREBASE_CLIENT_CERT_URL }}
+        EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
+        EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+        JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
+        JWT_ISSUER: ${{ secrets.JWT_ISSUER }}
+        JWT_AUDIENCE: ${{ secrets.JWT_AUDIENCE }}
+        RABBITMQ_HOST: ${{ secrets.RABBITMQ_HOST }}
+        RABBITMQ_USERNAME: ${{ secrets.RABBITMQ_USERNAME }}
+        RABBITMQ_PASSWORD: ${{ secrets.RABBITMQ_PASSWORD }}
+        AWS_BUCKET_NAME: ${{ secrets.AWS_BUCKET_NAME }}
+        AWS_REGION: ${{ secrets.AWS_REGION }}
+        AWS_ACCESS_KEY: ${{ secrets.AWS_ACCESS_KEY }}
+        AWS_SECRET_KEY: ${{ secrets.AWS_SECRET_KEY }}
+        SIGNATURE_CERT_PATH: ${{ secrets.SIGNATURE_CERT_PATH }}
+        SIGNATURE_CERT_PASSWORD: ${{ secrets.SIGNATURE_CERT_PASSWORD }}
+        GOONG_API_KEY: ${{ secrets.GOONG_API_KEY }}
+      run: |
+        cd basms-be
+
+        echo "Replacing environment variables..."
+
+        # Users.API
+        envsubst < Users.API/appsettings.json > Users.API/appsettings.tmp.json
+        mv Users.API/appsettings.tmp.json Users.API/appsettings.json
+
+        # Contracts.API
+        envsubst < Contracts.API/appsettings.json > Contracts.API/appsettings.tmp.json
+        mv Contracts.API/appsettings.tmp.json Contracts.API/appsettings.json
+
+        # Shifts.API
+        envsubst < Shifts.API/appsettings.json > Shifts.API/appsettings.tmp.json
+        mv Shifts.API/appsettings.tmp.json Shifts.API/appsettings.json
+
+        echo "Environment variables applied successfully"
+
+    - name: Restore dependencies
+      run: |
+        cd basms-be
+        dotnet restore
+
+    - name: Build solution
+      run: |
+        cd basms-be
+        dotnet build --configuration Release --no-restore
+
+    - name: Run tests (optional)
+      run: |
+        cd basms-be
+        # Uncomment if you have tests
+        # dotnet test --configuration Release --no-build --verbosity normal
+        echo "No tests configured yet"
+
+    - name: Publish Users.API
+      run: |
+        cd basms-be
+        dotnet publish Users.API/Users.API.csproj \
+          --configuration Release \
+          --no-build \
+          --output ./publish/users
+
+    - name: Publish Contracts.API
+      run: |
+        cd basms-be
+        dotnet publish Contracts.API/Contracts.API.csproj \
+          --configuration Release \
+          --no-build \
+          --output ./publish/contracts
+
+    - name: Publish Shifts.API
+      run: |
+        cd basms-be
+        dotnet publish Shifts.API/Shifts.API.csproj \
+          --configuration Release \
+          --no-build \
+          --output ./publish/shifts
+
+    - name: Create deployment package
+      run: |
+        cd basms-be/publish
+        tar -czf basms-backend.tar.gz users/ contracts/ shifts/
+        echo "Deployment package created: basms-backend.tar.gz"
+
+    - name: Upload to VPS
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USERNAME }}
+        key: ${{ secrets.VPS_SSH_KEY }}
+        port: ${{ secrets.VPS_SSH_PORT || 22 }}
+        source: "basms-be/publish/basms-backend.tar.gz"
+        target: "/tmp/"
+        strip_components: 2
+
+    - name: Deploy on VPS
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USERNAME }}
+        key: ${{ secrets.VPS_SSH_KEY }}
+        port: ${{ secrets.VPS_SSH_PORT || 22 }}
+        script: |
+          echo "Starting deployment on VPS..."
+
+          # Create deployment directory if not exists
+          sudo mkdir -p /var/www/basms
+
+          # Extract the package
+          cd /var/www/basms
+          sudo tar -xzf /tmp/basms-backend.tar.gz
+
+          # Set permissions
+          sudo chown -R www-data:www-data /var/www/basms
+          sudo chmod -R 755 /var/www/basms
+
+          # Restart services
+          echo "Restarting services..."
+          sudo systemctl restart basms-users || echo "basms-users service not found"
+          sudo systemctl restart basms-contracts || echo "basms-contracts service not found"
+          sudo systemctl restart basms-shifts || echo "basms-shifts service not found"
+
+          # Check service status
+          echo "Service status:"
+          sudo systemctl status basms-users --no-pager || true
+          sudo systemctl status basms-contracts --no-pager || true
+          sudo systemctl status basms-shifts --no-pager || true
+
+          # Cleanup
+          rm -f /tmp/basms-backend.tar.gz
+
+          echo "Deployment completed successfully!"
+
+    - name: Notify deployment status
+      if: always()
+      run: |
+        if [ ${{ job.status }} == 'success' ]; then
+          echo "Deployment to VPS completed successfully!"
+        else
+          echo "Deployment failed! Please check the logs."
+        fi

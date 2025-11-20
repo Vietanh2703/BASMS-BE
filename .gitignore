@@ -9,11 +9,16 @@
 *.user
 *.userosscache
 *.sln.docstates
-*.env
 
-# Ignore appsettings files and all .xml files
-appsettings.json
-appsettings.Development.json
+# Environment files with actual secrets (DO NOT COMMIT)
+*.env
+.env.local
+.env.production
+.env.staging
+appsettings.local.json
+appsettings.*.local.json
+
+# All .xml files
 *.xml
 
 # User-specific files (MonoDevelop/Xamarin Studio)
