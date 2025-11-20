@@ -32,8 +32,8 @@ services:
   # Users API
   users-api:
     build:
-      context: ./Users.API
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: Users.API/Dockerfile
     container_name: basms-users-api
     restart: unless-stopped
     ports:
@@ -65,8 +65,8 @@ services:
   # Contracts API
   contracts-api:
     build:
-      context: ./Contracts.API
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: Contracts.API/Dockerfile
     container_name: basms-contracts-api
     restart: unless-stopped
     ports:
@@ -96,8 +96,8 @@ services:
   # Shifts API
   shifts-api:
     build:
-      context: ./Shifts.API
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: Shifts.API/Dockerfile
     container_name: basms-shifts-api
     restart: unless-stopped
     ports:
