@@ -16,11 +16,6 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: ${{ env.DOTNET_VERSION }}
-
     - name: Install envsubst
       run: |
         sudo apt-get update
@@ -74,51 +69,17 @@ jobs:
 
         echo "Environment variables applied successfully"
 
-    - name: Restore dependencies
-      run: |
-        cd basms-be
-        dotnet restore
-
-    - name: Build solution
-      run: |
-        cd basms-be
-        dotnet build --configuration Release --no-restore
-
-    - name: Run tests (optional)
-      run: |
-        cd basms-be
-        # Uncomment if you have tests
-        # dotnet test --configuration Release --no-build --verbosity normal
-        echo "No tests configured yet"
-
-    - name: Publish Users.API
-      run: |
-        cd basms-be
-        dotnet publish Users.API/Users.API.csproj \
-          --configuration Release \
-          --no-build \
-          --output ./publish/users
-
-    - name: Publish Contracts.API
-      run: |
-        cd basms-be
-        dotnet publish Contracts.API/Contracts.API.csproj \
-          --configuration Release \
-          --no-build \
-          --output ./publish/contracts
-
-    - name: Publish Shifts.API
-      run: |
-        cd basms-be
-        dotnet publish Shifts.API/Shifts.API.csproj \
-          --configuration Release \
-          --no-build \
-          --output ./publish/shifts
-
     - name: Create deployment package
       run: |
-        cd basms-be/publish
-        tar -czf basms-backend.tar.gz users/ contracts/ shifts/
+        cd basms-be
+        tar -czf basms-backend.tar.gz \
+          --exclude='bin' \
+          --exclude='obj' \
+          --exclude='.git' \
+          --exclude='.vs' \
+          --exclude='*.user' \
+          --exclude='publish' \
+          .
         echo "Deployment package created: basms-backend.tar.gz"
 
     - name: Upload to VPS
@@ -128,11 +89,11 @@ jobs:
         username: ${{ secrets.VPS_USERNAME }}
         key: ${{ secrets.VPS_SSH_KEY }}
         port: ${{ secrets.VPS_SSH_PORT || 22 }}
-        source: "basms-be/publish/basms-backend.tar.gz"
+        source: "basms-be/basms-backend.tar.gz"
         target: "/tmp/"
-        strip_components: 2
+        strip_components: 1
 
-    - name: Deploy on VPS
+    - name: Deploy on VPS with Docker Compose
       uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.VPS_HOST }}
@@ -145,29 +106,55 @@ jobs:
           # Create deployment directory if not exists
           sudo mkdir -p /var/www/basms
 
+          # Backup old deployment
+          if [ -d "/var/www/basms/old" ]; then
+            sudo rm -rf /var/www/basms/old
+          fi
+          if [ -d "/var/www/basms/current" ]; then
+            sudo mv /var/www/basms/current /var/www/basms/old
+          fi
+
+          # Create new deployment directory
+          sudo mkdir -p /var/www/basms/current
+
           # Extract the package
-          cd /var/www/basms
+          cd /var/www/basms/current
           sudo tar -xzf /tmp/basms-backend.tar.gz
 
           # Set permissions
-          sudo chown -R www-data:www-data /var/www/basms
-          sudo chmod -R 755 /var/www/basms
+          sudo chown -R $USER:$USER /var/www/basms/current
 
-          # Restart services
-          echo "Restarting services..."
-          sudo systemctl restart basms-users || echo "basms-users service not found"
-          sudo systemctl restart basms-contracts || echo "basms-contracts service not found"
-          sudo systemctl restart basms-shifts || echo "basms-shifts service not found"
+          # Stop existing containers
+          echo "Stopping existing containers..."
+          cd /var/www/basms/current
+          sudo docker-compose down || echo "No containers to stop"
+
+          # Remove old images to free up space
+          echo "Cleaning up old Docker images..."
+          sudo docker image prune -af --filter "until=24h" || true
+
+          # Build Docker images
+          echo "Building Docker images..."
+          sudo docker-compose build --no-cache
+
+          # Start services with Docker Compose
+          echo "Starting services with Docker Compose..."
+          sudo docker-compose up -d
+
+          # Wait for services to be healthy
+          echo "Waiting for services to start..."
+          sleep 10
 
           # Check service status
           echo "Service status:"
-          sudo systemctl status basms-users --no-pager || true
-          sudo systemctl status basms-contracts --no-pager || true
-          sudo systemctl status basms-shifts --no-pager || true
+          sudo docker-compose ps
+
+          # Show logs
+          echo "Recent logs:"
+          sudo docker-compose logs --tail=50
 
           # Cleanup
           rm -f /tmp/basms-backend.tar.gz
-
           echo "Deployment completed successfully!"
 
     - name: Notify deployment status
