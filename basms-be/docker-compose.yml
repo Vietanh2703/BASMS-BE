@@ -40,6 +40,7 @@ services:
       - "5001:80"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:80
       - DB_CONNECTION_STRING_USERS=${DB_CONNECTION_STRING_USERS}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - JWT_ISSUER=${JWT_ISSUER}
@@ -73,6 +74,7 @@ services:
       - "5002:80"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:80
       - DB_CONNECTION_STRING_CONTRACTS=${DB_CONNECTION_STRING_CONTRACTS}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - JWT_ISSUER=${JWT_ISSUER}
@@ -104,6 +106,7 @@ services:
       - "5003:80"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:80
       - DB_CONNECTION_STRING_SHIFTS=${DB_CONNECTION_STRING_SHIFTS}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - JWT_ISSUER=${JWT_ISSUER}
