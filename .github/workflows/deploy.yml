@@ -71,15 +71,16 @@ jobs:
 
     - name: Create deployment package
       run: |
-        cd basms-be
         tar -czf basms-backend.tar.gz \
-          --exclude='bin' \
-          --exclude='obj' \
-          --exclude='.git' \
-          --exclude='.vs' \
-          --exclude='*.user' \
-          --exclude='publish' \
-          .
+          --exclude='basms-be/bin' \
+          --exclude='basms-be/obj' \
+          --exclude='basms-be/.git' \
+          --exclude='basms-be/.vs' \
+          --exclude='basms-be/*.user' \
+          --exclude='basms-be/publish' \
+          --exclude='basms-be/**/bin' \
+          --exclude='basms-be/**/obj' \
+          -C basms-be .
         echo "Deployment package created: basms-backend.tar.gz"
 
     - name: Upload to VPS
@@ -89,9 +90,8 @@ jobs:
         username: ${{ secrets.VPS_USERNAME }}
         key: ${{ secrets.VPS_SSH_KEY }}
         port: ${{ secrets.VPS_SSH_PORT || 22 }}
-        source: "basms-be/basms-backend.tar.gz"
+        source: "basms-backend.tar.gz"
         target: "/tmp/"
-        strip_components: 1
 
     - name: Deploy on VPS with Docker Compose
       uses: appleboy/ssh-action@v1.0.3
