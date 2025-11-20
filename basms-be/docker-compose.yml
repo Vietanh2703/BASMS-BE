@@ -62,22 +62,22 @@ services:
       - ASPNETCORE_URLS=http://+:8080
       - AllowedOrigins=${ALLOWED_ORIGINS}
       - ConnectionStrings__Database=${DB_CONNECTION_STRING_USERS}
-      - Jwt__Key=${JWT_SECRET_KEY}
-      - Jwt__Issuer=${JWT_ISSUER}
-      - Jwt__Audience=${JWT_AUDIENCE}
+      - JwtSettings__SecretKey=${JWT_SECRET_KEY}
+      - JwtSettings__Issuer=${JWT_ISSUER}
+      - JwtSettings__Audience=${JWT_AUDIENCE}
       - EmailSettings__Sender=${EMAIL_SENDER}
       - EmailSettings__Password=${EMAIL_PASSWORD}
       - RabbitMQ__Host=${RABBITMQ_HOST}
       - RabbitMQ__Username=${RABBITMQ_USERNAME}
       - RabbitMQ__Password=${RABBITMQ_PASSWORD}
-      - FirebaseSettings__ApiKey=${FIREBASE_API_KEY}
-      - FirebaseSettings__AuthUrl=${FIREBASE_URL}
-      - FirebaseSettings__ProjectId=${FIREBASE_PROJECT_ID}
-      - FirebaseSettings__PrivateKeyId=${FIREBASE_PRIVATE_KEY_ID}
-      - FirebaseSettings__PrivateKey=${FIREBASE_PRIVATE_KEY}
-      - FirebaseSettings__ClientEmail=${FIREBASE_CLIENT_EMAIL}
-      - FirebaseSettings__ClientId=${FIREBASE_CLIENT_ID}
-      - FirebaseSettings__ClientCertUrl=${FIREBASE_CLIENT_CERT_URL}
+      - Firebase__ApiKey=${FIREBASE_API_KEY}
+      - Firebase__Url=${FIREBASE_URL}
+      - FIREBASE_CONFIG__project_id=${FIREBASE_PROJECT_ID}
+      - FIREBASE_CONFIG__private_key_id=${FIREBASE_PRIVATE_KEY_ID}
+      - FIREBASE_CONFIG__private_key=${FIREBASE_PRIVATE_KEY}
+      - FIREBASE_CONFIG__client_email=${FIREBASE_CLIENT_EMAIL}
+      - FIREBASE_CONFIG__client_id=${FIREBASE_CLIENT_ID}
+      - FIREBASE_CONFIG__client_x509_cert_url=${FIREBASE_CLIENT_CERT_URL}
     depends_on:
       mysql:
         condition: service_healthy
@@ -111,13 +111,13 @@ services:
       - RabbitMQ__Host=${RABBITMQ_HOST}
       - RabbitMQ__Username=${RABBITMQ_USERNAME}
       - RabbitMQ__Password=${RABBITMQ_PASSWORD}
-      - AwsSettings__BucketName=${AWS_BUCKET_NAME}
-      - AwsSettings__Region=${AWS_REGION}
-      - AwsSettings__AccessKey=${AWS_ACCESS_KEY}
-      - AwsSettings__SecretKey=${AWS_SECRET_KEY}
-      - SignatureSettings__CertificatePath=${SIGNATURE_CERT_PATH}
-      - SignatureSettings__CertificatePassword=${SIGNATURE_CERT_PASSWORD}
-      - GoongApiSettings__ApiKey=${GOONG_API_KEY}
+      - AWS__BucketName=${AWS_BUCKET_NAME}
+      - AWS__Region=${AWS_REGION}
+      - AWS__AccessKey=${AWS_ACCESS_KEY}
+      - AWS__SecretKey=${AWS_SECRET_KEY}
+      - SignatureCertificate__Path=${SIGNATURE_CERT_PATH}
+      - SignatureCertificate__Password=${SIGNATURE_CERT_PASSWORD}
+      - GoongSettings__ApiKey=${GOONG_API_KEY}
     depends_on:
       mysql:
         condition: service_healthy
