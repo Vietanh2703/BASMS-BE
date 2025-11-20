@@ -36,10 +36,41 @@ builder.Services.AddSingleton<IDbConnectionFactory>(sp =>
 });
 
 // Cấu hình Firebase Authentication
-// Đọc config từ appsettings.json và tạo Firebase credential
-var firebaseConfig = builder.Configuration.GetSection("FIREBASE_CONFIG").Get<Dictionary<string, string>>();
-var jsonConfig = JsonSerializer.Serialize(firebaseConfig);
-var credential = GoogleCredential.FromJson(jsonConfig);
+GoogleCredential credential;
+
+// Ưu tiên đọc từ FIREBASE_CREDENTIALS_BASE64 (cho production/Docker)
+var firebaseCredsBase64 = builder.Configuration["FIREBASE_CREDENTIALS_BASE64"];
+if (!string.IsNullOrEmpty(firebaseCredsBase64))
+{
+    try
+    {
+        // Decode base64 thành JSON string
+        var jsonBytes = Convert.FromBase64String(firebaseCredsBase64);
+        var jsonConfig = System.Text.Encoding.UTF8.GetString(jsonBytes);
+        credential = GoogleCredential.FromJson(jsonConfig);
+        Console.WriteLine("✓ Firebase credentials loaded from FIREBASE_CREDENTIALS_BASE64");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"✗ Failed to decode FIREBASE_CREDENTIALS_BASE64: {ex.Message}");
+        throw;
+    }
+}
+else
+{
+    // Fallback: đọc từ FIREBASE_CONFIG section (cho development)
+    var firebaseConfig = builder.Configuration.GetSection("FIREBASE_CONFIG").Get<Dictionary<string, string>>();
+
+    // Fix private key newlines nếu cần
+    if (firebaseConfig != null && firebaseConfig.ContainsKey("private_key"))
+    {
+        firebaseConfig["private_key"] = firebaseConfig["private_key"].Replace("\\n", "\n");
+    }
+
+    var jsonConfig = JsonSerializer.Serialize(firebaseConfig);
+    credential = GoogleCredential.FromJson(jsonConfig);
+    Console.WriteLine("✓ Firebase credentials loaded from FIREBASE_CONFIG section");
+}
 
 // Khởi tạo Firebase App với credential
 FirebaseApp.Create(new AppOptions
