@@ -62,6 +62,24 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:8080
+      - AllowedOrigins=${ALLOWED_ORIGINS}
+      - ConnectionStrings__Database=${DB_CONNECTION_STRING_USERS}
+      - Jwt__Key=${JWT_SECRET_KEY}
+      - Jwt__Issuer=${JWT_ISSUER}
+      - Jwt__Audience=${JWT_AUDIENCE}
+      - EmailSettings__Sender=${EMAIL_SENDER}
+      - EmailSettings__Password=${EMAIL_PASSWORD}
+      - RabbitMQ__Host=${RABBITMQ_HOST}
+      - RabbitMQ__Username=${RABBITMQ_USERNAME}
+      - RabbitMQ__Password=${RABBITMQ_PASSWORD}
+      - FirebaseSettings__ApiKey=${FIREBASE_API_KEY}
+      - FirebaseSettings__AuthUrl=${FIREBASE_URL}
+      - FirebaseSettings__ProjectId=${FIREBASE_PROJECT_ID}
+      - FirebaseSettings__PrivateKeyId=${FIREBASE_PRIVATE_KEY_ID}
+      - FirebaseSettings__PrivateKey=${FIREBASE_PRIVATE_KEY}
+      - FirebaseSettings__ClientEmail=${FIREBASE_CLIENT_EMAIL}
+      - FirebaseSettings__ClientId=${FIREBASE_CLIENT_ID}
+      - FirebaseSettings__ClientCertUrl=${FIREBASE_CLIENT_CERT_URL}
     depends_on:
       mysql:
         condition: service_healthy
@@ -85,6 +103,23 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:8080
+      - AllowedOrigins=${ALLOWED_ORIGINS}
+      - ConnectionStrings__Database=${DB_CONNECTION_STRING_CONTRACTS}
+      - Jwt__Key=${JWT_SECRET_KEY}
+      - Jwt__Issuer=${JWT_ISSUER}
+      - Jwt__Audience=${JWT_AUDIENCE}
+      - EmailSettings__Sender=${EMAIL_SENDER}
+      - EmailSettings__Password=${EMAIL_PASSWORD}
+      - RabbitMQ__Host=${RABBITMQ_HOST}
+      - RabbitMQ__Username=${RABBITMQ_USERNAME}
+      - RabbitMQ__Password=${RABBITMQ_PASSWORD}
+      - AwsSettings__BucketName=${AWS_BUCKET_NAME}
+      - AwsSettings__Region=${AWS_REGION}
+      - AwsSettings__AccessKey=${AWS_ACCESS_KEY}
+      - AwsSettings__SecretKey=${AWS_SECRET_KEY}
+      - SignatureSettings__CertificatePath=${SIGNATURE_CERT_PATH}
+      - SignatureSettings__CertificatePassword=${SIGNATURE_CERT_PASSWORD}
+      - GoongApiSettings__ApiKey=${GOONG_API_KEY}
     depends_on:
       mysql:
         condition: service_healthy
@@ -108,6 +143,16 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:8080
+      - AllowedOrigins=${ALLOWED_ORIGINS}
+      - ConnectionStrings__Database=${DB_CONNECTION_STRING_SHIFTS}
+      - Jwt__Key=${JWT_SECRET_KEY}
+      - Jwt__Issuer=${JWT_ISSUER}
+      - Jwt__Audience=${JWT_AUDIENCE}
+      - EmailSettings__Sender=${EMAIL_SENDER}
+      - EmailSettings__Password=${EMAIL_PASSWORD}
+      - RabbitMQ__Host=${RABBITMQ_HOST}
+      - RabbitMQ__Username=${RABBITMQ_USERNAME}
+      - RabbitMQ__Password=${RABBITMQ_PASSWORD}
     depends_on:
       mysql:
         condition: service_healthy
