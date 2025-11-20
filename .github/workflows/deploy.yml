@@ -100,6 +100,7 @@ jobs:
           --exclude='basms-be/publish' \
           --exclude='basms-be/**/bin' \
           --exclude='basms-be/**/obj' \
+          --exclude='basms-be/compose.yaml' \
           -C basms-be .
         echo "Deployment package created: basms-backend.tar.gz"
 
@@ -140,6 +141,12 @@ jobs:
           # Extract the package
           cd ~/basms/current
           tar -xzf /tmp/basms-backend.tar.gz
+
+          # Remove compose.yaml if exists (use docker-compose.yml instead)
+          if [ -f compose.yaml ]; then
+            echo "Removing compose.yaml to avoid conflict with docker-compose.yml"
+            rm -f compose.yaml
+          fi
 
           # Rename .env.production to .env for Docker Compose
           if [ -f .env.production ]; then
