@@ -12,9 +12,31 @@ builder.Services.AddMediatR(config =>
 // Đăng ký Dapper connection factory cho MySQL
 builder.Services.AddSingleton<IDbConnectionFactory>(sp =>
 {
-    var connectionString = builder.Configuration.GetConnectionString("Database")!;
+    // Ưu tiên đọc từ environment variable trực tiếp
+    var connectionString = builder.Configuration["DB_CONNECTION_STRING_CONTRACTS"]
+                        ?? builder.Configuration["ConnectionStrings__Database"]
+                        ?? builder.Configuration.GetConnectionString("Database");
+
+    if (string.IsNullOrWhiteSpace(connectionString))
+    {
+        throw new InvalidOperationException("Database connection string is not configured properly");
+    }
+
+    Console.WriteLine($"Database Connection String: Server={ExtractServerFromConnectionString(connectionString)}");
     return new MySqlConnectionFactory(connectionString);
 });
+
+// Helper method để extract server từ connection string cho logging
+static string ExtractServerFromConnectionString(string connStr)
+{
+    try
+    {
+        var parts = connStr.Split(';');
+        var serverPart = parts.FirstOrDefault(p => p.Trim().StartsWith("Server=", StringComparison.OrdinalIgnoreCase));
+        return serverPart?.Split('=')[1] ?? "unknown";
+    }
+    catch { return "unknown"; }
+}
 
 // Đăng ký EmailSettings và EmailHandler
 builder.Services.Configure<Contracts.API.Extensions.EmailSettings>(
@@ -61,9 +83,30 @@ builder.Services.AddMassTransit(x =>
     // Configure RabbitMQ
     x.UsingRabbitMq((context, cfg) =>
     {
-        var rabbitMqHost = builder.Configuration["RabbitMQ:Host"] ?? "localhost";
-        var rabbitMqUsername = builder.Configuration["RabbitMQ:Username"] ?? "guest";
-        var rabbitMqPassword = builder.Configuration["RabbitMQ:Password"] ?? "guest";
+        // Ưu tiên đọc từ environment variables trực tiếp (RABBITMQ_HOST)
+        // Fallback về RabbitMQ:Host (nested config) nếu không có
+        var rabbitMqHost = builder.Configuration["RABBITMQ_HOST"]
+                        ?? builder.Configuration["RabbitMQ__Host"]
+                        ?? builder.Configuration["RabbitMQ:Host"]
+                        ?? "rabbitmq";
+
+        var rabbitMqUsername = builder.Configuration["RABBITMQ_USERNAME"]
+                            ?? builder.Configuration["RabbitMQ__Username"]
+                            ?? builder.Configuration["RabbitMQ:Username"]
+                            ?? "guest";
+
+        var rabbitMqPassword = builder.Configuration["RABBITMQ_PASSWORD"]
+                            ?? builder.Configuration["RabbitMQ__Password"]
+                            ?? builder.Configuration["RabbitMQ:Password"]
+                            ?? "guest";
+
+        Console.WriteLine($"RabbitMQ Config - Host: {rabbitMqHost}, Username: {rabbitMqUsername}");
+
+        // Validate host không empty
+        if (string.IsNullOrWhiteSpace(rabbitMqHost))
+        {
+            throw new InvalidOperationException("RabbitMQ Host is not configured properly");
+        }
 
         cfg.Host(rabbitMqHost, h =>
         {
