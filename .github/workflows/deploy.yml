@@ -17,46 +17,14 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Create .env file for Docker Compose
-      env:
-        ALLOWED_ORIGINS: ${{ secrets.ALLOWED_ORIGINS }}
-        DB_CONNECTION_STRING_USERS: ${{ secrets.DB_CONNECTION_STRING_USERS }}
-        DB_CONNECTION_STRING_CONTRACTS: ${{ secrets.DB_CONNECTION_STRING_CONTRACTS }}
-        DB_CONNECTION_STRING_SHIFTS: ${{ secrets.DB_CONNECTION_STRING_SHIFTS }}
-        FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
-        FIREBASE_URL: ${{ secrets.FIREBASE_URL }}
-        FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
-        FIREBASE_PRIVATE_KEY_ID: ${{ secrets.FIREBASE_PRIVATE_KEY_ID }}
-        FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
-        FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
-        FIREBASE_CLIENT_ID: ${{ secrets.FIREBASE_CLIENT_ID }}
-        FIREBASE_CLIENT_CERT_URL: ${{ secrets.FIREBASE_CLIENT_CERT_URL }}
-        EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
-        EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
-        JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
-        JWT_ISSUER: ${{ secrets.JWT_ISSUER }}
-        JWT_AUDIENCE: ${{ secrets.JWT_AUDIENCE }}
-        RABBITMQ_HOST: ${{ secrets.RABBITMQ_HOST }}
-        RABBITMQ_USERNAME: ${{ secrets.RABBITMQ_USERNAME }}
-        RABBITMQ_PASSWORD: ${{ secrets.RABBITMQ_PASSWORD }}
-        AWS_BUCKET_NAME: ${{ secrets.AWS_BUCKET_NAME }}
-        AWS_REGION: ${{ secrets.AWS_REGION }}
-        AWS_ACCESS_KEY: ${{ secrets.AWS_ACCESS_KEY }}
-        AWS_SECRET_KEY: ${{ secrets.AWS_SECRET_KEY }}
-        SIGNATURE_CERT_PATH: ${{ secrets.SIGNATURE_CERT_PATH }}
-        SIGNATURE_CERT_PASSWORD: ${{ secrets.SIGNATURE_CERT_PASSWORD }}
-        GOONG_API_KEY: ${{ secrets.GOONG_API_KEY }}
-        MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
       run: |
         cd basms-be
 
-        cat > .env.production << 'EOF'
-        # Database
+        cat > .env.production << EOF
         MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD }}
         DB_CONNECTION_STRING_USERS=${{ secrets.DB_CONNECTION_STRING_USERS }}
         DB_CONNECTION_STRING_CONTRACTS=${{ secrets.DB_CONNECTION_STRING_CONTRACTS }}
         DB_CONNECTION_STRING_SHIFTS=${{ secrets.DB_CONNECTION_STRING_SHIFTS }}
-
-        # Firebase
         FIREBASE_API_KEY=${{ secrets.FIREBASE_API_KEY }}
         FIREBASE_URL=${{ secrets.FIREBASE_URL }}
         FIREBASE_PROJECT_ID=${{ secrets.FIREBASE_PROJECT_ID }}
@@ -65,39 +33,34 @@ jobs:
         FIREBASE_CLIENT_EMAIL=${{ secrets.FIREBASE_CLIENT_EMAIL }}
         FIREBASE_CLIENT_ID=${{ secrets.FIREBASE_CLIENT_ID }}
         FIREBASE_CLIENT_CERT_URL=${{ secrets.FIREBASE_CLIENT_CERT_URL }}
-
-        # Email
         EMAIL_SENDER=${{ secrets.EMAIL_SENDER }}
         EMAIL_PASSWORD=${{ secrets.EMAIL_PASSWORD }}
-
-        # JWT
         JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}
         JWT_ISSUER=${{ secrets.JWT_ISSUER }}
         JWT_AUDIENCE=${{ secrets.JWT_AUDIENCE }}
-
-        # RabbitMQ
         RABBITMQ_HOST=${{ secrets.RABBITMQ_HOST }}
         RABBITMQ_USERNAME=${{ secrets.RABBITMQ_USERNAME }}
         RABBITMQ_PASSWORD=${{ secrets.RABBITMQ_PASSWORD }}
-
-        # AWS
         AWS_BUCKET_NAME=${{ secrets.AWS_BUCKET_NAME }}
         AWS_REGION=${{ secrets.AWS_REGION }}
         AWS_ACCESS_KEY=${{ secrets.AWS_ACCESS_KEY }}
         AWS_SECRET_KEY=${{ secrets.AWS_SECRET_KEY }}
-
-        # Signature
         SIGNATURE_CERT_PATH=${{ secrets.SIGNATURE_CERT_PATH }}
         SIGNATURE_CERT_PASSWORD=${{ secrets.SIGNATURE_CERT_PASSWORD }}
-
-        # Goong API
         GOONG_API_KEY=${{ secrets.GOONG_API_KEY }}
-
-        # CORS
         ALLOWED_ORIGINS=${{ secrets.ALLOWED_ORIGINS }}
         EOF
 
         echo ".env.production file created"
+        echo "Verifying .env.production file..."
+        if [ -f .env.production ]; then
+          echo "File exists, size: $(wc -c < .env.production) bytes"
+          echo "First few lines (masked):"
+          head -3 .env.production | sed 's/=.*/=***/'
+        else
+          echo "ERROR: .env.production file not created!"
+          exit 1
+        fi
 
     - name: Create deployment package
       run: |
@@ -155,8 +118,21 @@ jobs:
           if [ -f .env.production ]; then
             mv .env.production .env
             echo ".env file created from .env.production"
+            echo "File size: $(wc -c < .env) bytes"
+            echo "Number of variables: $(grep -c '=' .env || echo 0)"
+
+            # Verify critical variables exist
+            echo "Verifying critical environment variables..."
+            for var in ALLOWED_ORIGINS DB_CONNECTION_STRING_USERS JWT_SECRET_KEY RABBITMQ_HOST; do
+              if grep -q "^${var}=" .env; then
+                echo "✓ $var is set"
+              else
+                echo "✗ WARNING: $var is missing!"
+              fi
+            done
           else
-            echo "Warning: .env.production not found!"
+            echo "ERROR: .env.production not found!"
+            exit 1
           fi
 
           # Stop existing containers
