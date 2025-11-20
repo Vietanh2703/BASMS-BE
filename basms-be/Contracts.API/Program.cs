@@ -146,7 +146,17 @@ builder.Services.AddMassTransit(x =>
 
 
 // Cấu hình CORS cho frontend
-var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>();
+// Đọc từ ALLOWED_ORIGINS env var (string phân cách bằng dấu phẩy) hoặc AllowedOrigins section
+var allowedOriginsString = builder.Configuration["ALLOWED_ORIGINS"]
+                         ?? builder.Configuration["AllowedOrigins"]
+                         ?? "";
+
+var allowedOrigins = string.IsNullOrWhiteSpace(allowedOriginsString)
+    ? new[] { "http://localhost:3000" } // Fallback cho development
+    : allowedOriginsString.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+Console.WriteLine($"CORS Allowed Origins: {string.Join(", ", allowedOrigins)}");
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend",
