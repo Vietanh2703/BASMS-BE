@@ -104,42 +104,39 @@ jobs:
           echo "Starting deployment on VPS..."
 
           # Create deployment directory if not exists
-          sudo mkdir -p /var/www/basms
+          mkdir -p ~/basms
 
           # Backup old deployment
-          if [ -d "/var/www/basms/old" ]; then
-            sudo rm -rf /var/www/basms/old
+          if [ -d ~/basms/old ]; then
+            rm -rf ~/basms/old
           fi
-          if [ -d "/var/www/basms/current" ]; then
-            sudo mv /var/www/basms/current /var/www/basms/old
+          if [ -d ~/basms/current ]; then
+            mv ~/basms/current ~/basms/old
           fi
 
           # Create new deployment directory
-          sudo mkdir -p /var/www/basms/current
+          mkdir -p ~/basms/current
 
           # Extract the package
-          cd /var/www/basms/current
-          sudo tar -xzf /tmp/basms-backend.tar.gz
-
-          # Set permissions
-          sudo chown -R $USER:$USER /var/www/basms/current
+          cd ~/basms/current
+          tar -xzf /tmp/basms-backend.tar.gz
 
           # Stop existing containers
           echo "Stopping existing containers..."
-          cd /var/www/basms/current
-          sudo docker-compose down || echo "No containers to stop"
+          cd ~/basms/current
+          docker compose down || echo "No containers to stop"
 
           # Remove old images to free up space
           echo "Cleaning up old Docker images..."
-          sudo docker image prune -af --filter "until=24h" || true
+          docker image prune -af --filter "until=24h" || true
 
           # Build Docker images
           echo "Building Docker images..."
-          sudo docker-compose build --no-cache
+          docker compose build --no-cache
 
           # Start services with Docker Compose
           echo "Starting services with Docker Compose..."
-          sudo docker-compose up -d
+          docker compose up -d
 
           # Wait for services to be healthy
           echo "Waiting for services to start..."
@@ -147,11 +144,11 @@ jobs:
 
           # Check service status
           echo "Service status:"
-          sudo docker-compose ps
+          docker compose ps
 
           # Show logs
           echo "Recent logs:"
-          sudo docker-compose logs --tail=50
+          docker compose logs --tail=50
 
           # Cleanup
           rm -f /tmp/basms-backend.tar.gz
