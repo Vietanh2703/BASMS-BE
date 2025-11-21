@@ -32,8 +32,12 @@ public class CreateUserEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/users", async (CreateUserRequest request, ISender sender) =>
+        app.MapPost("/api/users", async (CreateUserRequest request, ISender sender, ILogger<CreateUserEndpoint> logger, HttpContext httpContext) =>
         {
+            // Log để debug routing issue
+            logger.LogInformation("CreateUserEndpoint HIT - Method: {Method}, Path: {Path}",
+                httpContext.Request.Method, httpContext.Request.Path);
+
             // Bước 1: Chuyển đổi request từ client thành command để xử lý
             // Sử dụng Mapster để tự động map các property giống nhau
             var command = request.Adapt<CreateUserCommand>();
@@ -49,6 +53,7 @@ public class CreateUserEndpoint : ICarterModule
             // Location header chứa URL để lấy thông tin user vừa tạo
             return Results.Created($"/users/{response.Id}", response);
         })
+        .AllowAnonymous()  // Explicitly allow anonymous access for user registration
         .WithTags("Users")  // Nhóm endpoint trong Swagger UI
         .WithName("CreateUser")  // Tên endpoint để reference
         // Định nghĩa các response codes có thể trả về

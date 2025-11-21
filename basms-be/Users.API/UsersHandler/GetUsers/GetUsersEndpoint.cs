@@ -4,8 +4,12 @@ public class GetUsersEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/users", async (ISender sender) =>
+        app.MapGet("/api/users", async (ISender sender, ILogger<GetUsersEndpoint> logger, HttpContext httpContext) =>
         {
+            // Log để debug routing issue
+            logger.LogInformation("GetUsersEndpoint HIT - Method: {Method}, Path: {Path}",
+                httpContext.Request.Method, httpContext.Request.Path);
+
             var query = new GetUsersQuery();
             var result = await sender.Send(query);
             return Results.Ok(result);

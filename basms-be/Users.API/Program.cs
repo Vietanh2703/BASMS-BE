@@ -211,6 +211,10 @@ var app = builder.Build();
 // Middleware này phải đặt đầu tiên để catch tất cả exceptions
 app.UseGlobalExceptionHandler();
 
+// IMPORTANT: CORS phải đặt TRƯỚC Authentication/Authorization
+// Để handle CORS preflight (OPTIONS) requests đúng cách
+app.UseCors("AllowFrontend");
+
 // Thêm Authentication middleware
 // Middleware này đọc JWT token từ header và authenticate user
 app.UseAuthentication();
@@ -219,7 +223,7 @@ app.UseAuthentication();
 // Middleware này kiểm tra user có quyền truy cập endpoint không
 app.UseAuthorization();
 
-// Map tất cả Carter endpoints
+// Map tất cả Carter endpoints - SAU CÙNG
 app.MapCarter();
-app.UseCors("AllowFrontend");
+
 app.Run();
