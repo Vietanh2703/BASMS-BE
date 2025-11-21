@@ -1,3 +1,5 @@
+using BuildingBlocks.Extensions;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Đăng ký Carter - Library để tổ chức API endpoints theo module
@@ -194,6 +196,10 @@ using (var scope = app.Services.CreateScope())
         Console.WriteLine("✓ Shifts database tables initialized successfully");
     }
 }
+
+// Thêm Global Exception Handler Middleware
+// Middleware này phải đặt đầu tiên để catch tất cả exceptions
+app.UseGlobalExceptionHandler();
 
 app.MapCarter();
 app.UseCors("AllowFrontend");

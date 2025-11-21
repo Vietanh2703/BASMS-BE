@@ -1,4 +1,6 @@
-﻿namespace Users.API.UsersHandler.LoginUser;
+﻿using BuildingBlocks.Exceptions;
+
+namespace Users.API.UsersHandler.LoginUser;
 
 // Command để đăng nhập - hỗ trợ cả email/password và Google
 public record LoginUserCommand(
@@ -40,8 +42,13 @@ public class LoginUserHandler(
         var validationResult = await validator.ValidateAsync(command, cancellationToken);
         if (!validationResult.IsValid)
         {
-            var errors = string.Join(", ", validationResult.Errors.Select(e => e.ErrorMessage));
-            throw new InvalidOperationException($"Validation failed: {errors}");
+            var validationErrors = validationResult.Errors
+                .GroupBy(e => e.PropertyName)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Select(e => e.ErrorMessage).ToArray()
+                );
+            throw new BuildingBlocks.Exceptions.ValidationException(validationErrors, "LOGIN_VALIDATION_ERROR");
         }
 
         try
@@ -183,21 +190,21 @@ public class LoginUserHandler(
         if (user == null)
         {
             logger.LogWarning("Login failed: User not found with email {Email}", email);
-            throw new UnauthorizedAccessException("Invalid email or password");
+            throw new UnauthorizedException("Invalid email or password", "AUTH_INVALID_CREDENTIALS");
         }
 
         // Bước 2: Kiểm tra account active
         if (!user.IsActive)
         {
             logger.LogWarning("Login failed: User account inactive for email {Email}", email);
-            throw new UnauthorizedAccessException("Account is inactive. Please contact support.");
+            throw new UnauthorizedException("Account is inactive. Please contact support.", "AUTH_ACCOUNT_INACTIVE");
         }
 
         // Bước 3: Kiểm tra user có password không
         if (string.IsNullOrEmpty(user.Password))
         {
             logger.LogWarning("Login failed: No password set for user {Email}. User may have registered with Google.", email);
-            throw new UnauthorizedAccessException("This account was registered with Google. Please use Google sign-in.");
+            throw new UnauthorizedException("This account was registered with Google. Please use Google sign-in.", "AUTH_USE_GOOGLE_LOGIN");
         }
 
         // Bước 4: Verify password với BCrypt
@@ -207,13 +214,13 @@ public class LoginUserHandler(
             if (!isPasswordValid)
             {
                 logger.LogWarning("Login failed: Invalid password for user {Email}", email);
-                throw new UnauthorizedAccessException("Invalid password. Please check your password and try again.");
+                throw new UnauthorizedException("Invalid password. Please check your password and try again.", "AUTH_INVALID_PASSWORD");
             }
         }
         catch (BCrypt.Net.SaltParseException ex)
         {
             logger.LogError(ex, "Login failed: Password hash corrupted for user {Email}", email);
-            throw new UnauthorizedAccessException("Account error. Please contact support.");
+            throw new UnauthorizedException("Account error. Please contact support.", "AUTH_ACCOUNT_ERROR");
         }
 
         logger.LogInformation("User authenticated successfully with email/password: {Email}", email);
@@ -237,7 +244,7 @@ public class LoginUserHandler(
 
             if (string.IsNullOrEmpty(email))
             {
-                throw new UnauthorizedAccessException("Email not found in Google token");
+                throw new UnauthorizedException("Email not found in Google token", "AUTH_GOOGLE_EMAIL_MISSING");
             }
 
             // Bước 2: Tìm user theo Firebase UID hoặc email
@@ -264,7 +271,7 @@ public class LoginUserHandler(
             // Bước 5: Kiểm tra account có active không
             if (!user.IsActive)
             {
-                throw new UnauthorizedAccessException("Account is inactive");
+                throw new UnauthorizedException("Account is inactive", "AUTH_ACCOUNT_INACTIVE");
             }
 
             return user;
@@ -272,7 +279,7 @@ public class LoginUserHandler(
         catch (FirebaseAuthException ex)
         {
             logger.LogError(ex, "Firebase authentication failed");
-            throw new UnauthorizedAccessException("Invalid Google token", ex);
+            throw new UnauthorizedException("Invalid Google token", ex, "AUTH_GOOGLE_TOKEN_INVALID");
         }
     }
 
@@ -293,7 +300,7 @@ public class LoginUserHandler(
         var defaultRole = roles.FirstOrDefault(r => r.Name == "guard" && !r.IsDeleted);
         if (defaultRole == null)
         {
-            throw new InvalidOperationException("Default role 'guard' not found");
+            throw new NotFoundException("Default role 'guard' not found", "ROLE_NOT_FOUND");
         }
 
         // Bước 3: Tạo entity User mới
@@ -333,13 +340,13 @@ public class LoginUserHandler(
             var userRecord = await FirebaseAuth.DefaultInstance.GetUserAsync(firebaseUid);
             if (userRecord.Disabled)
             {
-                throw new UnauthorizedAccessException("Firebase account is disabled");
+                throw new UnauthorizedException("Firebase account is disabled", "AUTH_FIREBASE_DISABLED");
             }
         }
         catch (FirebaseAuthException ex)
         {
             logger.LogError(ex, "Firebase user verification failed for UID: {FirebaseUid}", firebaseUid);
-            throw new UnauthorizedAccessException("Firebase authentication failed", ex);
+            throw new UnauthorizedException("Firebase authentication failed", ex, "AUTH_FIREBASE_FAILED");
         }
     }
 

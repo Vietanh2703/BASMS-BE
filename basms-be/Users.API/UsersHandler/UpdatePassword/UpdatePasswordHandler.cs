@@ -1,4 +1,6 @@
-﻿// Handler xử lý logic đổi mật khẩu
+﻿using BuildingBlocks.Exceptions;
+
+// Handler xử lý logic đổi mật khẩu
 // Thực hiện: Verify old password -> Tạo pending password reset -> Gửi OTP -> Chờ verify OTP để confirm
 namespace Users.API.UsersHandler.UpdatePassword;
 
@@ -35,8 +37,13 @@ internal class UpdatePasswordHandler(
         var validationResult = await validator.ValidateAsync(command, cancellationToken);
         if (!validationResult.IsValid)
         {
-            var errors = string.Join(", ", validationResult.Errors.Select(e => e.ErrorMessage));
-            throw new InvalidOperationException($"Validation failed: {errors}");
+            var validationErrors = validationResult.Errors
+                .GroupBy(e => e.PropertyName)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Select(e => e.ErrorMessage).ToArray()
+                );
+            throw new BuildingBlocks.Exceptions.ValidationException(validationErrors, "UPDATE_PASSWORD_VALIDATION_ERROR");
         }
 
         logger.LogInformation("Initiating password update for email: {Email}", command.Email);
@@ -56,7 +63,7 @@ internal class UpdatePasswordHandler(
                 if (user == null)
                 {
                     logger.LogWarning("User not found with email: {Email}", command.Email);
-                    throw new InvalidOperationException("User not found");
+                    throw new NotFoundException("User not found", "USER_NOT_FOUND");
                 }
 
                 userId = user.Id;
@@ -66,14 +73,14 @@ internal class UpdatePasswordHandler(
                 if (!BCrypt.Net.BCrypt.Verify(command.OldPassword, user.Password))
                 {
                     logger.LogWarning("Invalid old password for user: {Email}", command.Email);
-                    throw new InvalidOperationException("Current password is incorrect");
+                    throw new UnauthorizedException("Current password is incorrect", "AUTH_INVALID_PASSWORD");
                 }
 
                 // Bước 4: Kiểm tra new password khác old password
                 // Không cho phép đổi sang password giống cũ
                 if (BCrypt.Net.BCrypt.Verify(command.NewPassword, user.Password))
                 {
-                    throw new InvalidOperationException("New password must be different from current password");
+                    throw new BadRequestException("New password must be different from current password", "PASSWORD_SAME_AS_OLD");
                 }
 
                 // Bước 5: Vô hiệu hóa các password reset tokens cũ

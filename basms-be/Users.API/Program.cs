@@ -1,5 +1,7 @@
 // File cấu hình chính của ứng dụng
 // Thiết lập: DI Container, Database, Firebase, Email, JWT Authentication, Authorization
+using BuildingBlocks.Extensions;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Đăng ký Carter - Library để tổ chức API endpoints theo module
@@ -204,6 +206,10 @@ builder.Services.AddCors(options =>
         });
 });
 var app = builder.Build();
+
+// Thêm Global Exception Handler Middleware
+// Middleware này phải đặt đầu tiên để catch tất cả exceptions
+app.UseGlobalExceptionHandler();
 
 // Thêm Authentication middleware
 // Middleware này đọc JWT token từ header và authenticate user

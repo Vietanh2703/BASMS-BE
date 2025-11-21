@@ -1,3 +1,5 @@
+using BuildingBlocks.Exceptions;
+
 namespace Users.API.UsersHandler.RefreshAccessToken;
 
 // Command để refresh access token
@@ -44,14 +46,14 @@ public class RefreshAccessTokenHandler(
                 if (storedToken == null)
                 {
                     logger.LogWarning("Refresh token not found or revoked");
-                    throw new UnauthorizedAccessException("Invalid refresh token");
+                    throw new UnauthorizedException("Invalid refresh token", "AUTH_INVALID_REFRESH_TOKEN");
                 }
 
                 // Bước 4: Kiểm tra refresh token còn hạn không
                 if (storedToken.ExpiresAt <= DateTime.UtcNow)
                 {
                     logger.LogWarning("Refresh token expired for UserId: {UserId}", storedToken.UserId);
-                    throw new UnauthorizedAccessException("Refresh token expired");
+                    throw new UnauthorizedException("Refresh token expired", "AUTH_REFRESH_TOKEN_EXPIRED");
                 }
 
                 // Bước 5: Lấy thông tin user
@@ -59,14 +61,14 @@ public class RefreshAccessTokenHandler(
                 if (user == null || user.IsDeleted)
                 {
                     logger.LogWarning("User not found for refresh token");
-                    throw new UnauthorizedAccessException("User not found");
+                    throw new NotFoundException("User not found", "USER_NOT_FOUND");
                 }
 
                 // Bước 6: Kiểm tra user có active không
                 if (!user.IsActive)
                 {
                     logger.LogWarning("User account inactive for UserId: {UserId}", user.Id);
-                    throw new UnauthorizedAccessException("Account is inactive");
+                    throw new UnauthorizedException("Account is inactive", "AUTH_ACCOUNT_INACTIVE");
                 }
 
                 // Bước 7: Tạo JWT tokens mới
