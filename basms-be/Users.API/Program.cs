@@ -100,8 +100,6 @@ builder.Services.AddMassTransit(x =>
     // Configure RabbitMQ
     x.UsingRabbitMq((context, cfg) =>
     {
-        // Ưu tiên đọc từ environment variables trực tiếp (RABBITMQ_HOST)
-        // Fallback về RabbitMQ:Host (nested config) nếu không có
         var rabbitMqHost = builder.Configuration["RABBITMQ_HOST"]
                         ?? builder.Configuration["RabbitMQ__Host"]
                         ?? builder.Configuration["RabbitMQ:Host"]

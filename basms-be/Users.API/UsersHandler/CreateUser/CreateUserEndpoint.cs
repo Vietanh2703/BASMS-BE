@@ -54,9 +54,8 @@ public class CreateUserEndpoint : ICarterModule
             return Results.Created($"/users/{response.Id}", response);
         })
         .AllowAnonymous()  // Explicitly allow anonymous access for user registration
-        .WithTags("Users")  // Nhóm endpoint trong Swagger UI
-        .WithName("CreateUser")  // Tên endpoint để reference
-        // Định nghĩa các response codes có thể trả về
+        .WithTags("Users")  
+        .WithName("CreateUser")  
         .Produces<CreateUserResponse>(StatusCodes.Status201Created)  // Thành công
         .ProducesProblem(StatusCodes.Status400BadRequest)  // Dữ liệu không hợp lệ
         .ProducesProblem(StatusCodes.Status401Unauthorized)  // Chưa đăng nhập
