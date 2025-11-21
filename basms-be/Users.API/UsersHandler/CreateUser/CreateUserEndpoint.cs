@@ -32,11 +32,11 @@ public class CreateUserEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/users", async (CreateUserRequest request, ISender sender, ILogger<CreateUserEndpoint> logger, HttpContext httpContext) =>
+        app.MapPost("/api/users/create", async (CreateUserRequest request, ISender sender, ILogger<CreateUserEndpoint> logger, HttpContext httpContext) =>
         {
             // Log để debug routing issue
-            logger.LogInformation("CreateUserEndpoint HIT - Method: {Method}, Path: {Path}",
-                httpContext.Request.Method, httpContext.Request.Path);
+            logger.LogInformation("CreateUserEndpoint HIT - Method: {Method}, Path: {Path}, ContentType: {ContentType}",
+                httpContext.Request.Method, httpContext.Request.Path, httpContext.Request.ContentType);
 
             // Bước 1: Chuyển đổi request từ client thành command để xử lý
             // Sử dụng Mapster để tự động map các property giống nhau
