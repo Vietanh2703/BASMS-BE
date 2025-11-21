@@ -32,7 +32,7 @@ public class CreateUserEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/users", async (CreateUserRequest request, ISender sender) =>
+        app.MapPost("/api/user", async (CreateUserRequest request, ISender sender) =>
         {
             // Bước 1: Chuyển đổi request từ client thành command để xử lý
             // Sử dụng Mapster để tự động map các property giống nhau
