@@ -12,7 +12,6 @@ public record RequestResetPasswordResult(
 );
 
 internal class RequestResetPasswordHandler(
-    IDbConnectionFactory connectionFactory,
     ILogger<RequestResetPasswordHandler> logger,
     ISender sender,
     RequestResetPasswordValidator validator) // MediatR sender to call CreateOtpHandler
@@ -32,30 +31,8 @@ internal class RequestResetPasswordHandler(
         {
             logger.LogInformation("Processing reset password request for email: {Email}", command.Email);
 
-            // Validate email exists
-            using var connection = await connectionFactory.CreateConnectionAsync();
-            var users = await connection.GetAllAsync<Models.Users>();
-            var user = users.FirstOrDefault(u => u.Email == command.Email && !u.IsDeleted);
-
-            if (user == null)
-            {
-                // Return success even if user not found (security best practice - don't reveal if email exists)
-                logger.LogWarning("Reset password requested for non-existent email: {Email}", command.Email);
-                return new RequestResetPasswordResult(
-                    true,
-                    "If an account with this email exists, you will receive an OTP code shortly."
-                );
-            }
-
-            // Check if account is active
-            if (!user.IsActive)
-            {
-                logger.LogWarning("Reset password requested for inactive account: {Email}", command.Email);
-                return new RequestResetPasswordResult(
-                    false,
-                    "Your account is inactive. Please contact support."
-                );
-            }
+            // Note: Email validation should be done using ValidateEmail endpoint before calling this
+            // This handler assumes the email has already been validated
 
             // Create OTP using CreateOtpHandler
             var createOtpCommand = new CreateOtpCommand(
