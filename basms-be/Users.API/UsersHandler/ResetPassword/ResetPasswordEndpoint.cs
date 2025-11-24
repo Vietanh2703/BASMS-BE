@@ -60,29 +60,7 @@ public class ResetPasswordEndpoint : ICarterModule
         .WithSummary("Request password reset OTP")
         .WithDescription("Sends an OTP code to the user's email. Step 2 of 4: Validate Email → Request OTP → Verify OTP → Reset Password");
 
-        // Step 3: Verify OTP for password reset
-        app.MapPost("/api/users/reset-password/verify-otp", async (VerifyResetPasswordOtpRequest request, ISender sender) =>
-        {
-            var command = new VerifyResetPasswordOtpCommand(
-                Email: request.Email,
-                OtpCode: request.OtpCode
-            );
 
-            var result = await sender.Send(command);
-            var response = result.Adapt<VerifyResetPasswordOtpResponse>();
-
-            return Results.Ok(response);
-        })
-        .AllowAnonymous()
-        .WithTags("Users")
-        .WithName("VerifyResetPasswordOtp")
-        .Produces<VerifyResetPasswordOtpResponse>(StatusCodes.Status200OK)
-        .ProducesProblem(StatusCodes.Status400BadRequest)
-        .ProducesProblem(StatusCodes.Status500InternalServerError)
-        .WithSummary("Verify OTP for password reset")
-        .WithDescription("Verifies the OTP code sent to user's email. Step 3 of 4: Validate Email → Request OTP → Verify OTP → Reset Password");
-
-        // Step 4: Reset password with new password
         app.MapPost("/api/users/reset-password", async (CompleteResetPasswordRequest request, ISender sender) =>
         {
             var command = new CompleteResetPasswordCommand(
