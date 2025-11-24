@@ -9,7 +9,7 @@ public class UpdateOtpEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        app.MapPut("/api/otp/refresh-otp", async ([FromBody] UpdateOtpRequest request, ISender sender) =>
+        app.MapPut("/api/users/refresh-otp", async ([FromBody] UpdateOtpRequest request, ISender sender) =>
             {
                 var command = new UpdateOtpCommand(
                     Email: request.Email,
