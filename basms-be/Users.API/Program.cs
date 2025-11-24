@@ -161,10 +161,10 @@ builder.Services.AddAuthentication(options =>
     // Cấu hình validation parameters cho JWT token
     options.TokenValidationParameters = new TokenValidationParameters
     {
-        ValidateIssuer = true,              // Validate Issuer (người phát hành token)
-        ValidateAudience = true,            // Validate Audience (người nhận token)
-        ValidateLifetime = true,            // Validate token chưa hết hạn
-        ValidateIssuerSigningKey = true,    // Validate chữ ký token
+        ValidateIssuer = true,              
+        ValidateAudience = true,            
+        ValidateLifetime = true,            
+        ValidateIssuerSigningKey = true,   
         ValidIssuer = jwtSettings?.Issuer,
         ValidAudience = jwtSettings?.Audience,
         // Key để verify chữ ký token
@@ -179,8 +179,6 @@ builder.Services.AddAuthorization();
 // Cho phép truy cập HttpContext (JWT claims) trong handlers
 builder.Services.AddHttpContextAccessor();
 
-// Cấu hình CORS cho frontend
-// Đọc từ ALLOWED_ORIGINS env var (string phân cách bằng dấu phẩy) hoặc AllowedOrigins section
 var allowedOriginsString = builder.Configuration["ALLOWED_ORIGINS"]
                          ?? builder.Configuration["AllowedOrigins"]
                          ?? "";

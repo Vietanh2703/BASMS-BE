@@ -1,8 +1,4 @@
-﻿using Carter;
-using MediatR;
-using Microsoft.AspNetCore.Mvc;
-
-namespace Users.API.UsersHandler.CreateOtp;
+﻿namespace Users.API.Extensions.CreateOtp;
 
 public record CreateOtpRequest(
     string Email,
