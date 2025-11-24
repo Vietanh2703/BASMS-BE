@@ -58,7 +58,7 @@ public class ResetPasswordEndpoint : ICarterModule
         .ProducesProblem(StatusCodes.Status400BadRequest)
         .ProducesProblem(StatusCodes.Status500InternalServerError)
         .WithSummary("Request password reset OTP")
-        .WithDescription("Sends an OTP code to the user's email. Step 2 of 4: Validate Email → Request OTP → Verify OTP → Reset Password");
+        .WithDescription("Sends an OTP code to the user's email.");
 
 
         app.MapPost("/api/users/reset-password", async (CompleteResetPasswordRequest request, ISender sender) =>
@@ -81,6 +81,6 @@ public class ResetPasswordEndpoint : ICarterModule
         .ProducesProblem(StatusCodes.Status400BadRequest)
         .ProducesProblem(StatusCodes.Status500InternalServerError)
         .WithSummary("Reset password")
-        .WithDescription("Updates the user's password after successful OTP verification. Step 4 of 4: Validate Email → Request OTP → Verify OTP → Reset Password. Accepts email, new password, and confirm password.");
+        .WithDescription("Updates the user's password after successful OTP verification.");
     }
 }

@@ -12,6 +12,7 @@ public record RequestResetPasswordResult(
 );
 
 internal class RequestResetPasswordHandler(
+    IDbConnectionFactory connectionFactory,
     ILogger<RequestResetPasswordHandler> logger,
     ISender sender,
     RequestResetPasswordValidator validator) // MediatR sender to call CreateOtpHandler
@@ -31,8 +32,49 @@ internal class RequestResetPasswordHandler(
         {
             logger.LogInformation("Processing reset password request for email: {Email}", command.Email);
 
-            // Note: Email validation should be done using ValidateEmail endpoint before calling this
-            // This handler assumes the email has already been validated
+            // Validate account status before sending OTP
+            using var connection = await connectionFactory.CreateConnectionAsync();
+            var users = await connection.GetAllAsync<Models.Users>();
+            var user = users.FirstOrDefault(u => u.Email == command.Email && !u.IsDeleted);
+
+            if (user == null)
+            {
+                // Return generic message for security (don't reveal if email exists)
+                logger.LogWarning("Reset password requested for non-existent email: {Email}", command.Email);
+                return new RequestResetPasswordResult(
+                    false,
+                    "Unable to process password reset request. Please verify your email address."
+                );
+            }
+
+            // Check if account is active
+            if (!user.IsActive)
+            {
+                logger.LogWarning("Reset password requested for inactive account: {Email}", command.Email);
+                return new RequestResetPasswordResult(
+                    false,
+                    "Your account is inactive. Please contact support."
+                );
+            }
+
+            // Check if account is locked or suspended
+            if (user.Status?.ToLower() == "locked")
+            {
+                logger.LogWarning("Reset password requested for locked account: {Email}", command.Email);
+                return new RequestResetPasswordResult(
+                    false,
+                    "Your account has been locked. Please contact support to unlock your account."
+                );
+            }
+
+            if (user.Status?.ToLower() == "suspended")
+            {
+                logger.LogWarning("Reset password requested for suspended account: {Email}", command.Email);
+                return new RequestResetPasswordResult(
+                    false,
+                    "Your account has been suspended. Please contact support."
+                );
+            }
 
             // Create OTP using CreateOtpHandler
             var createOtpCommand = new CreateOtpCommand(
