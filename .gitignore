@@ -18,6 +18,9 @@
 appsettings.local.json
 appsettings.*.local.json
 
+# Development appsettings with sensitive data (DO NOT COMMIT)
+**/appsettings.Development.json
+
 # All .xml files
 *.xml
 
