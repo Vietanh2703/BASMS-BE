@@ -115,7 +115,6 @@ internal class GetAllContractDocumentsHandler(
                 DocumentName = d.DocumentName,
                 FileUrl = d.FileUrl,
                 FileSize = d.FileSize,
-                MimeType = d.MimeType,
                 Version = d.Version,
                 DocumentDate = d.DocumentDate,
                 UploadedBy = d.UploadedBy,

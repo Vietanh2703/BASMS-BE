@@ -180,13 +180,15 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     `DocumentName` VARCHAR(255) NOT NULL,
                     `FileUrl` VARCHAR(500) NOT NULL,
                     `FileSize` BIGINT NULL,
-                    `MimeType` VARCHAR(100) NULL,
                     `Version` VARCHAR(20) NOT NULL DEFAULT '1.0',
+                    `Tokens` VARCHAR(100) NOT NULL,
+                    `TokenExpiredDay` DATETIME NOT NULL,
                     `DocumentDate` DATE NULL,
                     `UploadedBy` CHAR(36) NULL,
                     `IsDeleted` BOOLEAN NOT NULL DEFAULT FALSE,
                     `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    INDEX `idx_doc_type` (`DocumentType`)
+                    INDEX `idx_doc_type` (`DocumentType`),
+                    INDEX `idx_doc_token` (`Tokens`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 COMMENT='Tài liệu hợp đồng';
              ");

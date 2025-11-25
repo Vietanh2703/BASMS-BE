@@ -107,9 +107,6 @@ builder.Services.AddScoped<Contracts.API.Extensions.IS3Service, Contracts.API.Ex
 builder.Services.AddScoped<Contracts.API.Extensions.IWordContractService, Contracts.API.Extensions.WordContractService>();
 builder.Services.AddScoped<Contracts.API.Extensions.IDigitalSignatureService, Contracts.API.Extensions.DigitalSignatureService>();
 
-// Đăng ký Background Job để xử lý contract tự động (thay thế AWS Lambda)
-builder.Services.AddScoped<Contracts.API.BackgroundJobs.ContractProcessingJob>();
-
 // Đăng ký MassTransit with RabbitMQ
 builder.Services.AddMassTransit(x =>
 {

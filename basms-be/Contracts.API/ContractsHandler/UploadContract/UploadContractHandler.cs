@@ -139,7 +139,6 @@ internal class UploadContractHandler(
                     DocumentName = request.FileName,
                     FileUrl = fileUrl,
                     FileSize = request.FileSize,
-                    MimeType = request.ContentType,
                     Version = "1.0",
                     DocumentDate = request.DocumentDate ?? DateTime.UtcNow,
                     UploadedBy = request.UploadedBy,

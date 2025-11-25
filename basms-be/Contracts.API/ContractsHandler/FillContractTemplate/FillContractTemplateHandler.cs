@@ -30,6 +30,8 @@ public record FillContractFromTemplateResult
     public string? FilledFileUrl { get; init; }
     public string? FilledFileName { get; init; }
     public string? FolderPath { get; init; }
+    public string? SecurityToken { get; init; }
+    public DateTime? TokenExpiredDay { get; init; }
 }
 
 /// <summary>
@@ -198,8 +200,11 @@ internal class FillContractFromTemplateHandler(
 
             logger.LogInformation("Uploaded filled contract to S3: {S3Url}", s3Url);
 
-            // BƯỚC 7: TẠO RECORD TRONG CONTRACT_DOCUMENTS
+            // BƯỚC 7: TẠO RECORD TRONG CONTRACT_DOCUMENTS VỚI TOKEN BẢO MẬT
             var filledDocumentId = Guid.NewGuid();
+            var securityToken = Guid.NewGuid().ToString(); // Token bảo mật để truy cập tài liệu
+            var tokenExpiredDay = DateTime.UtcNow.AddDays(7); // Token hết hạn sau 7 ngày
+
             var filledDocument = new ContractDocument
             {
                 Id = filledDocumentId,
@@ -208,14 +213,17 @@ internal class FillContractFromTemplateHandler(
                 FileSize = 0,
                 DocumentType = "filled_contract",
                 Version = "pending_signature",
+                Tokens = securityToken,
+                TokenExpiredDay = tokenExpiredDay,
                 UploadedBy = Guid.Empty,
                 IsDeleted = false,
                 CreatedAt = DateTime.UtcNow
             };
 
             await connection.InsertAsync(filledDocument);
-            logger.LogInformation("Created ContractDocument record: {DocumentId} with S3 key: {S3Key}",
-                filledDocumentId, s3Key);
+            logger.LogInformation(
+                "Created ContractDocument record: {DocumentId} with S3 key: {S3Key}, Token: {Token}, Expires: {ExpiryDate}",
+                filledDocumentId, s3Key, securityToken, tokenExpiredDay);
 
             return new FillContractFromTemplateResult
             {
@@ -223,7 +231,9 @@ internal class FillContractFromTemplateHandler(
                 FilledFileUrl = s3Url,
                 FilledFileName = fileName,
                 FolderPath = folderPath,
-                FilledDocumentId = filledDocumentId
+                FilledDocumentId = filledDocumentId,
+                SecurityToken = securityToken,
+                TokenExpiredDay = tokenExpiredDay
             };
         }
         catch (Exception ex)

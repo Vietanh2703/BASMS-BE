@@ -1,9 +1,73 @@
 namespace Contracts.API.ContractsHandler.FillContractTemplate;
 
+/// <summary>
+/// Request DTO để điền template từ S3
+/// </summary>
+public record FillContractFromS3Request(
+    Guid TemplateDocumentId,
+    Dictionary<string, object>? Data
+);
+
 public class FillContractTemplateEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
+        // Route: POST /api/contracts/template/fill-from-s3
+        app.MapPost("/api/contracts/template/fill-from-s3",
+                async (FillContractFromS3Request request, ISender sender, ILogger<FillContractTemplateEndpoint> logger) =>
+                {
+                    try
+                    {
+                        logger.LogInformation("Filling template from S3: {TemplateId}", request.TemplateDocumentId);
+
+                        var command = new FillContractFromTemplateCommand(
+                            TemplateDocumentId: request.TemplateDocumentId,
+                            Data: request.Data
+                        );
+
+                        var result = await sender.Send(command);
+
+                        if (!result.Success)
+                        {
+                            return Results.BadRequest(new
+                            {
+                                success = false,
+                                error = result.ErrorMessage
+                            });
+                        }
+
+                        return Results.Ok(new
+                        {
+                            success = true,
+                            data = new
+                            {
+                                documentId = result.FilledDocumentId,
+                                fileUrl = result.FilledFileUrl,
+                                fileName = result.FilledFileName,
+                                folderPath = result.FolderPath,
+                                securityToken = result.SecurityToken,
+                                tokenExpiredDay = result.TokenExpiredDay,
+                                signatureUrl = $"/api/contracts/documents/{result.FilledDocumentId}/sign?token={result.SecurityToken}"
+                            }
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Error filling template from S3");
+                        return Results.Problem(
+                            title: "Fill template from S3 failed",
+                            detail: ex.Message,
+                            statusCode: StatusCodes.Status500InternalServerError
+                        );
+                    }
+                })
+            .WithTags("Contracts")
+            .WithName("FillContractTemplateFromS3")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status500InternalServerError)
+            .WithSummary("Điền template từ S3 và tạo token bảo mật cho ký điện tử");
+
         // Route: POST /api/contracts/template/fill
         app.MapPost("/api/contracts/template/fill",
                 async (HttpRequest request, ISender sender, ILogger<FillContractTemplateEndpoint> logger) =>

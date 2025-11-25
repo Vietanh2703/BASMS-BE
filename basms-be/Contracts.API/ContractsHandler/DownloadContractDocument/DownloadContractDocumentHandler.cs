@@ -93,7 +93,6 @@ internal class DownloadContractDocumentHandler(
                 Success = true,
                 FileStream = fileStream,
                 FileName = document.DocumentName,
-                ContentType = document.MimeType ?? "application/octet-stream",
                 FileSize = document.FileSize
             };
         }

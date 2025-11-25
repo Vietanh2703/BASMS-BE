@@ -32,14 +32,19 @@ public class ContractDocument
     public long? FileSize { get; set; }
 
     /// <summary>
-    /// MIME type: application/pdf, image/jpeg...
-    /// </summary>
-    public string? MimeType { get; set; }
-
-    /// <summary>
     /// Phiên bản tài liệu: 1.0, 1.1, 2.0...
     /// </summary>
     public string Version { get; set; } = "1.0";
+
+    /// <summary>
+    /// Token để truy cập tài liệu
+    /// </summary>
+    public string Tokens { get; set; } = Guid.NewGuid().ToString();
+
+    /// <summary>
+    /// Ngày hết hạn token (7 ngày sau ngày tạo)
+    /// </summary>
+    public DateTime TokenExpiredDay { get; set; } = DateTime.UtcNow.AddDays(7);
 
     /// <summary>
     /// Ngày tài liệu
