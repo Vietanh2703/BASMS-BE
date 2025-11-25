@@ -1,3 +1,4 @@
+using Amazon.Extensions.NETCore.Setup;
 using BuildingBlocks.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -50,17 +51,57 @@ builder.Services.Configure<Contracts.API.Extensions.GoongSettings>(
     builder.Configuration.GetSection("GoongSettings"));
 
 // Đăng ký AWS S3
-builder.Services.Configure<Contracts.API.Extensions.AwsS3Settings>(
-    builder.Configuration.GetSection("AWS"));
+var awsBucketName = builder.Configuration["AWS_BUCKET_NAME"]
+                 ?? builder.Configuration["AWS:BucketName"];
+var awsRegion = builder.Configuration["AWS_REGION"]
+             ?? builder.Configuration["AWS:Region"];
+var awsAccessKey = builder.Configuration["AWS_ACCESS_KEY"]
+                ?? builder.Configuration["AWS:AccessKey"];
+var awsSecretKey = builder.Configuration["AWS_SECRET_KEY"]
+                ?? builder.Configuration["AWS:SecretKey"];
+var awsFolderPrefix = builder.Configuration["AWS:FolderPrefix"] ?? "contracts";
+
+// Validate AWS configuration
+if (string.IsNullOrWhiteSpace(awsRegion))
+{
+    throw new InvalidOperationException("AWS_REGION is not configured. Please set AWS_REGION environment variable.");
+}
+if (string.IsNullOrWhiteSpace(awsBucketName))
+{
+    throw new InvalidOperationException("AWS_BUCKET_NAME is not configured. Please set AWS_BUCKET_NAME environment variable.");
+}
+if (string.IsNullOrWhiteSpace(awsAccessKey) || string.IsNullOrWhiteSpace(awsSecretKey))
+{
+    throw new InvalidOperationException("AWS credentials are not configured. Please set AWS_ACCESS_KEY and AWS_SECRET_KEY environment variables.");
+}
+
+Console.WriteLine($"AWS S3 Config - Region: {awsRegion}, Bucket: {awsBucketName}, Prefix: {awsFolderPrefix}");
+
+// Bind AWS settings manually
+builder.Services.Configure<Contracts.API.Extensions.AwsS3Settings>(options =>
+{
+    options.BucketName = awsBucketName;
+    options.Region = awsRegion;
+    options.AccessKey = awsAccessKey;
+    options.SecretKey = awsSecretKey;
+    options.FolderPrefix = awsFolderPrefix;
+});
+
+// Configure AWS S3 Client
+var awsOptions = new AWSOptions
+{
+    Credentials = new BasicAWSCredentials(awsAccessKey, awsSecretKey),
+    Region = RegionEndpoint.GetBySystemName(awsRegion)
+};
+
+if (awsOptions.Region == null)
+{
+    throw new InvalidOperationException($"Invalid AWS Region: '{awsRegion}'. Valid examples: ap-southeast-2, us-east-1, eu-west-1");
+}
+
+builder.Services.AddDefaultAWSOptions(awsOptions);
 builder.Services.AddAWSService<IAmazonS3>();
 builder.Services.AddScoped<Contracts.API.Extensions.IS3Service, Contracts.API.Extensions.S3Service>();
-var awsOptions = builder.Configuration.GetAWSOptions();
-awsOptions.Credentials = new BasicAWSCredentials(
-    builder.Configuration["AWS:AccessKey"],
-    builder.Configuration["AWS:SecretKey"]
-);
-awsOptions.Region = RegionEndpoint.GetBySystemName(builder.Configuration["AWS:Region"]);
-builder.Services.AddDefaultAWSOptions(awsOptions);
 
 // Đăng ký Word Contract Service và Digital Signature Service
 builder.Services.AddScoped<Contracts.API.Extensions.IWordContractService, Contracts.API.Extensions.WordContractService>();
