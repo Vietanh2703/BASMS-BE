@@ -37,14 +37,14 @@ public class ContractDocument
     public string Version { get; set; } = "1.0";
 
     /// <summary>
-    /// Token để truy cập tài liệu
+    /// Token để truy cập tài liệu (nullable - chỉ có khi cần ký điện tử)
     /// </summary>
-    public string Tokens { get; set; } = Guid.NewGuid().ToString();
+    public string? Tokens { get; set; }
 
     /// <summary>
-    /// Ngày hết hạn token (7 ngày sau ngày tạo)
+    /// Ngày hết hạn token (nullable - NULL sau khi ký hoặc không cần token)
     /// </summary>
-    public DateTime TokenExpiredDay { get; set; } = DateTime.UtcNow.AddDays(7);
+    public DateTime? TokenExpiredDay { get; set; }
 
     /// <summary>
     /// Ngày tài liệu

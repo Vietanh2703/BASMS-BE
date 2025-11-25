@@ -19,7 +19,6 @@ public record ContractDocumentDto
     public string DocumentName { get; init; } = string.Empty;
     public string FileUrl { get; init; } = string.Empty;
     public long? FileSize { get; init; }
-    public string? MimeType { get; init; }
     public string Version { get; init; } = string.Empty;
     public DateTime? DocumentDate { get; init; }
     public Guid? UploadedBy { get; init; }
@@ -90,7 +89,6 @@ internal class GetAllContractDocumentsHandler(
                     DocumentName,
                     FileUrl,
                     FileSize,
-                    MimeType,
                     Version,
                     DocumentDate,
                     UploadedBy,

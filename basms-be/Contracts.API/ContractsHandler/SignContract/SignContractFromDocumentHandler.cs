@@ -1,10 +1,11 @@
 namespace Contracts.API.ContractsHandler.SignContract;
 
 /// <summary>
-/// Command để ký điện tử hợp đồng từ DocumentId (S3-based workflow)
+/// Command để ký điện tử hợp đồng từ DocumentId hoặc Token (S3-based workflow)
 /// </summary>
 public record SignContractFromDocumentCommand(
-    Guid DocumentId,  // FilledDocumentId from S3
+    Guid? DocumentId = null,  // FilledDocumentId from S3 (admin mode)
+    string? Token = null,  // Security token (user mode)
     IFormFile? CertificateFile = null,  // File PFX upload (optional)
     string? CertificatePassword = null  // Password for PFX (optional)
 ) : ICommand<SignContractFromDocumentResult>;
@@ -36,24 +37,71 @@ internal class SignContractFromDocumentHandler(
         try
         {
             logger.LogInformation(
-                "Starting sign contract from document - DocumentId: {DocumentId}",
-                request.DocumentId);
+                "Starting sign contract - DocumentId: {DocumentId}, HasToken: {HasToken}",
+                request.DocumentId, !string.IsNullOrEmpty(request.Token));
 
             using var connection = await connectionFactory.CreateConnectionAsync();
 
             // ================================================================
-            // BƯỚC 1: LẤY THÔNG TIN FILLED DOCUMENT
+            // BƯỚC 1: LẤY THÔNG TIN FILLED DOCUMENT (VIA DOCUMENTID HOẶC TOKEN)
             // ================================================================
-            var filledDoc = await connection.QueryFirstOrDefaultAsync<ContractDocument>(
-                "SELECT * FROM contract_documents WHERE Id = @Id AND IsDeleted = 0",
-                new { Id = request.DocumentId });
+            ContractDocument? filledDoc = null;
 
-            if (filledDoc == null)
+            if (!string.IsNullOrWhiteSpace(request.Token))
+            {
+                // MODE 1: Ký bằng Token (người dùng qua link email)
+                logger.LogInformation("Signing with token");
+
+                filledDoc = await connection.QueryFirstOrDefaultAsync<ContractDocument>(@"
+                    SELECT * FROM contract_documents
+                    WHERE Tokens = @Token AND IsDeleted = 0
+                ", new { Token = request.Token });
+
+                if (filledDoc == null)
+                {
+                    return new SignContractFromDocumentResult
+                    {
+                        Success = false,
+                        ErrorMessage = "Invalid security token or document not found"
+                    };
+                }
+
+                // Validate token expiry
+                if (filledDoc.TokenExpiredDay < DateTime.UtcNow)
+                {
+                    return new SignContractFromDocumentResult
+                    {
+                        Success = false,
+                        ErrorMessage = $"Security token has expired on {filledDoc.TokenExpiredDay:yyyy-MM-dd HH:mm:ss} UTC"
+                    };
+                }
+
+                logger.LogInformation("Token validated successfully. Document: {DocumentId}", filledDoc.Id);
+            }
+            else if (request.DocumentId.HasValue)
+            {
+                // MODE 2: Ký bằng DocumentId (admin mode)
+                logger.LogInformation("Signing with documentId: {DocumentId}", request.DocumentId);
+
+                filledDoc = await connection.QueryFirstOrDefaultAsync<ContractDocument>(
+                    "SELECT * FROM contract_documents WHERE Id = @Id AND IsDeleted = 0",
+                    new { Id = request.DocumentId.Value });
+
+                if (filledDoc == null)
+                {
+                    return new SignContractFromDocumentResult
+                    {
+                        Success = false,
+                        ErrorMessage = $"Filled document {request.DocumentId} not found"
+                    };
+                }
+            }
+            else
             {
                 return new SignContractFromDocumentResult
                 {
                     Success = false,
-                    ErrorMessage = $"Filled document {request.DocumentId} not found"
+                    ErrorMessage = "Either DocumentId or Token must be provided"
                 };
             }
 
@@ -214,7 +262,23 @@ internal class SignContractFromDocumentHandler(
                 signedDocumentId, signedS3Key);
 
             // ================================================================
-            // BƯỚC 8: CẬP NHẬT CONTRACT VỚI SIGNED DOCUMENT ID (nếu có)
+            // BƯỚC 8: CẬP NHẬT FILLED DOCUMENT → SIGNED_DOCUMENT & XÓA TOKEN
+            // ================================================================
+            await connection.ExecuteAsync(@"
+                UPDATE contract_documents
+                SET DocumentType = 'signed_document',
+                    Version = 'signed',
+                    Tokens = NULL,
+                    TokenExpiredDay = NULL
+                WHERE Id = @DocumentId
+            ", new { DocumentId = filledDoc.Id });
+
+            logger.LogInformation(
+                "Updated filled document {DocumentId} to signed_document and cleared tokens",
+                filledDoc.Id);
+
+            // ================================================================
+            // BƯỚC 9: CẬP NHẬT CONTRACT VỚI SIGNED DOCUMENT ID (nếu có)
             // ================================================================
             // Lấy ContractId từ filled document (nếu có)
             var contractId = await connection.QueryFirstOrDefaultAsync<Guid?>(
