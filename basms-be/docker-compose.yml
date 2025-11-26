@@ -89,6 +89,8 @@ services:
       - SIGNATURE_CERT_PATH=${SIGNATURE_CERT_PATH}
       - SIGNATURE_CERT_PASSWORD=${SIGNATURE_CERT_PASSWORD}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+      - EmailSettings__Sender=${EMAIL_SENDER}
+      - EmailSettings__Password=${EMAIL_PASSWORD}
     depends_on:
       - mysql
       - rabbitmq
@@ -116,6 +118,8 @@ services:
       - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
       - GOONG_API_KEY=${GOONG_API_KEY}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+      - EmailSettings__Sender=${EMAIL_SENDER}
+      - EmailSettings__Password=${EMAIL_PASSWORD}
     depends_on:
       - mysql
       - rabbitmq
