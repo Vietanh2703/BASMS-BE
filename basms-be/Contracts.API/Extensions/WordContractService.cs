@@ -1,5 +1,11 @@
 using Xceed.Document.NET;
 using Xceed.Words.NET;
+using DocumentFormat.OpenXml;
+using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Wordprocessing;
+using A = DocumentFormat.OpenXml.Drawing;
+using DW = DocumentFormat.OpenXml.Drawing.Wordprocessing;
+using PIC = DocumentFormat.OpenXml.Drawing.Pictures;
 
 namespace Contracts.API.Extensions;
 
@@ -298,5 +304,220 @@ public class WordContractService : IWordContractService
             _logger.LogError(ex, "Failed to extract text from Word document");
             return Task.FromResult<(bool Success, string? Text, string? ErrorMessage)>((false, null, ex.Message));
         }
+    }
+
+    /// <summary>
+    /// Insert ảnh chữ ký vào Content Control với tag specified
+    /// Sử dụng Open XML SDK để xử lý Content Control
+    /// Detect image type từ magic bytes (file signature) để đảm bảo chính xác
+    /// </summary>
+    public async Task<(bool Success, Stream? FileStream, string? ErrorMessage)> InsertSignatureImageAsync(
+        Stream documentStream,
+        string contentControlTag,
+        Stream imageStream,
+        string imageFileName,
+        CancellationToken cancellationToken = default)
+    {
+        MemoryStream? docMemoryStream = null;
+        MemoryStream? imageMemoryStream = null;
+
+        try
+        {
+            _logger.LogInformation("Inserting signature image '{FileName}' into content control: {Tag}",
+                imageFileName, contentControlTag);
+
+            // Copy image stream to memory and detect type from magic bytes
+            imageMemoryStream = new MemoryStream();
+            await imageStream.CopyToAsync(imageMemoryStream, cancellationToken);
+            imageMemoryStream.Position = 0;
+
+            var imageType = DetectImageTypeFromBytes(imageMemoryStream);
+            if (imageType == null)
+            {
+                _logger.LogWarning("Unsupported image format for file: {FileName}", imageFileName);
+                imageMemoryStream?.Dispose();
+                return (false, null, "Unsupported image format. Only PNG and JPEG are supported.");
+            }
+
+            _logger.LogInformation("Detected image type: {ImageType}", imageType);
+
+            // Copy document stream to memory
+            docMemoryStream = new MemoryStream();
+            await documentStream.CopyToAsync(docMemoryStream, cancellationToken);
+            docMemoryStream.Position = 0;
+
+            // Open document with Open XML SDK
+            using (var wordDoc = WordprocessingDocument.Open(docMemoryStream, true))
+            {
+                var mainPart = wordDoc.MainDocumentPart;
+                if (mainPart == null)
+                {
+                    docMemoryStream?.Dispose();
+                    imageMemoryStream?.Dispose();
+                    return (false, null, "Main document part not found");
+                }
+
+                // Find content control by tag
+                var sdtElements = mainPart.Document.Body?.Descendants<SdtElement>()
+                    .Where(sdt =>
+                    {
+                        var sdtProperties = sdt.Elements<SdtProperties>().FirstOrDefault();
+                        var tag = sdtProperties?.Elements<DocumentFormat.OpenXml.Wordprocessing.Tag>().FirstOrDefault();
+                        return tag?.Val?.Value == contentControlTag;
+                    }).ToList();
+
+                if (sdtElements == null || !sdtElements.Any())
+                {
+                    _logger.LogWarning("Content control with tag '{Tag}' not found", contentControlTag);
+                    docMemoryStream?.Dispose();
+                    imageMemoryStream?.Dispose();
+                    return (false, null, $"Content control with tag '{contentControlTag}' not found in document");
+                }
+
+                _logger.LogInformation("Found {Count} content control(s) with tag '{Tag}'",
+                    sdtElements.Count, contentControlTag);
+
+                // Insert image into each found content control
+                foreach (var sdtElement in sdtElements)
+                {
+                    // Add image part with detected type
+                    imageMemoryStream.Position = 0;
+                    ImagePart imagePart;
+
+                    if (imageType == "png")
+                    {
+                        imagePart = mainPart.AddImagePart(ImagePartType.Png);
+                    }
+                    else // jpeg
+                    {
+                        imagePart = mainPart.AddImagePart(ImagePartType.Jpeg);
+                    }
+
+                    imagePart.FeedData(imageMemoryStream);
+
+                    var imagePartId = mainPart.GetIdOfPart(imagePart);
+
+                    // Create image element
+                    var element = CreateImageElement(imagePartId, imageFileName, 200, 80);
+
+                    // Find the content of the SDT
+                    OpenXmlCompositeElement? sdtContent = sdtElement.Elements<SdtContentBlock>().FirstOrDefault();
+                    if (sdtContent == null)
+                        sdtContent = sdtElement.Elements<SdtContentRun>().FirstOrDefault();
+                    if (sdtContent == null)
+                        sdtContent = sdtElement.Elements<SdtContentCell>().FirstOrDefault();
+
+                    if (sdtContent != null)
+                    {
+                        // Clear existing content
+                        sdtContent.RemoveAllChildren();
+
+                        // Add image as new paragraph
+                        var paragraph = new DocumentFormat.OpenXml.Wordprocessing.Paragraph(
+                            new DocumentFormat.OpenXml.Wordprocessing.Run(element));
+                        sdtContent.Append(paragraph);
+
+                        _logger.LogInformation("✓ Inserted image into content control '{Tag}'", contentControlTag);
+                    }
+                }
+
+                mainPart.Document.Save();
+            }
+
+            // Clean up image stream
+            imageMemoryStream?.Dispose();
+
+            // Return modified document stream
+            docMemoryStream.Position = 0;
+            _logger.LogInformation("✓ Successfully inserted signature image");
+            return (true, docMemoryStream, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to insert signature image into content control '{Tag}'", contentControlTag);
+
+            // Clean up resources on error
+            docMemoryStream?.Dispose();
+            imageMemoryStream?.Dispose();
+
+            return (false, null, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Create Drawing element for image insertion
+    /// </summary>
+    private static Drawing CreateImageElement(string imagePartId, string fileName, long widthEmus, long heightEmus)
+    {
+        // Convert pixels to EMUs (English Metric Units)
+        // 1 pixel = 9525 EMUs at 96 DPI
+        var widthInEmus = widthEmus * 9525L;
+        var heightInEmus = heightEmus * 9525L;
+
+        var element = new Drawing(
+            new DW.Inline(
+                new DW.Extent { Cx = widthInEmus, Cy = heightInEmus },
+                new DW.EffectExtent { LeftEdge = 0L, TopEdge = 0L, RightEdge = 0L, BottomEdge = 0L },
+                new DW.DocProperties { Id = 1U, Name = fileName },
+                new DW.NonVisualGraphicFrameDrawingProperties(
+                    new A.GraphicFrameLocks { NoChangeAspect = true }),
+                new A.Graphic(
+                    new A.GraphicData(
+                        new PIC.Picture(
+                            new PIC.NonVisualPictureProperties(
+                                new PIC.NonVisualDrawingProperties { Id = 0U, Name = fileName },
+                                new PIC.NonVisualPictureDrawingProperties()),
+                            new PIC.BlipFill(
+                                new A.Blip { Embed = imagePartId },
+                                new A.Stretch(new A.FillRectangle())),
+                            new PIC.ShapeProperties(
+                                new A.Transform2D(
+                                    new A.Offset { X = 0L, Y = 0L },
+                                    new A.Extents { Cx = widthInEmus, Cy = heightInEmus }),
+                                new A.PresetGeometry(new A.AdjustValueList()) { Preset = A.ShapeTypeValues.Rectangle })))
+                    { Uri = "http://schemas.openxmlformats.org/drawingml/2006/picture" }))
+            {
+                DistanceFromTop = 0U,
+                DistanceFromBottom = 0U,
+                DistanceFromLeft = 0U,
+                DistanceFromRight = 0U
+            });
+
+        return element;
+    }
+
+    /// <summary>
+    /// Detect image type từ magic bytes (file signature)
+    /// PNG: 89 50 4E 47
+    /// JPEG: FF D8 FF
+    /// Returns: "png", "jpeg", or null
+    /// </summary>
+    private static string? DetectImageTypeFromBytes(MemoryStream imageStream)
+    {
+        if (imageStream == null || imageStream.Length < 4)
+        {
+            return null;
+        }
+
+        var position = imageStream.Position;
+        imageStream.Position = 0;
+
+        var header = new byte[4];
+        imageStream.Read(header, 0, 4);
+        imageStream.Position = position; // Reset position
+
+        // PNG signature: 89 50 4E 47 (‰PNG)
+        if (header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47)
+        {
+            return "png";
+        }
+
+        // JPEG signature: FF D8 FF
+        if (header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF)
+        {
+            return "jpeg";
+        }
+
+        return null;
     }
 }

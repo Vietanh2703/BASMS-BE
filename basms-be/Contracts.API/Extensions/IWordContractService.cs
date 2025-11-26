@@ -29,4 +29,15 @@ public interface IWordContractService
     Task<(bool Success, string? Text, string? ErrorMessage)> ExtractTextFromWordAsync(
         Stream documentStream,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Insert ảnh chữ ký vào Content Control theo tag
+    /// Tìm Content Control với tag specified và thay thế bằng ảnh
+    /// </summary>
+    Task<(bool Success, Stream? FileStream, string? ErrorMessage)> InsertSignatureImageAsync(
+        Stream documentStream,
+        string contentControlTag,
+        Stream imageStream,
+        string imageFileName,
+        CancellationToken cancellationToken = default);
 }
