@@ -247,7 +247,7 @@ public class EmailHandler
 <body>
     <div class='container'>
         <div class='header'>
-            <h1>✍️ Yêu cầu ký hợp đồng điện tử</h1>
+            <h1>Yêu cầu ký hợp đồng điện tử</h1>
             <p>Building & Assets Security Management System</p>
         </div>
 
@@ -257,13 +257,13 @@ public class EmailHandler
             <p>Chúng tôi đã hoàn tất việc chuẩn bị hợp đồng dịch vụ bảo vệ. Vui lòng xem xét và ký hợp đồng điện tử để hoàn tất thủ tục.</p>
 
             <div class='info-box'>
-                <strong>📋 Thông tin hợp đồng:</strong><br>
+                <strong>Thông tin hợp đồng:</strong><br>
                 <strong>Mã hợp đồng:</strong> {contractNumber}<br>
                 <strong>Mã tài liệu:</strong> {documentId}
             </div>
 
             <div class='signing-info'>
-                <strong>📝 Hướng dẫn ký hợp đồng:</strong><br>
+                <strong>Hướng dẫn ký hợp đồng:</strong><br>
                 1. Nhấn vào nút ""Ký hợp đồng ngay"" bên dưới<br>
                 2. Đăng nhập vào hệ thống (nếu cần)<br>
                 3. Xem xét kỹ nội dung hợp đồng<br>
@@ -271,18 +271,18 @@ public class EmailHandler
             </div>
 
             <center>
-                <a href='{signingUrl}' class='button'>✍️ Ký hợp đồng ngay</a>
+                <a href='{signingUrl}' class='button'>Ký hợp đồng ngay</a>
             </center>
 
             <div class='expiry-notice'>
-                <strong>⏰ Lưu ý quan trọng:</strong><br>
+                <strong>Lưu ý quan trọng:</strong><br>
                 • Link ký hợp đồng này sẽ hết hạn vào: <strong>{expiredDateStr}</strong><br>
                 • Vui lòng hoàn tất ký trước thời hạn trên<br>
                 • Nếu link hết hạn, vui lòng liên hệ với chúng tôi để được cấp link mới
             </div>
 
             <div class='warning'>
-                <strong>⚠️ Bảo mật:</strong><br>
+                <strong>Bảo mật:</strong><br>
                 • Link này chỉ dành riêng cho bạn, không chia sẻ cho người khác<br>
                 • Nếu bạn không yêu cầu ký hợp đồng, vui lòng bỏ qua email này và thông báo cho chúng tôi<br>
                 • Link có mã bảo mật và sẽ tự động hết hạn sau thời gian quy định
@@ -346,7 +346,7 @@ public class EmailHandler
 <body>
     <div class='container'>
         <div class='header'>
-            <h1>✅ Xác nhận chữ ký thành công</h1>
+            <h1>Xác nhận chữ ký thành công</h1>
             <p>Building & Assets Security Management System</p>
         </div>
 
@@ -358,7 +358,7 @@ public class EmailHandler
             <p>Chúng tôi xin chân thành cảm ơn Quý khách đã hoàn tất việc ký điện tử hợp đồng.</p>
 
             <div class='success-box'>
-                <strong>🎉 Chữ ký điện tử của Quý khách đã được xác nhận thành công!</strong><br><br>
+                <strong>Chữ ký điện tử của Quý khách đã được xác nhận thành công!</strong><br><br>
                 <strong>📋 Mã hợp đồng:</strong> {contractNumber}<br>
                 <strong>📅 Thời gian ký:</strong> {signedDateStr}<br>
                 <strong>✅ Trạng thái:</strong> <span class='highlight'>Đã ký - Chờ phê duyệt</span>
@@ -387,13 +387,6 @@ public class EmailHandler
                 Chúng tôi cam kết sẽ xử lý hồ sơ của Quý khách một cách nhanh chóng và chính xác nhất.
             </div>
 
-            <p style='margin-top: 30px;'><strong>Quý khách có thể:</strong></p>
-            <ul>
-                <li>✅ Đăng nhập vào hệ thống BASMS để theo dõi trạng thái hợp đồng</li>
-                <li>✅ Xem lại nội dung hợp đồng đã ký bất cứ lúc nào</li>
-                <li>✅ Liên hệ với chúng tôi nếu cần hỗ trợ thêm</li>
-            </ul>
-
             <p style='margin-top: 30px;'>Nếu có bất kỳ thắc mắc hoặc cần hỗ trợ, vui lòng liên hệ:</p>
             <p>
                 📞 Hotline: 1900-xxxx<br>
@@ -402,15 +395,12 @@ public class EmailHandler
                 ⏰ Thời gian hỗ trợ: 8:00 - 17:30 (Thứ 2 - Thứ 6)
             </p>
 
-            <p style='margin-top: 30px;'>Một lần nữa, chúng tôi xin chân thành cảm ơn sự tin tưởng của Quý khách!</p>
-
             <p>Trân trọng,<br><strong>Đội ngũ BASMS</strong><br><em>Building & Assets Security Management System</em></p>
         </div>
 
         <div class='footer'>
             <p>© 2025 BASMS - Building & Assets Security Management System</p>
             <p>Email này được gửi tự động, vui lòng không trả lời trực tiếp.</p>
-            <p style='margin-top: 10px;'>Để cập nhật thông tin liên lạc hoặc hủy đăng ký nhận email, vui lòng đăng nhập vào hệ thống.</p>
         </div>
     </div>
 </body>
