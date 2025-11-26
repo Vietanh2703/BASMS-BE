@@ -14,6 +14,13 @@ public class EmailHandler
     {
         _emailSettings = emailSettings.Value;
         _logger = logger;
+
+        // Log email configuration status (without exposing password)
+        _logger.LogInformation("EmailHandler initialized - Sender: {Sender}, SmtpHost: {Host}:{Port}, Password Length: {PwdLen}",
+            string.IsNullOrEmpty(_emailSettings.Sender) ? "NOT SET" : _emailSettings.Sender,
+            string.IsNullOrEmpty(_emailSettings.SmtpHost) ? "NOT SET" : _emailSettings.SmtpHost,
+            _emailSettings.SmtpPort,
+            string.IsNullOrEmpty(_emailSettings.Password) ? 0 : _emailSettings.Password.Length);
     }
 
     public async Task SendEmailAsync(EmailRequests emailRequest)
