@@ -1,3 +1,8 @@
+using MailKit.Net.Smtp;
+using MailKit.Security;
+using Microsoft.Extensions.Options;
+using MimeKit;
+
 namespace Contracts.API.Extensions;
 
 public class EmailHandler
@@ -15,6 +20,25 @@ public class EmailHandler
     {
         try
         {
+            // Validate email settings
+            if (string.IsNullOrEmpty(_emailSettings.Sender))
+            {
+                _logger.LogError("EMAIL_SENDER is not configured");
+                throw new InvalidOperationException("EMAIL_SENDER environment variable is not set");
+            }
+
+            if (string.IsNullOrEmpty(_emailSettings.Password))
+            {
+                _logger.LogError("EMAIL_PASSWORD is not configured");
+                throw new InvalidOperationException("EMAIL_PASSWORD environment variable is not set. Please use Gmail App Password (16 characters)");
+            }
+
+            _logger.LogInformation("Sending email from {Sender} to {Recipient} via {SmtpHost}:{SmtpPort}",
+                _emailSettings.Sender,
+                emailRequest.Email,
+                _emailSettings.SmtpHost,
+                _emailSettings.SmtpPort);
+
             var email = new MimeMessage();
             email.Sender = new MailboxAddress("BASMS System", _emailSettings.Sender);
             email.To.Add(MailboxAddress.Parse(emailRequest.Email));
@@ -28,15 +52,27 @@ public class EmailHandler
 
             using var smtp = new SmtpClient();
             await smtp.ConnectAsync(_emailSettings.SmtpHost, _emailSettings.SmtpPort, SecureSocketOptions.StartTls);
-            await smtp.AuthenticateAsync(_emailSettings.Sender, _emailSettings.Password);
+
+            try
+            {
+                await smtp.AuthenticateAsync(_emailSettings.Sender, _emailSettings.Password);
+            }
+            catch (AuthenticationException authEx)
+            {
+                _logger.LogError(authEx,
+                    "Gmail authentication failed. Make sure you're using an App Password (not regular password). " +
+                    "Guide: https://support.google.com/accounts/answer/185833");
+                throw;
+            }
+
             await smtp.SendAsync(email);
             await smtp.DisconnectAsync(true);
 
-            _logger.LogInformation("Email sent successfully to {Email}", emailRequest.Email);
+            _logger.LogInformation("✓ Email sent successfully to {Email}", emailRequest.Email);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send email to {Email}", emailRequest.Email);
+            _logger.LogError(ex, "✗ Failed to send email to {Email}", emailRequest.Email);
             throw;
         }
     }
