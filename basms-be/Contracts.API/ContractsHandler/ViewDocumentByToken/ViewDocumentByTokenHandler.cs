@@ -74,25 +74,23 @@ internal class ViewDocumentByTokenHandler(
             logger.LogInformation("Token is valid. Expires: {ExpiryDate}",
                 document.TokenExpiredDay);
 
-            // BƯỚC 2: DOWNLOAD FILE TỪ S3
-            var (downloadSuccess, fileStream, downloadError) = await s3Service.DownloadFileAsync(
-                document.FileUrl,
-                cancellationToken);
-
-            if (!downloadSuccess || fileStream == null)
+            // BƯỚC 2: TẠO PRE-SIGNED URL TỪ S3
+            string presignedUrl;
+            try
             {
-                logger.LogError("Failed to download file from S3: {FileUrl}. Error: {Error}",
-                    document.FileUrl, downloadError);
+                presignedUrl = s3Service.GetPresignedUrl(document.FileUrl, expirationMinutes: 15);
+                logger.LogInformation("Generated pre-signed URL for document {DocumentId}", document.Id);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to generate pre-signed URL for {FileUrl}", document.FileUrl);
                 return new ViewDocumentByTokenResult
                 {
                     Success = false,
-                    ErrorMessage = "Failed to retrieve document from storage",
-                    ErrorCode = "DOWNLOAD_FAILED"
+                    ErrorMessage = "Failed to generate document access URL",
+                    ErrorCode = "URL_GENERATION_FAILED"
                 };
             }
-
-            logger.LogInformation("Successfully downloaded file from S3: {FileUrl}",
-                document.FileUrl);
 
             // BƯỚC 3: XÁC ĐỊNH CONTENT TYPE
             var contentType = DetermineContentType(document.DocumentName);
@@ -100,14 +98,17 @@ internal class ViewDocumentByTokenHandler(
             // BƯỚC 4: LOG ACCESS (Audit Trail)
             await LogDocumentAccess(connection, document.Id, request.Token);
 
+            var urlExpiresAt = DateTime.UtcNow.AddMinutes(15);
+
             return new ViewDocumentByTokenResult
             {
                 Success = true,
-                FileStream = fileStream,
+                FileUrl = presignedUrl,
                 FileName = document.DocumentName,
                 ContentType = contentType,
                 FileSize = document.FileSize,
-                DocumentId = document.Id
+                DocumentId = document.Id,
+                UrlExpiresAt = urlExpiresAt
             };
         }
         catch (Exception ex)

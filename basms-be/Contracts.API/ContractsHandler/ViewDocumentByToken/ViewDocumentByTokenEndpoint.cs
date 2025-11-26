@@ -58,29 +58,35 @@ public class ViewDocumentByTokenEndpoint : ICarterModule
                             );
                         }
 
-                        // Validate result có file stream không
-                        if (result.FileStream == null || string.IsNullOrEmpty(result.ContentType))
+                        // Validate result có file URL không
+                        if (string.IsNullOrEmpty(result.FileUrl))
                         {
-                            logger.LogError("File stream is null after successful query");
+                            logger.LogError("File URL is null after successful query");
                             return Results.Problem(
                                 title: "Document retrieval failed",
-                                detail: "File stream is not available",
+                                detail: "File URL is not available",
                                 statusCode: StatusCodes.Status500InternalServerError
                             );
                         }
 
                         logger.LogInformation(
-                            "Successfully retrieved document: {DocumentId} - {FileName} ({ContentType})",
-                            result.DocumentId, result.FileName, result.ContentType);
+                            "Successfully generated access URL for document: {DocumentId} - {FileName}",
+                            result.DocumentId, result.FileName);
 
-                        // Trả về file stream với correct Content-Type
-                        // Browser sẽ hiển thị PDF inline, hoặc download file Word
-                        return Results.File(
-                            fileStream: result.FileStream,
-                            contentType: result.ContentType,
-                            fileDownloadName: result.FileName,
-                            enableRangeProcessing: true  // Hỗ trợ partial content (video/pdf streaming)
-                        );
+                        // Trả về JSON với pre-signed URL
+                        return Results.Ok(new
+                        {
+                            success = true,
+                            data = new
+                            {
+                                fileUrl = result.FileUrl,
+                                fileName = result.FileName,
+                                contentType = result.ContentType,
+                                fileSize = result.FileSize,
+                                documentId = result.DocumentId,
+                                urlExpiresAt = result.UrlExpiresAt
+                            }
+                        });
                     }
                     catch (Exception ex)
                     {
@@ -95,49 +101,76 @@ public class ViewDocumentByTokenEndpoint : ICarterModule
             .AllowAnonymous()  // Không cần authentication, chỉ cần token
             .WithTags("Contracts")
             .WithName("ViewDocumentByToken")
-            .Produces(StatusCodes.Status200OK, contentType: "application/pdf")
-            .Produces(StatusCodes.Status200OK, contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+            .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status500InternalServerError)
-            .WithSummary("Xem document bằng documentId và security token (dùng cho ký điện tử)")
+            .WithSummary("Lấy pre-signed URL để xem document (dùng cho ký điện tử)")
             .WithDescription(@"
 ## Mô tả
-Endpoint này cho phép xem document đã được fill bằng documentId và security token.
+Endpoint này trả về **S3 pre-signed URL** để frontend có thể truy cập trực tiếp file từ S3.
 Token được tạo tự động sau khi fill template thành công.
 
 ## Use Case
-- Frontend hiển thị document trong PDF viewer trước khi ký
+- Frontend nhận pre-signed URL và hiển thị document trong PDF viewer
 - Người ký xem trước nội dung hợp đồng
 - Không yêu cầu authentication, chỉ cần documentId và token hợp lệ
+- File được download trực tiếp từ S3 (không qua backend)
 
 ## Security
 - Yêu cầu cả documentId (route param) và token (query param) phải khớp
-- Token có thời hạn (mặc định 7 ngày)
+- Document token có thời hạn (mặc định 7 ngày)
+- Pre-signed URL có thời hạn 15 phút
 - Token chỉ dùng 1 lần (invalidated sau khi ký)
 - Mọi truy cập được log để audit
 
-## Response Types
-- **PDF**: Browser hiển thị inline trong PDF viewer
-- **Word**: Browser tự động download file
+## Performance Benefits
+- **Faster**: Download trực tiếp từ S3, không qua backend
+- **Scalable**: S3 handle file serving, backend chỉ generate URL
+- **Bandwidth**: Không tốn bandwidth backend
 
 ## Ví dụ
+
+**Request:**
 ```
 GET /api/contracts/documents/123e4567-e89b-12d3-a456-426614174000/view?token=a1b2c3d4-e5f6-4789-b012-3456789abcde
+```
 
-Response Headers:
-  Content-Type: application/pdf
-  Content-Disposition: inline; filename=""contract.pdf""
+**Response:**
+```json
+{
+  ""success"": true,
+  ""data"": {
+    ""fileUrl"": ""https://bucket.s3.region.amazonaws.com/contracts/filled/file.docx?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=..."",
+    ""fileName"": ""FILLED_contract_2025.docx"",
+    ""contentType"": ""application/vnd.openxmlformats-officedocument.wordprocessingml.document"",
+    ""fileSize"": 123456,
+    ""documentId"": ""123e4567-e89b-12d3-a456-426614174000"",
+    ""urlExpiresAt"": ""2025-11-26T07:00:00Z""
+  }
+}
+```
 
-Response Body: [PDF binary stream]
+**Frontend Usage:**
+```javascript
+// Get URL from API
+const response = await fetch(apiUrl);
+const { data } = await response.json();
+
+// Use pre-signed URL directly
+window.open(data.fileUrl); // Download
+// OR
+<iframe src={data.fileUrl} /> // Display
+// OR
+<embed src={data.fileUrl} type=""application/pdf"" /> // PDF viewer
 ```
 
 ## Error Codes
 - `TOKEN_REQUIRED`: Token không được cung cấp
 - `INVALID_TOKEN`: Token hoặc documentId không khớp hoặc đã bị vô hiệu hóa
 - `TOKEN_EXPIRED`: Token đã hết hạn
-- `DOWNLOAD_FAILED`: Không thể tải file từ S3
+- `URL_GENERATION_FAILED`: Không thể tạo pre-signed URL từ S3
             ");
     }
 }

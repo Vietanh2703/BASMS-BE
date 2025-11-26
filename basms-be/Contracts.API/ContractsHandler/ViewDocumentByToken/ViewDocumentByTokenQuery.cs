@@ -10,16 +10,17 @@ public record ViewDocumentByTokenQuery(
 ) : IQuery<ViewDocumentByTokenResult>;
 
 /// <summary>
-/// Result chứa file stream và metadata
+/// Result chứa pre-signed URL và metadata
 /// </summary>
 public record ViewDocumentByTokenResult
 {
     public bool Success { get; init; }
     public string? ErrorMessage { get; init; }
     public string? ErrorCode { get; init; }
-    public Stream? FileStream { get; init; }
+    public string? FileUrl { get; init; }
     public string? FileName { get; init; }
     public string? ContentType { get; init; }
     public long? FileSize { get; init; }
     public Guid? DocumentId { get; init; }
+    public DateTime? UrlExpiresAt { get; init; }
 }
