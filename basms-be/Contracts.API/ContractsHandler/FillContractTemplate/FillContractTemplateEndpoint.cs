@@ -41,34 +41,39 @@ public class FillContractTemplateEndpoint : ICarterModule
                             });
                         }
 
+                        // Trích xuất thông tin customer từ data nếu không có trong request
+                        var customerEmail = request.CustomerEmail ?? ExtractFromData(request.Data, "Email", "email", "EMAIL");
+                        var customerName = request.CustomerName ?? ExtractFromData(request.Data, "TenKhachHang", "CustomerName", "HoTen", "FullName");
+                        var contractNumber = request.ContractNumber ?? ExtractFromData(request.Data, "SoHopDong", "ContractNumber", "MaHopDong");
+
                         // Gửi email ký hợp đồng điện tử nếu có thông tin customer
-                        if (!string.IsNullOrEmpty(request.CustomerEmail) && result.FilledDocumentId.HasValue && !string.IsNullOrEmpty(result.SecurityToken))
+                        if (!string.IsNullOrEmpty(customerEmail) && result.FilledDocumentId.HasValue && !string.IsNullOrEmpty(result.SecurityToken))
                         {
                             try
                             {
-                                logger.LogInformation("Sending contract signing email to {Email}", request.CustomerEmail);
+                                logger.LogInformation("Sending contract signing email to {Email}", customerEmail);
 
                                 await emailHandler.SendContractSigningEmailAsync(
-                                    customerName: request.CustomerName ?? "Quý khách",
-                                    email: request.CustomerEmail,
-                                    contractNumber: request.ContractNumber ?? "N/A",
+                                    customerName: customerName ?? "Quý khách",
+                                    email: customerEmail,
+                                    contractNumber: contractNumber ?? "N/A",
                                     documentId: result.FilledDocumentId.Value,
                                     securityToken: result.SecurityToken,
                                     tokenExpiredDay: result.TokenExpiredDay ?? DateTime.UtcNow.AddDays(7)
                                 );
 
-                                logger.LogInformation("✓ Contract signing email sent successfully to {Email}", request.CustomerEmail);
+                                logger.LogInformation("✓ Contract signing email sent successfully to {Email}", customerEmail);
                             }
                             catch (Exception emailEx)
                             {
-                                logger.LogError(emailEx, "✗ Failed to send contract signing email to {Email}", request.CustomerEmail);
+                                logger.LogError(emailEx, "✗ Failed to send contract signing email to {Email}", customerEmail);
                                 // Không fail toàn bộ request nếu email gửi thất bại
                             }
                         }
                         else
                         {
                             logger.LogWarning("Email NOT sent - CustomerEmail: {HasEmail}, DocumentId: {HasDocId}, Token: {HasToken}",
-                                !string.IsNullOrEmpty(request.CustomerEmail),
+                                !string.IsNullOrEmpty(customerEmail),
                                 result.FilledDocumentId.HasValue,
                                 !string.IsNullOrEmpty(result.SecurityToken));
                         }
@@ -104,6 +109,38 @@ public class FillContractTemplateEndpoint : ICarterModule
             .Produces(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status500InternalServerError)
             .WithSummary("Điền template từ S3 và tạo token bảo mật cho ký điện tử");
+    }
+
+    /// <summary>
+    /// Trích xuất giá trị từ data dictionary theo nhiều key có thể có
+    /// </summary>
+    private static string? ExtractFromData(Dictionary<string, object>? data, params string[] possibleKeys)
+    {
+        if (data == null || data.Count == 0)
+            return null;
+
+        foreach (var key in possibleKeys)
+        {
+            // Tìm key trong dictionary (case-insensitive)
+            var foundKey = data.Keys.FirstOrDefault(k =>
+                k.Equals(key, StringComparison.OrdinalIgnoreCase) ||
+                k.Replace("{{", "").Replace("}}", "").Trim().Equals(key, StringComparison.OrdinalIgnoreCase));
+
+            if (foundKey != null && data.TryGetValue(foundKey, out var value))
+            {
+                if (value is string strValue && !string.IsNullOrWhiteSpace(strValue))
+                    return strValue;
+
+                if (value is System.Text.Json.JsonElement jsonElement && jsonElement.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    var extracted = jsonElement.GetString();
+                    if (!string.IsNullOrWhiteSpace(extracted))
+                        return extracted;
+                }
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
