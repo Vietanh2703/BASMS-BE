@@ -51,8 +51,6 @@ public class FillContractTemplateEndpoint : ICarterModule
                         {
                             try
                             {
-                                logger.LogInformation("Sending contract signing email to {Email}", customerEmail);
-
                                 await emailHandler.SendContractSigningEmailAsync(
                                     customerName: customerName ?? "Quý khách",
                                     email: customerEmail,
@@ -61,21 +59,11 @@ public class FillContractTemplateEndpoint : ICarterModule
                                     securityToken: result.SecurityToken,
                                     tokenExpiredDay: result.TokenExpiredDay ?? DateTime.UtcNow.AddDays(7)
                                 );
-
-                                logger.LogInformation("✓ Contract signing email sent successfully to {Email}", customerEmail);
                             }
-                            catch (Exception emailEx)
+                            catch
                             {
-                                logger.LogError(emailEx, "✗ Failed to send contract signing email to {Email}", customerEmail);
                                 // Không fail toàn bộ request nếu email gửi thất bại
                             }
-                        }
-                        else
-                        {
-                            logger.LogWarning("Email NOT sent - CustomerEmail: {HasEmail}, DocumentId: {HasDocId}, Token: {HasToken}",
-                                !string.IsNullOrEmpty(customerEmail),
-                                result.FilledDocumentId.HasValue,
-                                !string.IsNullOrEmpty(result.SecurityToken));
                         }
 
                         return Results.Ok(new

@@ -46,23 +46,6 @@ builder.Services.Configure<Contracts.API.Extensions.EmailSettings>(
     builder.Configuration.GetSection("EmailSettings"));
 builder.Services.AddScoped<Contracts.API.Extensions.EmailHandler>();
 
-// Log Email Configuration Status
-var emailSender = builder.Configuration["EmailSettings:Sender"]
-               ?? builder.Configuration["EMAIL_SENDER"];
-var emailPassword = builder.Configuration["EmailSettings:Password"]
-                 ?? builder.Configuration["EMAIL_PASSWORD"];
-var emailHost = builder.Configuration["EmailSettings:SmtpHost"] ?? "smtp.gmail.com";
-var emailPort = builder.Configuration["EmailSettings:SmtpPort"] ?? "587";
-
-Console.WriteLine($"Email Config - Sender: {(string.IsNullOrEmpty(emailSender) ? "NOT SET" : emailSender)}, " +
-                  $"Host: {emailHost}:{emailPort}, " +
-                  $"Password Length: {(string.IsNullOrEmpty(emailPassword) ? 0 : emailPassword.Length)} chars");
-
-if (string.IsNullOrEmpty(emailSender) || string.IsNullOrEmpty(emailPassword))
-{
-    Console.WriteLine("⚠️  WARNING: Email settings are not properly configured. EMAIL_SENDER and EMAIL_PASSWORD environment variables must be set.");
-}
-
 // Đăng ký GoongSettings cho geocoding API
 builder.Services.Configure<Contracts.API.Extensions.GoongSettings>(
     builder.Configuration.GetSection("GoongSettings"));
