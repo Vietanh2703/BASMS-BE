@@ -69,26 +69,16 @@ public class SignContractFromDocumentEndpoint : ICarterModule
                         });
                     }
 
-                    // Optional: Customer info for email notification
-                    var customerEmail = form["customerEmail"].ToString();
-                    var customerName = form["customerName"].ToString();
-                    var contractNumber = form["contractNumber"].ToString();
-
                     logger.LogInformation(
-                        "Inserting signature - DocumentId: {DocumentId}, Image: {FileName} ({Size} bytes), Customer: {CustomerName} ({CustomerEmail})",
-                        documentId, signatureImage.FileName, signatureImage.Length,
-                        string.IsNullOrEmpty(customerName) ? "N/A" : customerName,
-                        string.IsNullOrEmpty(customerEmail) ? "N/A" : customerEmail);
+                        "Inserting signature - DocumentId: {DocumentId}, Image: {FileName} ({Size} bytes)",
+                        documentId, signatureImage.FileName, signatureImage.Length);
 
                     // ================================================================
                     // TẠO COMMAND VÀ GỬI ĐẾN HANDLER
                     // ================================================================
                     var command = new SignContractFromDocumentCommand(
                         DocumentId: documentId,
-                        SignatureImage: signatureImage,
-                        CustomerEmail: string.IsNullOrWhiteSpace(customerEmail) ? null : customerEmail,
-                        CustomerName: string.IsNullOrWhiteSpace(customerName) ? null : customerName,
-                        ContractNumber: string.IsNullOrWhiteSpace(contractNumber) ? null : contractNumber
+                        SignatureImage: signatureImage
                     );
 
                     var result = await sender.Send(command);
@@ -136,24 +126,19 @@ public class SignContractFromDocumentEndpoint : ICarterModule
 ## Mô tả
 Chèn ảnh chữ ký vào vị trí Content Control với tag 'DigitalSignature' trong file Word.
 File sau khi chèn ảnh sẽ được đổi tên thành ""Signed_..."" và chuyển vào thư mục ""contracts/signed/"".
+Email xác nhận sẽ được gửi tự động đến địa chỉ email đã lưu trong document.
 
 ## Request (multipart/form-data)
 
 **Parameters:**
 - `documentId` (required): GUID của document cần chèn chữ ký
 - `file` (required): File ảnh chữ ký (PNG, JPG, JPEG)
-- `customerEmail` (optional): Email khách hàng để gửi thông báo xác nhận
-- `customerName` (optional): Tên khách hàng
-- `contractNumber` (optional): Số hợp đồng
 
 **Example:**
 ```bash
 curl -X POST http://localhost:5000/api/contracts/sign-document \
   -F ""documentId=123e4567-e89b-12d3-a456-426614174000"" \
-  -F ""file=@signature.png"" \
-  -F ""customerEmail=customer@example.com"" \
-  -F ""customerName=Nguyen Van A"" \
-  -F ""contractNumber=HD-2025-001""
+  -F ""file=@signature.png""
 ```
 
 ## Response
@@ -179,11 +164,14 @@ curl -X POST http://localhost:5000/api/contracts/sign-document \
 7. Return document info
 
 ## Email Notification
-Nếu cung cấp đầy đủ thông tin customer (email, tên, số hợp đồng), hệ thống sẽ tự động gửi email xác nhận với nội dung:
+Hệ thống tự động gửi email xác nhận đến địa chỉ email đã lưu trong document (DocumentEmail) với nội dung:
 - ✅ Xác nhận chữ ký thành công
 - 📋 Thông tin hợp đồng đã ký
 - 📌 Các bước tiếp theo (xét duyệt, triển khai)
 - 📧 Nhắc nhở theo dõi email để nhận thông báo
+- ℹ️ Thời gian xử lý dự kiến: 1-2 ngày làm việc
+
+**Lưu ý:** Email chỉ được gửi nếu DocumentEmail và DocumentCustomerName đã được lưu khi fill template.
 
 ## Content Control Requirements
 Document Word phải có Content Control với:

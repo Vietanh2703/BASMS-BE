@@ -185,10 +185,13 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     `TokenExpiredDay` DATETIME NULL,
                     `DocumentDate` DATE NULL,
                     `UploadedBy` CHAR(36) NULL,
+                    `DocumentEmail` VARCHAR(255) NULL COMMENT 'Email của khách hàng hoặc nhân viên',
+                    `DocumentCustomerName` VARCHAR(255) NULL COMMENT 'Tên khách hàng hoặc nhân viên',
                     `IsDeleted` BOOLEAN NOT NULL DEFAULT FALSE,
                     `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     INDEX `idx_doc_type` (`DocumentType`),
-                    INDEX `idx_doc_token` (`Tokens`)
+                    INDEX `idx_doc_token` (`Tokens`),
+                    INDEX `idx_doc_email` (`DocumentEmail`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 COMMENT='Tài liệu hợp đồng';
              ");

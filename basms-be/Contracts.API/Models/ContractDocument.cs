@@ -56,6 +56,16 @@ public class ContractDocument
     /// </summary>
     public Guid? UploadedBy { get; set; }
 
+    /// <summary>
+    /// Email của khách hàng hoặc nhân viên (để gửi thông báo)
+    /// </summary>
+    public string? DocumentEmail { get; set; }
+
+    /// <summary>
+    /// Tên khách hàng hoặc nhân viên (để hiển thị trong email)
+    /// </summary>
+    public string? DocumentCustomerName { get; set; }
+
     // ============================================================================
     // METADATA
     // ============================================================================

@@ -205,6 +205,28 @@ internal class FillContractFromTemplateHandler(
             var securityToken = Guid.NewGuid().ToString(); // Token bảo mật để truy cập tài liệu
             var tokenExpiredDay = DateTime.UtcNow.AddDays(7); // Token hết hạn sau 7 ngày
 
+            // Extract customer info từ data để lưu vào document
+            string? documentEmail = null;
+            string? documentCustomerName = null;
+
+            if (request.Data != null)
+            {
+                // Tìm email: CustomerEmail hoặc EmployeeEmail
+                if (request.Data.TryGetValue("CustomerEmail", out var customerEmailObj))
+                    documentEmail = ExtractStringValue(customerEmailObj);
+                else if (request.Data.TryGetValue("EmployeeEmail", out var employeeEmailObj))
+                    documentEmail = ExtractStringValue(employeeEmailObj);
+
+                // Tìm name: CustomerName hoặc EmployeeName
+                if (request.Data.TryGetValue("CustomerName", out var customerNameObj))
+                    documentCustomerName = ExtractStringValue(customerNameObj);
+                else if (request.Data.TryGetValue("EmployeeName", out var employeeNameObj))
+                    documentCustomerName = ExtractStringValue(employeeNameObj);
+            }
+
+            logger.LogInformation("Extracted customer info - Email: {Email}, Name: {Name}",
+                documentEmail ?? "N/A", documentCustomerName ?? "N/A");
+
             var filledDocument = new ContractDocument
             {
                 Id = filledDocumentId,
@@ -216,6 +238,8 @@ internal class FillContractFromTemplateHandler(
                 Tokens = securityToken,
                 TokenExpiredDay = tokenExpiredDay,
                 UploadedBy = Guid.Empty,
+                DocumentEmail = documentEmail,
+                DocumentCustomerName = documentCustomerName,
                 IsDeleted = false,
                 CreatedAt = DateTime.UtcNow
             };
@@ -245,6 +269,29 @@ internal class FillContractFromTemplateHandler(
                 ErrorMessage = $"Fill template failed: {ex.Message}"
             };
         }
+    }
+
+    /// <summary>
+    /// Extract string value từ object (có thể là string, JsonElement, hoặc object khác)
+    /// </summary>
+    private string? ExtractStringValue(object? value)
+    {
+        if (value == null) return null;
+
+        if (value is string stringValue)
+            return stringValue;
+
+        if (value is System.Text.Json.JsonElement jsonElement)
+        {
+            return jsonElement.ValueKind switch
+            {
+                System.Text.Json.JsonValueKind.String => jsonElement.GetString(),
+                System.Text.Json.JsonValueKind.Object => ExtractValueFromJsonObject(jsonElement),
+                _ => jsonElement.ToString()
+            };
+        }
+
+        return value.ToString();
     }
 
     /// <summary>

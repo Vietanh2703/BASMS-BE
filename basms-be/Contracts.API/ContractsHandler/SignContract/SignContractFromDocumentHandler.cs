@@ -5,10 +5,7 @@ namespace Contracts.API.ContractsHandler.SignContract;
 /// </summary>
 public record SignContractFromDocumentCommand(
     Guid DocumentId,  // FilledDocumentId from S3
-    IFormFile SignatureImage,  // Signature image to insert into content control
-    string? CustomerEmail = null,  // Email to send confirmation (optional)
-    string? CustomerName = null,  // Customer name for email (optional)
-    string? ContractNumber = null  // Contract number for email (optional)
+    IFormFile SignatureImage  // Signature image to insert into content control
 ) : ICommand<SignContractFromDocumentResult>;
 
 /// <summary>
@@ -210,33 +207,36 @@ internal class SignContractFromDocumentHandler(
                 document.Id, newFileName, newS3Key);
 
             // ================================================================
-            // BƯỚC 7: GỬI EMAIL XÁC NHẬN (NẾU CÓ THÔNG TIN CUSTOMER)
+            // BƯỚC 7: GỬI EMAIL XÁC NHẬN (NẾU CÓ THÔNG TIN CUSTOMER TRONG DATABASE)
             // ================================================================
-            if (!string.IsNullOrEmpty(request.CustomerEmail) &&
-                !string.IsNullOrEmpty(request.CustomerName) &&
-                !string.IsNullOrEmpty(request.ContractNumber))
+            if (!string.IsNullOrEmpty(document.DocumentEmail) &&
+                !string.IsNullOrEmpty(document.DocumentCustomerName))
             {
                 try
                 {
-                    logger.LogInformation("Sending contract signed confirmation email to {Email}", request.CustomerEmail);
+                    logger.LogInformation("Sending contract signed confirmation email to {Email}", document.DocumentEmail);
+
+                    // Sử dụng DocumentName làm contract number (hoặc có thể extract từ filename)
+                    var contractNumber = ExtractContractNumberFromFileName(document.DocumentName);
 
                     await emailHandler.SendContractSignedConfirmationEmailAsync(
-                        request.CustomerName,
-                        request.CustomerEmail,
-                        request.ContractNumber,
+                        document.DocumentCustomerName,
+                        document.DocumentEmail,
+                        contractNumber,
                         DateTime.UtcNow);
 
-                    logger.LogInformation("✓ Sent confirmation email successfully to {Email}", request.CustomerEmail);
+                    logger.LogInformation("✓ Sent confirmation email successfully to {Email}", document.DocumentEmail);
                 }
                 catch (Exception emailEx)
                 {
                     // Email error không làm fail toàn bộ process
-                    logger.LogWarning(emailEx, "Failed to send confirmation email to {Email}, but signature was successful", request.CustomerEmail);
+                    logger.LogWarning(emailEx, "Failed to send confirmation email to {Email}, but signature was successful", document.DocumentEmail);
                 }
             }
             else
             {
-                logger.LogInformation("Skipping email notification (missing customer information)");
+                logger.LogInformation("Skipping email notification (missing customer information in document: Email={Email}, Name={Name})",
+                    document.DocumentEmail ?? "NULL", document.DocumentCustomerName ?? "NULL");
             }
 
             return new SignContractFromDocumentResult
@@ -258,4 +258,39 @@ internal class SignContractFromDocumentHandler(
         }
     }
 
+    /// <summary>
+    /// Extract contract number từ filename
+    /// VD: "FILLED_abc123_HOP_DONG_LAO_DONG_22_11_2025.docx" => "HĐ-2025-abc123"
+    /// </summary>
+    private string ExtractContractNumberFromFileName(string fileName)
+    {
+        try
+        {
+            // Remove extension
+            var nameWithoutExt = Path.GetFileNameWithoutExtension(fileName);
+
+            // Try to extract GUID from filename (usually after FILLED_ or SIGNED_)
+            var parts = nameWithoutExt.Split('_');
+            if (parts.Length > 1)
+            {
+                // parts[0] = "FILLED" or "SIGNED"
+                // parts[1] = GUID or date
+                var guidPart = parts[1];
+
+                // Check if it looks like a GUID (has dashes or is 32+ chars)
+                if (guidPart.Length >= 8)
+                {
+                    return $"HĐ-{DateTime.Now.Year}-{guidPart.Substring(0, 8)}";
+                }
+            }
+
+            // Fallback: use filename as-is
+            return nameWithoutExt;
+        }
+        catch
+        {
+            // Fallback: return filename
+            return fileName;
+        }
+    }
 }
