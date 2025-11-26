@@ -42,8 +42,8 @@ public class FillContractTemplateEndpoint : ICarterModule
                         }
 
                         // Trích xuất thông tin customer từ data nếu không có trong request
-                        var customerEmail = request.CustomerEmail ?? ExtractFromData(request.Data, "Email", "email", "EMAIL");
-                        var customerName = request.CustomerName ?? ExtractFromData(request.Data, "TenKhachHang", "CustomerName", "HoTen", "FullName");
+                        var customerEmail = request.CustomerEmail ?? ExtractFromData(request.Data, "Email", "email", "EMAIL", "CustomerEmail", "EmployeeEmail");
+                        var customerName = request.CustomerName ?? ExtractFromData(request.Data, "TenKhachHang", "CustomerName", "HoTen", "FullName", "EmployeeName");
                         var contractNumber = request.ContractNumber ?? ExtractFromData(request.Data, "SoHopDong", "ContractNumber", "MaHopDong");
 
                         // Gửi email ký hợp đồng điện tử nếu có thông tin customer
