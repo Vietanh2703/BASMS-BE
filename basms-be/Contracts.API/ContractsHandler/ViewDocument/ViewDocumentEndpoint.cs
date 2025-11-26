@@ -68,6 +68,7 @@ public class ViewDocumentEndpoint : ICarterModule
                                 contentType = result.ContentType,
                                 fileSize = result.FileSize,
                                 documentId = result.DocumentId,
+                                createdAt = result.CreatedAt,
                                 urlExpiresAt = result.UrlExpiresAt
                             }
                         });

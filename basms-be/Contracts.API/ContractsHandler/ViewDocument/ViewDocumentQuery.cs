@@ -21,5 +21,6 @@ public record ViewDocumentResult
     public string? ContentType { get; init; }
     public long? FileSize { get; init; }
     public Guid? DocumentId { get; init; }
+    public DateTime? CreatedAt { get; init; }
     public DateTime? UrlExpiresAt { get; init; }
 }

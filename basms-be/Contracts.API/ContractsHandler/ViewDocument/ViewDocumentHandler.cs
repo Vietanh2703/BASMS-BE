@@ -78,6 +78,7 @@ internal class ViewDocumentHandler(
                 ContentType = contentType,
                 FileSize = document.FileSize,
                 DocumentId = document.Id,
+                CreatedAt = document.CreatedAt,
                 UrlExpiresAt = urlExpiresAt
             };
         }
