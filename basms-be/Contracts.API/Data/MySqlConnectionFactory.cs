@@ -177,6 +177,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                 CREATE TABLE IF NOT EXISTS `contract_documents` (
                     `Id` CHAR(36) PRIMARY KEY,
                     `DocumentType` VARCHAR(50) NOT NULL,
+                    `Category` VARCHAR(100) NULL COMMENT 'Danh mục hợp đồng: labor_contract, service_contract, etc.',
                     `DocumentName` VARCHAR(255) NOT NULL,
                     `FileUrl` VARCHAR(500) NOT NULL,
                     `FileSize` BIGINT NULL,
@@ -190,6 +191,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     `IsDeleted` BOOLEAN NOT NULL DEFAULT FALSE,
                     `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     INDEX `idx_doc_type` (`DocumentType`),
+                    INDEX `idx_doc_category` (`Category`),
                     INDEX `idx_doc_token` (`Tokens`),
                     INDEX `idx_doc_email` (`DocumentEmail`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci

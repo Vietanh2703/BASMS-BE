@@ -13,6 +13,7 @@ public record UploadContractCommand(
     string ContentType,
     long FileSize,
     string DocumentType,
+    string? Category,  // Danh mục hợp đồng (optional)
     DateTime? DocumentDate,
     Guid UploadedBy
 ) : ICommand<UploadContractResult>;
@@ -29,6 +30,7 @@ public record UploadContractResult
     public string? DocumentName { get; init; }
     public long? FileSize { get; init; }
     public string? DocumentType { get; init; }
+    public string? Category { get; init; }
 }
 
 internal class UploadContractHandler(
@@ -136,6 +138,7 @@ internal class UploadContractHandler(
                 {
                     Id = Guid.NewGuid(),
                     DocumentType = request.DocumentType.ToLowerInvariant(),
+                    Category = string.IsNullOrWhiteSpace(request.Category) ? null : request.Category,
                     DocumentName = request.FileName,
                     FileUrl = fileUrl,
                     FileSize = request.FileSize,
@@ -151,8 +154,9 @@ internal class UploadContractHandler(
                 transaction.Commit();
 
                 logger.LogInformation(
-                    "✓ Contract document uploaded successfully: DocumentId={DocumentId}, File={FileName}",
+                    "✓ Contract document uploaded successfully: DocumentId={DocumentId}, Category={Category}, File={FileName}",
                     document.Id,
+                    document.Category ?? "N/A",
                     request.FileName);
 
                 return new UploadContractResult
@@ -162,7 +166,8 @@ internal class UploadContractHandler(
                     FileUrl = fileUrl,
                     DocumentName = request.FileName,
                     FileSize = request.FileSize,
-                    DocumentType = request.DocumentType
+                    DocumentType = request.DocumentType,
+                    Category = document.Category
                 };
             }
             catch (Exception dbEx)

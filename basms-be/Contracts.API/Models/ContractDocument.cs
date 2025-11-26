@@ -17,6 +17,11 @@ public class ContractDocument
     public string DocumentType { get; set; } = string.Empty;
 
     /// <summary>
+    /// Danh mục hợp đồng: labor_contract, service_contract, etc.
+    /// </summary>
+    public string? Category { get; set; }
+
+    /// <summary>
     /// Tên tài liệu: "Hợp đồng dịch vụ bảo vệ - signed.pdf"
     /// </summary>
     public string DocumentName { get; set; } = string.Empty;

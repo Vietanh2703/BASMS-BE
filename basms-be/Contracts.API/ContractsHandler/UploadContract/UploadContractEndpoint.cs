@@ -29,6 +29,12 @@ public class UploadContractEndpoint : ICarterModule
                         documentType = "contract"; // Default
                     }
 
+                    var category = request.Form["category"].ToString();
+                    if (string.IsNullOrWhiteSpace(category))
+                    {
+                        category = null;
+                    }
+
                     DateTime? documentDate = null;
                     var documentDateStr = request.Form["documentDate"].ToString();
                     if (!string.IsNullOrEmpty(documentDateStr) && DateTime.TryParse(documentDateStr, out var parsedDate))
@@ -55,6 +61,7 @@ public class UploadContractEndpoint : ICarterModule
                         ContentType: file.ContentType,
                         FileSize: file.Length,
                         DocumentType: documentType,
+                        Category: category,
                         DocumentDate: documentDate,
                         UploadedBy: uploadedBy
                     );
@@ -80,7 +87,8 @@ public class UploadContractEndpoint : ICarterModule
                             fileUrl = result.FileUrl,
                             documentName = result.DocumentName,
                             fileSize = result.FileSize,
-                            documentType = result.DocumentType
+                            documentType = result.DocumentType,
+                            category = result.Category
                         }
                     });
                 }
@@ -109,6 +117,7 @@ Document is created independently first, then contract will reference it later v
 **Form fields:**
 - `file` (required): The document file (.pdf, .doc, .docx)
 - `documentType` (optional): Type of document - contract, amendment, appendix, requirements, site_plan (default: contract)
+- `category` (optional): Category of contract - labor_contract, service_contract, working_contract, etc.
 - `documentDate` (optional): Date of the document (ISO format: yyyy-MM-dd)
 - `uploadedBy` (required): GUID of the user uploading the document
 
@@ -116,10 +125,18 @@ Document is created independently first, then contract will reference it later v
 ```bash
 curl -X POST http://localhost:5000/api/contracts/documents/upload \
   -F 'file=@contract.pdf' \
-  -F 'documentType=working_contract' \
+  -F 'documentType=contract' \
+  -F 'category=labor_contract' \
   -F 'documentDate=2024-01-15' \
   -F 'uploadedBy=550e8400-e29b-41d4-a716-446655440000'
 ```
+
+**Category Examples:**
+- `labor_contract`: Hợp đồng lao động
+- `service_contract`: Hợp đồng dịch vụ
+- `working_contract`: Hợp đồng làm việc
+- `internship_contract`: Hợp đồng thực tập
+- `probation_contract`: Hợp đồng thử việc
 
 **Validation:**
 - File size must be ≤ 10MB
