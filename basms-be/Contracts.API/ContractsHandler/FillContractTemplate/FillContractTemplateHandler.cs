@@ -248,6 +248,36 @@ internal class FillContractFromTemplateHandler(
     }
 
     /// <summary>
+    /// Extract giá trị từ JsonElement Object
+    /// Nếu có property "value", lấy giá trị đó
+    /// Nếu không, trả về ToString() của object
+    /// </summary>
+    private string ExtractValueFromJsonObject(System.Text.Json.JsonElement jsonElement)
+    {
+        if (jsonElement.ValueKind != System.Text.Json.JsonValueKind.Object)
+        {
+            return jsonElement.ToString();
+        }
+
+        // Kiểm tra xem có property "value" không
+        if (jsonElement.TryGetProperty("value", out var valueProperty))
+        {
+            return valueProperty.ValueKind switch
+            {
+                System.Text.Json.JsonValueKind.String => valueProperty.GetString() ?? string.Empty,
+                System.Text.Json.JsonValueKind.Number => valueProperty.GetDecimal().ToString("N0"),
+                System.Text.Json.JsonValueKind.True => "true",
+                System.Text.Json.JsonValueKind.False => "false",
+                _ => valueProperty.ToString()
+            };
+        }
+
+        // Nếu không có "value", trả về toString của toàn bộ object (fallback)
+        logger.LogWarning("JsonElement Object không có property 'value', trả về ToString(): {Json}", jsonElement.ToString());
+        return jsonElement.ToString();
+    }
+
+    /// <summary>
     /// Convert Dictionary<string, object> sang Dictionary<string, string>
     /// Không hard-code, chỉ convert những gì user cung cấp
     /// Giữ nguyên casing của key từ user
@@ -286,6 +316,8 @@ internal class FillContractFromTemplateHandler(
                     System.Text.Json.JsonValueKind.Number => jsonElement.GetDecimal().ToString("N0"),
                     System.Text.Json.JsonValueKind.True => "true",
                     System.Text.Json.JsonValueKind.False => "false",
+                    System.Text.Json.JsonValueKind.Object => ExtractValueFromJsonObject(jsonElement),
+                    System.Text.Json.JsonValueKind.Array => string.Join(", ", jsonElement.EnumerateArray().Select(e => e.ToString())),
                     _ => jsonElement.ToString()
                 };
             }
