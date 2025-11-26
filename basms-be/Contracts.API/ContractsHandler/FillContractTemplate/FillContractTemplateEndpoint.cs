@@ -1,3 +1,5 @@
+using Contracts.API.Extensions;
+
 namespace Contracts.API.ContractsHandler.FillContractTemplate;
 
 /// <summary>
@@ -5,7 +7,10 @@ namespace Contracts.API.ContractsHandler.FillContractTemplate;
 /// </summary>
 public record FillContractFromS3Request(
     Guid TemplateDocumentId,
-    Dictionary<string, object>? Data
+    Dictionary<string, object>? Data,
+    string? CustomerEmail = null,
+    string? CustomerName = null,
+    string? ContractNumber = null
 );
 
 public class FillContractTemplateEndpoint : ICarterModule
@@ -14,7 +19,7 @@ public class FillContractTemplateEndpoint : ICarterModule
     {
         // Route: POST /api/contracts/template/fill-from-s3
         app.MapPost("/api/contracts/template/fill-from-s3",
-                async (FillContractFromS3Request request, ISender sender, ILogger<FillContractTemplateEndpoint> logger) =>
+                async (FillContractFromS3Request request, ISender sender, EmailHandler emailHandler, ILogger<FillContractTemplateEndpoint> logger) =>
                 {
                     try
                     {
@@ -34,6 +39,31 @@ public class FillContractTemplateEndpoint : ICarterModule
                                 success = false,
                                 error = result.ErrorMessage
                             });
+                        }
+
+                        // Gửi email ký hợp đồng điện tử nếu có thông tin customer
+                        if (!string.IsNullOrEmpty(request.CustomerEmail) && result.FilledDocumentId.HasValue && !string.IsNullOrEmpty(result.SecurityToken))
+                        {
+                            try
+                            {
+                                logger.LogInformation("Sending contract signing email to {Email}", request.CustomerEmail);
+
+                                await emailHandler.SendContractSigningEmailAsync(
+                                    customerName: request.CustomerName ?? "Quý khách",
+                                    email: request.CustomerEmail,
+                                    contractNumber: request.ContractNumber ?? "N/A",
+                                    documentId: result.FilledDocumentId.Value,
+                                    securityToken: result.SecurityToken,
+                                    tokenExpiredDay: result.TokenExpiredDay ?? DateTime.UtcNow.AddDays(7)
+                                );
+
+                                logger.LogInformation("Contract signing email sent successfully to {Email}", request.CustomerEmail);
+                            }
+                            catch (Exception emailEx)
+                            {
+                                logger.LogError(emailEx, "Failed to send contract signing email to {Email}", request.CustomerEmail);
+                                // Không fail toàn bộ request nếu email gửi thất bại
+                            }
                         }
 
                         return Results.Ok(new
@@ -67,155 +97,6 @@ public class FillContractTemplateEndpoint : ICarterModule
             .Produces(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status500InternalServerError)
             .WithSummary("Điền template từ S3 và tạo token bảo mật cho ký điện tử");
-
-        // Route: POST /api/contracts/template/fill
-        app.MapPost("/api/contracts/template/fill",
-                async (HttpRequest request, ISender sender, ILogger<FillContractTemplateEndpoint> logger) =>
-                {
-                    try
-                    {
-                        // Kiểm tra request có file không
-                        if (!request.HasFormContentType || request.Form.Files.Count == 0)
-                        {
-                            return Results.BadRequest(new
-                            {
-                                success = false,
-                                error = "No template file uploaded"
-                            });
-                        }
-
-                        var templateFile = request.Form.Files[0];
-
-                        // Validate file extension
-                        if (!templateFile.FileName.EndsWith(".docx", StringComparison.OrdinalIgnoreCase))
-                        {
-                            return Results.BadRequest(new
-                            {
-                                success = false,
-                                error = "Only .docx files are supported"
-                            });
-                        }
-
-                        // Parse JSON data từ form
-                        var dataJson = request.Form["data"].ToString();
-                        if (string.IsNullOrEmpty(dataJson))
-                        {
-                            return Results.BadRequest(new
-                            {
-                                success = false,
-                                error = "Contract data is required"
-                            });
-                        }
-
-                        // ✅ FIX: Clean up JSON string to handle unescaped newlines
-                        // Some clients may send newlines as actual \n characters instead of escaped \\n
-                        // This causes JsonException: '0x0A' is invalid within a JSON string
-                        logger.LogDebug("Original JSON length: {Length}", dataJson.Length);
-
-                        Dictionary<string, string>? data = null;
-                        try
-                        {
-                            // Try parsing with relaxed options first
-                            var options = new System.Text.Json.JsonSerializerOptions
-                            {
-                                PropertyNameCaseInsensitive = true,
-                                AllowTrailingCommas = true,
-                                ReadCommentHandling = System.Text.Json.JsonCommentHandling.Skip
-                            };
-
-                            data = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(dataJson, options);
-                        }
-                        catch (System.Text.Json.JsonException ex)
-                        {
-                            // If normal parsing fails, try to fix common issues
-                            logger.LogWarning(ex, "Failed to parse JSON directly, attempting to clean and retry");
-
-                            try
-                            {
-                                // Method 1: Try to fix unescaped newlines by pre-processing the JSON
-                                // This handles the case where string values contain actual newlines
-                                var cleanedJson = CleanJsonString(dataJson);
-                                logger.LogDebug("Cleaned JSON length: {Length}", cleanedJson.Length);
-
-                                var options = new System.Text.Json.JsonSerializerOptions
-                                {
-                                    PropertyNameCaseInsensitive = true,
-                                    AllowTrailingCommas = true
-                                };
-
-                                data = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(cleanedJson, options);
-                                logger.LogInformation("Successfully parsed JSON after cleaning");
-                            }
-                            catch (Exception cleanEx)
-                            {
-                                logger.LogError(cleanEx, "Failed to parse JSON even after cleaning");
-                                return Results.BadRequest(new
-                                {
-                                    success = false,
-                                    error = $"Invalid JSON format: {ex.Message}. Please ensure newlines are properly escaped as \\n",
-                                    details = "JSON strings must not contain unescaped newlines. Use \\n instead."
-                                });
-                            }
-                        }
-
-                        if (data == null || data.Count == 0)
-                        {
-                            return Results.BadRequest(new
-                            {
-                                success = false,
-                                error = "Invalid contract data format or empty data"
-                            });
-                        }
-
-                        logger.LogInformation("Filling template {FileName} with {Count} fields", templateFile.FileName,
-                            data.Count);
-
-                        // Tạo output filename
-                        var outputFileName = $"HopDong_{DateTime.UtcNow:yyyyMMdd_HHmmss}.docx";
-
-                        // Tạo command
-                        using var templateStream = templateFile.OpenReadStream();
-                        var command = new FillContractTemplateCommand(
-                            TemplateStream: templateStream,
-                            Data: data,
-                            OutputFileName: outputFileName
-                        );
-
-                        var result = await sender.Send(command);
-
-                        if (!result.Success || result.FilledDocumentStream == null)
-                        {
-                            return Results.BadRequest(new
-                            {
-                                success = false,
-                                error = result.ErrorMessage
-                            });
-                        }
-
-                        // Trả về file đã điền
-                        return Results.File(
-                            fileStream: result.FilledDocumentStream,
-                            contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                            fileDownloadName: outputFileName
-                        );
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogError(ex, "Error in fill contract template endpoint");
-                        return Results.Problem(
-                            title: "Fill template failed",
-                            detail: ex.Message,
-                            statusCode: StatusCodes.Status500InternalServerError
-                        );
-                    }
-                })
-            .DisableAntiforgery()
-            .WithTags("Contracts")
-            .WithName("FillContractTemplate")
-            .Produces(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status400BadRequest)
-            .ProducesProblem(StatusCodes.Status500InternalServerError)
-            .WithSummary("Điền thông tin vào template hợp đồng lao động Word");
     }
 
     /// <summary>

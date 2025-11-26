@@ -27,3 +27,6 @@ global using Microsoft.AspNetCore.Authentication.JwtBearer;
 global using Microsoft.IdentityModel.Tokens;
 global using System.Globalization;
 global using MySql.Data.MySqlClient;
+global using MailKit.Net.Smtp;
+global using MailKit.Security;
+global using MimeKit;
