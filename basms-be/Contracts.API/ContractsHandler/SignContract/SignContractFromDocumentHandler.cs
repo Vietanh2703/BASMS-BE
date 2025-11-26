@@ -141,8 +141,8 @@ internal class SignContractFromDocumentHandler(
 
             // Tạo tên file mới với prefix "Signed_"
             var newFileName = originalFileName.StartsWith("FILLED_")
-                ? originalFileName.Replace("FILLED_", "Signed_")
-                : $"Signed_{originalFileName}";
+                ? originalFileName.Replace("FILLED_", "SIGNED_")
+                : $"SIGNED_{originalFileName}";
 
             // Tạo S3 key mới
             var newS3Key = $"contracts/signed/{folderName}/{newFileName}";
@@ -177,6 +177,7 @@ internal class SignContractFromDocumentHandler(
             var updateSql = @"
                 UPDATE contract_documents
                 SET
+                    DocumentType = 'signed_contract',
                     DocumentName = @DocumentName,
                     FileUrl = @FileUrl,
                     Version = @Version,
@@ -188,6 +189,7 @@ internal class SignContractFromDocumentHandler(
             var rowsAffected = await connection.ExecuteAsync(updateSql, new
             {
                 Id = document.Id,
+                DocumentType = "signed_contract",
                 DocumentName = newFileName,
                 FileUrl = newS3Key,
                 Version = "signed",
