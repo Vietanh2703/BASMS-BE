@@ -57,13 +57,20 @@ public class FillContractTemplateEndpoint : ICarterModule
                                     tokenExpiredDay: result.TokenExpiredDay ?? DateTime.UtcNow.AddDays(7)
                                 );
 
-                                logger.LogInformation("Contract signing email sent successfully to {Email}", request.CustomerEmail);
+                                logger.LogInformation("✓ Contract signing email sent successfully to {Email}", request.CustomerEmail);
                             }
                             catch (Exception emailEx)
                             {
-                                logger.LogError(emailEx, "Failed to send contract signing email to {Email}", request.CustomerEmail);
+                                logger.LogError(emailEx, "✗ Failed to send contract signing email to {Email}", request.CustomerEmail);
                                 // Không fail toàn bộ request nếu email gửi thất bại
                             }
+                        }
+                        else
+                        {
+                            logger.LogWarning("Email NOT sent - CustomerEmail: {HasEmail}, DocumentId: {HasDocId}, Token: {HasToken}",
+                                !string.IsNullOrEmpty(request.CustomerEmail),
+                                result.FilledDocumentId.HasValue,
+                                !string.IsNullOrEmpty(result.SecurityToken));
                         }
 
                         return Results.Ok(new
