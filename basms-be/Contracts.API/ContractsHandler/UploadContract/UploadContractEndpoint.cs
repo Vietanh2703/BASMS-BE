@@ -23,27 +23,32 @@ public class UploadContractEndpoint : ICarterModule
                     var file = request.Form.Files[0];
 
                     // Lấy thông tin từ form
-                    var documentType = request.Form["documentType"].ToString();
-                    if (string.IsNullOrEmpty(documentType))
+                    var documentType = request.Form["documentType"].FirstOrDefault();
+                    if (string.IsNullOrWhiteSpace(documentType))
                     {
                         documentType = "contract"; // Default
                     }
 
-                    var category = request.Form["category"].ToString();
+                    // Parse category (optional text field)
+                    var category = request.Form["category"].FirstOrDefault();
                     if (string.IsNullOrWhiteSpace(category))
                     {
                         category = null;
                     }
+                    else
+                    {
+                        category = category.Trim(); // Trim whitespace
+                    }
 
                     DateTime? documentDate = null;
-                    var documentDateStr = request.Form["documentDate"].ToString();
+                    var documentDateStr = request.Form["documentDate"].FirstOrDefault();
                     if (!string.IsNullOrEmpty(documentDateStr) && DateTime.TryParse(documentDateStr, out var parsedDate))
                     {
                         documentDate = parsedDate;
                     }
 
-                    // Lấy UploadedBy từ claims (JWT token)
-                    var uploadedByStr = request.Form["uploadedBy"].ToString();
+                    // Lấy UploadedBy từ form
+                    var uploadedByStr = request.Form["uploadedBy"].FirstOrDefault();
                     if (string.IsNullOrEmpty(uploadedByStr) || !Guid.TryParse(uploadedByStr, out var uploadedBy))
                     {
                         return Results.BadRequest(new
