@@ -182,7 +182,7 @@ internal class SignContractFromDocumentHandler(
                     Version = @Version,
                     Tokens = NULL,
                     TokenExpiredDay = NULL,
-                    UpdatedAt = @UpdatedAt
+                    CreatedAt = @CreatedAt
                 WHERE Id = @Id AND IsDeleted = 0";
 
             var rowsAffected = await connection.ExecuteAsync(updateSql, new
@@ -191,7 +191,7 @@ internal class SignContractFromDocumentHandler(
                 DocumentName = newFileName,
                 FileUrl = newS3Key,
                 Version = "signed",
-                UpdatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow
             });
 
             if (rowsAffected == 0)
