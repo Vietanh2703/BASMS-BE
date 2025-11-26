@@ -1,10 +1,11 @@
 namespace Contracts.API.ContractsHandler.ViewDocumentByToken;
 
 /// <summary>
-/// Query để lấy document bằng token bảo mật
+/// Query để lấy document bằng documentId và token bảo mật
 /// Dùng cho việc xem document trước khi ký điện tử
 /// </summary>
 public record ViewDocumentByTokenQuery(
+    Guid DocumentId,
     string Token
 ) : IQuery<ViewDocumentByTokenResult>;
 

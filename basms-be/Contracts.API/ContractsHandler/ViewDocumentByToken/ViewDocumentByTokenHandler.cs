@@ -18,7 +18,7 @@ internal class ViewDocumentByTokenHandler(
     {
         try
         {
-            logger.LogInformation("Validating token and retrieving document");
+            logger.LogInformation("Validating documentId {DocumentId} and token", request.DocumentId);
 
             // VALIDATION 1: Token không được rỗng
             if (string.IsNullOrWhiteSpace(request.Token))
@@ -34,22 +34,23 @@ internal class ViewDocumentByTokenHandler(
 
             using var connection = await connectionFactory.CreateConnectionAsync();
 
-            // BƯỚC 1: TÌM DOCUMENT BẰNG TOKEN
+            // BƯỚC 1: TÌM DOCUMENT BẰNG CẢ DOCUMENTID VÀ TOKEN
             var document = await connection.QueryFirstOrDefaultAsync<ContractDocument>(@"
                 SELECT * FROM contract_documents
-                WHERE Tokens = @Token
+                WHERE Id = @DocumentId
+                AND Tokens = @Token
                 AND IsDeleted = 0
-            ", new { Token = request.Token });
+            ", new { DocumentId = request.DocumentId, Token = request.Token });
 
-            // VALIDATION 2: Token không tồn tại hoặc document đã bị xóa
+            // VALIDATION 2: DocumentId và Token không khớp hoặc document đã bị xóa
             if (document == null)
             {
-                logger.LogWarning("Document not found for token: {Token}",
-                    MaskToken(request.Token));
+                logger.LogWarning("Document not found or token mismatch. DocumentId: {DocumentId}, Token: {Token}",
+                    request.DocumentId, MaskToken(request.Token));
                 return new ViewDocumentByTokenResult
                 {
                     Success = false,
-                    ErrorMessage = "Invalid security token or document not found",
+                    ErrorMessage = "Invalid document ID or security token",
                     ErrorCode = "INVALID_TOKEN"
                 };
             }

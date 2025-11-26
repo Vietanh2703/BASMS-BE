@@ -4,9 +4,10 @@ public class ViewDocumentByTokenEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        // Route: GET /api/contracts/documents/view?token={securityToken}
-        app.MapGet("/api/contracts/documents/view",
+        // Route: GET /api/contracts/documents/{documentId}/view?token={securityToken}
+        app.MapGet("/api/contracts/documents/{documentId:guid}/view",
                 async (
+                    Guid documentId,
                     string? token,
                     ISender sender,
                     ILogger<ViewDocumentByTokenEndpoint> logger) =>
@@ -25,9 +26,11 @@ public class ViewDocumentByTokenEndpoint : ICarterModule
                             });
                         }
 
-                        logger.LogInformation("Retrieving document with token");
+                        logger.LogInformation("Retrieving document {DocumentId} with token", documentId);
 
-                        var query = new ViewDocumentByTokenQuery(Token: token);
+                        var query = new ViewDocumentByTokenQuery(
+                            DocumentId: documentId,
+                            Token: token);
                         var result = await sender.Send(query);
 
                         if (!result.Success)
@@ -98,18 +101,19 @@ public class ViewDocumentByTokenEndpoint : ICarterModule
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status500InternalServerError)
-            .WithSummary("Xem document bằng security token (dùng cho ký điện tử)")
+            .WithSummary("Xem document bằng documentId và security token (dùng cho ký điện tử)")
             .WithDescription(@"
 ## Mô tả
-Endpoint này cho phép xem document đã được fill bằng security token.
+Endpoint này cho phép xem document đã được fill bằng documentId và security token.
 Token được tạo tự động sau khi fill template thành công.
 
 ## Use Case
 - Frontend hiển thị document trong PDF viewer trước khi ký
 - Người ký xem trước nội dung hợp đồng
-- Không yêu cầu authentication, chỉ cần token hợp lệ
+- Không yêu cầu authentication, chỉ cần documentId và token hợp lệ
 
 ## Security
+- Yêu cầu cả documentId (route param) và token (query param) phải khớp
 - Token có thời hạn (mặc định 7 ngày)
 - Token chỉ dùng 1 lần (invalidated sau khi ký)
 - Mọi truy cập được log để audit
@@ -120,7 +124,7 @@ Token được tạo tự động sau khi fill template thành công.
 
 ## Ví dụ
 ```
-GET /api/contracts/documents/view?token=a1b2c3d4-e5f6-4789-b012-3456789abcde
+GET /api/contracts/documents/123e4567-e89b-12d3-a456-426614174000/view?token=a1b2c3d4-e5f6-4789-b012-3456789abcde
 
 Response Headers:
   Content-Type: application/pdf
@@ -131,7 +135,7 @@ Response Body: [PDF binary stream]
 
 ## Error Codes
 - `TOKEN_REQUIRED`: Token không được cung cấp
-- `INVALID_TOKEN`: Token không tồn tại hoặc đã bị vô hiệu hóa
+- `INVALID_TOKEN`: Token hoặc documentId không khớp hoặc đã bị vô hiệu hóa
 - `TOKEN_EXPIRED`: Token đã hết hạn
 - `DOWNLOAD_FAILED`: Không thể tải file từ S3
             ");
