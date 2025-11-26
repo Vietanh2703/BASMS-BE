@@ -5,7 +5,10 @@ namespace Contracts.API.ContractsHandler.SignContract;
 /// </summary>
 public record SignContractFromDocumentCommand(
     Guid DocumentId,  // FilledDocumentId from S3
-    IFormFile SignatureImage  // Signature image to insert into content control
+    IFormFile SignatureImage,  // Signature image to insert into content control
+    string? CustomerEmail = null,  // Email to send confirmation (optional)
+    string? CustomerName = null,  // Customer name for email (optional)
+    string? ContractNumber = null  // Contract number for email (optional)
 ) : ICommand<SignContractFromDocumentResult>;
 
 /// <summary>
@@ -24,6 +27,7 @@ internal class SignContractFromDocumentHandler(
     IDbConnectionFactory connectionFactory,
     IS3Service s3Service,
     IWordContractService wordContractService,
+    EmailHandler emailHandler,
     ILogger<SignContractFromDocumentHandler> logger)
     : ICommandHandler<SignContractFromDocumentCommand, SignContractFromDocumentResult>
 {
@@ -117,11 +121,40 @@ internal class SignContractFromDocumentHandler(
             }
 
             // ================================================================
-            // BƯỚC 4: UPLOAD FILE BACK TO S3 (OVERWRITE)
+            // BƯỚC 4: TẠO ĐƯỜNG DẪN MỚI CHO SIGNED DOCUMENT
+            // ================================================================
+            // Lấy folder name từ đường dẫn hiện tại
+            // VD: contracts/filled/Hợp đồng lao động nhân viên bảo vệ/FILLED_xxx.docx
+            // => contracts/signed/Hợp đồng lao động nhân viên bảo vệ/Signed_xxx.docx
+            var originalPath = document.FileUrl;
+            var pathParts = originalPath.Split('/');
+
+            string folderName = "Hợp đồng khác"; // Default
+            string originalFileName = document.DocumentName;
+
+            // Extract folder name từ path
+            if (pathParts.Length >= 3 && pathParts[0] == "contracts" && pathParts[1] == "filled")
+            {
+                // pathParts[2] là folder name (VD: "Hợp đồng lao động nhân viên bảo vệ")
+                folderName = pathParts[2];
+            }
+
+            // Tạo tên file mới với prefix "Signed_"
+            var newFileName = originalFileName.StartsWith("FILLED_")
+                ? originalFileName.Replace("FILLED_", "Signed_")
+                : $"Signed_{originalFileName}";
+
+            // Tạo S3 key mới
+            var newS3Key = $"contracts/signed/{folderName}/{newFileName}";
+
+            logger.LogInformation("Moving signed document: {OldPath} => {NewPath}", originalPath, newS3Key);
+
+            // ================================================================
+            // BƯỚC 5: UPLOAD FILE VÀO ĐƯỜNG DẪN MỚI (SIGNED FOLDER)
             // ================================================================
             var (uploadSuccess, fileUrl, uploadError) = await s3Service.UploadFileWithCustomKeyAsync(
                 documentWithSignature,
-                document.FileUrl,  // Use same S3 key to overwrite
+                newS3Key,
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 cancellationToken);
 
@@ -132,18 +165,84 @@ internal class SignContractFromDocumentHandler(
                 return new SignContractFromDocumentResult
                 {
                     Success = false,
-                    ErrorMessage = uploadError ?? "Failed to upload document to S3"
+                    ErrorMessage = uploadError ?? "Failed to upload signed document to S3"
                 };
             }
 
-            logger.LogInformation("Uploaded document with signature to S3: {FileUrl}", fileUrl);
+            logger.LogInformation("Uploaded signed document to S3: {FileUrl}", fileUrl);
+
+            // ================================================================
+            // BƯỚC 6: CẬP NHẬT DATABASE
+            // ================================================================
+            var updateSql = @"
+                UPDATE contract_documents
+                SET
+                    DocumentName = @DocumentName,
+                    FileUrl = @FileUrl,
+                    Version = @Version,
+                    Tokens = NULL,
+                    TokenExpiredDay = NULL,
+                    UpdatedAt = @UpdatedAt
+                WHERE Id = @Id AND IsDeleted = 0";
+
+            var rowsAffected = await connection.ExecuteAsync(updateSql, new
+            {
+                Id = document.Id,
+                DocumentName = newFileName,
+                FileUrl = newS3Key,
+                Version = "signed",
+                UpdatedAt = DateTime.UtcNow
+            });
+
+            if (rowsAffected == 0)
+            {
+                logger.LogWarning("Failed to update document record in database for DocumentId: {DocumentId}", document.Id);
+                return new SignContractFromDocumentResult
+                {
+                    Success = false,
+                    ErrorMessage = "Failed to update document record in database"
+                };
+            }
+
+            logger.LogInformation("✓ Updated database: DocumentId={DocumentId}, NewFileName={FileName}, NewPath={Path}, Version=signed, Tokens=NULL",
+                document.Id, newFileName, newS3Key);
+
+            // ================================================================
+            // BƯỚC 7: GỬI EMAIL XÁC NHẬN (NẾU CÓ THÔNG TIN CUSTOMER)
+            // ================================================================
+            if (!string.IsNullOrEmpty(request.CustomerEmail) &&
+                !string.IsNullOrEmpty(request.CustomerName) &&
+                !string.IsNullOrEmpty(request.ContractNumber))
+            {
+                try
+                {
+                    logger.LogInformation("Sending contract signed confirmation email to {Email}", request.CustomerEmail);
+
+                    await emailHandler.SendContractSignedConfirmationEmailAsync(
+                        request.CustomerName,
+                        request.CustomerEmail,
+                        request.ContractNumber,
+                        DateTime.UtcNow);
+
+                    logger.LogInformation("✓ Sent confirmation email successfully to {Email}", request.CustomerEmail);
+                }
+                catch (Exception emailEx)
+                {
+                    // Email error không làm fail toàn bộ process
+                    logger.LogWarning(emailEx, "Failed to send confirmation email to {Email}, but signature was successful", request.CustomerEmail);
+                }
+            }
+            else
+            {
+                logger.LogInformation("Skipping email notification (missing customer information)");
+            }
 
             return new SignContractFromDocumentResult
             {
                 Success = true,
                 DocumentId = document.Id,
                 FileUrl = fileUrl,
-                FileName = document.DocumentName
+                FileName = newFileName
             };
         }
         catch (Exception ex)

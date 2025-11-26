@@ -97,6 +97,26 @@ public class EmailHandler
         await SendEmailAsync(emailRequest);
     }
 
+    /// <summary>
+    /// Gửi email xác nhận đã ký hợp đồng thành công
+    /// </summary>
+    public async Task SendContractSignedConfirmationEmailAsync(
+        string customerName,
+        string email,
+        string contractNumber,
+        DateTime signedDate)
+    {
+        var emailBody = GenerateContractSignedConfirmationEmailBody(customerName, contractNumber, signedDate);
+        var emailRequest = new EmailRequests
+        {
+            Email = email,
+            Subject = "Xác nhận chữ ký hợp đồng thành công - BASMS ✅",
+            EmailBody = emailBody
+        };
+
+        await SendEmailAsync(emailRequest);
+    }
+
     private string GenerateCustomerLoginEmailBody(
         string customerName,
         string email,
@@ -293,5 +313,113 @@ public class EmailHandler
             .Replace("{documentId}", documentId.ToString())
             .Replace("{signingUrl}", signingUrl)
             .Replace("{expiredDateStr}", expiredDateStr);
+    }
+
+    private string GenerateContractSignedConfirmationEmailBody(
+        string customerName,
+        string contractNumber,
+        DateTime signedDate)
+    {
+        var signedDateStr = signedDate.ToString("dd/MM/yyyy HH:mm");
+
+        var template = @"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='UTF-8'>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background-color: #4CAF50; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
+        .content { background-color: #f9f9f9; padding: 30px; border: 1px solid #ddd; }
+        .success-box { background-color: #e8f5e9; border-left: 4px solid #4CAF50; padding: 20px; margin: 20px 0; border-radius: 5px; }
+        .info-box { background-color: #e3f2fd; border-left: 4px solid #2196F3; padding: 15px; margin: 20px 0; }
+        .next-steps { background-color: #fff; padding: 20px; border-left: 4px solid #FF9800; margin: 20px 0; }
+        .reminder-box { background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; }
+        .footer { background-color: #333; color: white; padding: 15px; text-align: center; font-size: 12px; border-radius: 0 0 5px 5px; }
+        .checkmark { font-size: 48px; color: #4CAF50; text-align: center; margin: 20px 0; }
+        .highlight { color: #4CAF50; font-weight: bold; }
+        ul { padding-left: 20px; }
+        ul li { margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <div class='header'>
+            <h1>✅ Xác nhận chữ ký thành công</h1>
+            <p>Building & Assets Security Management System</p>
+        </div>
+
+        <div class='content'>
+            <div class='checkmark'>✓</div>
+
+            <p>Kính gửi <strong>{customerName}</strong>,</p>
+
+            <p>Chúng tôi xin chân thành cảm ơn Quý khách đã hoàn tất việc ký điện tử hợp đồng.</p>
+
+            <div class='success-box'>
+                <strong>🎉 Chữ ký điện tử của Quý khách đã được xác nhận thành công!</strong><br><br>
+                <strong>📋 Mã hợp đồng:</strong> {contractNumber}<br>
+                <strong>📅 Thời gian ký:</strong> {signedDateStr}<br>
+                <strong>✅ Trạng thái:</strong> <span class='highlight'>Đã ký - Chờ phê duyệt</span>
+            </div>
+
+            <div class='next-steps'>
+                <strong>📌 Các bước tiếp theo:</strong><br><br>
+                <ul>
+                    <li><strong>Xét duyệt hợp đồng:</strong> Bộ phận pháp lý và quản lý của chúng tôi sẽ xem xét và phê duyệt hợp đồng trong thời gian sớm nhất</li>
+                    <li><strong>Thông báo kết quả:</strong> Quý khách sẽ nhận được email xác nhận ngay khi hợp đồng được phê duyệt</li>
+                    <li><strong>Triển khai dịch vụ:</strong> Sau khi phê duyệt, chúng tôi sẽ liên hệ để sắp xếp lịch triển khai dịch vụ</li>
+                </ul>
+            </div>
+
+            <div class='reminder-box'>
+                <strong>📧 Lưu ý quan trọng:</strong><br>
+                • Vui lòng <strong>thường xuyên kiểm tra hòm thư email</strong> của Quý khách để không bỏ lỡ các thông báo quan trọng<br>
+                • Kiểm tra cả <strong>thư mục Spam/Junk Mail</strong> nếu không thấy email từ chúng tôi<br>
+                • Thêm địa chỉ email <strong>support@basms.com</strong> vào danh bạ để đảm bảo nhận được thông báo<br>
+                • Mọi cập nhật về tiến độ xét duyệt sẽ được gửi qua email này
+            </div>
+
+            <div class='info-box'>
+                <strong>ℹ️ Thời gian xử lý dự kiến:</strong><br>
+                Thông thường, quá trình xét duyệt hợp đồng sẽ hoàn tất trong vòng <strong>1-2 ngày làm việc</strong>.
+                Chúng tôi cam kết sẽ xử lý hồ sơ của Quý khách một cách nhanh chóng và chính xác nhất.
+            </div>
+
+            <p style='margin-top: 30px;'><strong>Quý khách có thể:</strong></p>
+            <ul>
+                <li>✅ Đăng nhập vào hệ thống BASMS để theo dõi trạng thái hợp đồng</li>
+                <li>✅ Xem lại nội dung hợp đồng đã ký bất cứ lúc nào</li>
+                <li>✅ Liên hệ với chúng tôi nếu cần hỗ trợ thêm</li>
+            </ul>
+
+            <p style='margin-top: 30px;'>Nếu có bất kỳ thắc mắc hoặc cần hỗ trợ, vui lòng liên hệ:</p>
+            <p>
+                📞 Hotline: 1900-xxxx<br>
+                📧 Email: support@basms.com<br>
+                🌐 Website: www.basms.com<br>
+                ⏰ Thời gian hỗ trợ: 8:00 - 17:30 (Thứ 2 - Thứ 6)
+            </p>
+
+            <p style='margin-top: 30px;'>Một lần nữa, chúng tôi xin chân thành cảm ơn sự tin tưởng của Quý khách!</p>
+
+            <p>Trân trọng,<br><strong>Đội ngũ BASMS</strong><br><em>Building & Assets Security Management System</em></p>
+        </div>
+
+        <div class='footer'>
+            <p>© 2025 BASMS - Building & Assets Security Management System</p>
+            <p>Email này được gửi tự động, vui lòng không trả lời trực tiếp.</p>
+            <p style='margin-top: 10px;'>Để cập nhật thông tin liên lạc hoặc hủy đăng ký nhận email, vui lòng đăng nhập vào hệ thống.</p>
+        </div>
+    </div>
+</body>
+</html>
+";
+
+        return template
+            .Replace("{customerName}", customerName)
+            .Replace("{contractNumber}", contractNumber)
+            .Replace("{signedDateStr}", signedDateStr);
     }
 }
