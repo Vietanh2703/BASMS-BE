@@ -277,9 +277,22 @@ public class S3Service : IS3Service
                 fileKey, expirationMinutes);
 
             // Tạo Content-Disposition header với tên file tùy chỉnh nếu có
-            var contentDisposition = string.IsNullOrEmpty(downloadFileName)
-                ? "attachment"
-                : $"attachment; filename=\"{downloadFileName}\"";
+            // Encode filename theo chuẩn RFC 5987 để hỗ trợ Unicode và ký tự đặc biệt
+            string contentDisposition;
+            if (string.IsNullOrEmpty(downloadFileName))
+            {
+                contentDisposition = "attachment";
+            }
+            else
+            {
+                // Sanitize filename: remove/replace characters that might cause issues
+                var sanitizedFileName = SanitizeFileName(downloadFileName);
+
+                // Use RFC 5987 encoding for better Unicode support
+                // Format: attachment; filename="simple.docx"; filename*=UTF-8''encoded%20name.docx
+                var encodedFileName = Uri.EscapeDataString(sanitizedFileName);
+                contentDisposition = $"attachment; filename=\"{sanitizedFileName}\"; filename*=UTF-8''{encodedFileName}";
+            }
 
             var request = new GetPreSignedUrlRequest
             {
@@ -305,5 +318,39 @@ public class S3Service : IS3Service
             _logger.LogError(ex, "Error generating pre-signed URL for {FileUrlOrKey}", fileUrlOrKey);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Sanitize filename to remove characters that might cause issues with HTTP headers or Word
+    /// </summary>
+    private static string SanitizeFileName(string fileName)
+    {
+        if (string.IsNullOrEmpty(fileName))
+            return fileName;
+
+        // Remove or replace problematic characters
+        // Keep: letters, numbers, dots, hyphens, underscores, spaces
+        // Remove: quotes, backslashes, and other special characters that can break HTTP headers
+        var sanitized = fileName
+            .Replace("\"", "") // Remove quotes
+            .Replace("\\", "") // Remove backslashes
+            .Replace("/", "_") // Replace forward slashes with underscores
+            .Replace(":", "_") // Replace colons
+            .Replace("*", "_") // Replace asterisks
+            .Replace("?", "_") // Replace question marks
+            .Replace("<", "_") // Replace less than
+            .Replace(">", "_") // Replace greater than
+            .Replace("|", "_"); // Replace pipes
+
+        // Trim whitespace
+        sanitized = sanitized.Trim();
+
+        // If filename becomes empty after sanitization, use a default
+        if (string.IsNullOrEmpty(sanitized))
+        {
+            sanitized = "document.docx";
+        }
+
+        return sanitized;
     }
 }

@@ -421,7 +421,14 @@ public class WordContractService : IWordContractService
                     }
                 }
 
+                // Save document changes to the main part
                 mainPart.Document.Save();
+
+                // CRITICAL FIX: Save the entire document package to ensure all changes are written to stream
+                // Without this, the document may be corrupted when uploaded to S3
+                wordDoc.Save();
+
+                _logger.LogInformation("Document saved successfully");
             }
 
             // Clean up image stream
@@ -429,7 +436,7 @@ public class WordContractService : IWordContractService
 
             // Return modified document stream
             docMemoryStream.Position = 0;
-            _logger.LogInformation("✓ Successfully inserted signature image");
+            _logger.LogInformation("✓ Successfully inserted signature image. Stream size: {Size} bytes", docMemoryStream.Length);
             return (true, docMemoryStream, null);
         }
         catch (Exception ex)
