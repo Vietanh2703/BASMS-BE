@@ -9,11 +9,13 @@ public class EmailHandler
 {
     private readonly EmailSettings _emailSettings;
     private readonly ILogger<EmailHandler> _logger;
+    private readonly IS3Service _s3Service;
 
-    public EmailHandler(IOptions<EmailSettings> emailSettings, ILogger<EmailHandler> logger)
+    public EmailHandler(IOptions<EmailSettings> emailSettings, ILogger<EmailHandler> logger, IS3Service s3Service)
     {
         _emailSettings = emailSettings.Value;
         _logger = logger;
+        _s3Service = s3Service;
     }
 
     public async Task SendEmailAsync(EmailRequests emailRequest)
@@ -105,9 +107,9 @@ public class EmailHandler
         string email,
         string contractNumber,
         DateTime signedDate,
-        Guid documentId)
+        string s3FileKey)
     {
-        var emailBody = GenerateContractSignedConfirmationEmailBody(customerName, contractNumber, signedDate, documentId);
+        var emailBody = GenerateContractSignedConfirmationEmailBody(customerName, contractNumber, signedDate, s3FileKey);
         var emailRequest = new EmailRequests
         {
             Email = email,
@@ -320,10 +322,12 @@ public class EmailHandler
         string customerName,
         string contractNumber,
         DateTime signedDate,
-        Guid documentId)
+        string s3FileKey)
     {
         var signedDateStr = signedDate.ToString("dd/MM/yyyy HH:mm");
-        var downloadUrl = $"https://anninhsinhtrac.com/api/contracts/documents/{documentId}/download";
+
+        // Tạo presigned URL từ S3 - hết hạn sau 7 ngày (10080 phút)
+        var downloadUrl = _s3Service.GetPresignedUrl(s3FileKey, expirationMinutes: 10080);
 
         var template = @"
 <!DOCTYPE html>
@@ -369,7 +373,8 @@ public class EmailHandler
 
             <div class='info-box'>
                 <strong>📥 Tải về hợp đồng đã ký</strong><br><br>
-                Quý khách có thể tải về bản hợp đồng đã ký (định dạng DOCX) để lưu trữ và tham khảo:<br><br>
+                Quý khách có thể tải về bản hợp đồng đã ký (định dạng DOCX) để lưu trữ và tham khảo.<br>
+                <strong>Lưu ý:</strong> Link tải sẽ hết hạn sau <strong>7 ngày</strong>.<br><br>
                 <center>
                     <a href='{downloadUrl}' class='button' style='background-color: #FF9800;'>📄 Tải về hợp đồng (DOCX)</a>
                 </center>
