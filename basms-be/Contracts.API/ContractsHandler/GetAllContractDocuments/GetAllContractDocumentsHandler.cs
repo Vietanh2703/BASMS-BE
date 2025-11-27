@@ -15,6 +15,7 @@ public record GetAllContractDocumentsQuery : IQuery<GetAllContractDocumentsResul
 public record ContractDocumentDto
 {
     public Guid Id { get; init; }
+    public string Category { get; init; } = string.Empty;
     public string DocumentType { get; init; } = string.Empty;
     public string DocumentName { get; init; } = string.Empty;
     public string FileUrl { get; init; } = string.Empty;
@@ -85,6 +86,7 @@ internal class GetAllContractDocumentsHandler(
             var query = @"
                 SELECT
                     Id,
+                    Category,
                     DocumentType,
                     DocumentName,
                     FileUrl,
@@ -109,6 +111,7 @@ internal class GetAllContractDocumentsHandler(
             var documentDtos = documentsList.Select(d => new ContractDocumentDto
             {
                 Id = d.Id,
+                Category = d.Category,
                 DocumentType = d.DocumentType,
                 DocumentName = d.DocumentName,
                 FileUrl = d.FileUrl,
