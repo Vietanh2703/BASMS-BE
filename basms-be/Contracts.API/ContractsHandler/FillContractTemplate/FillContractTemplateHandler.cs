@@ -234,6 +234,7 @@ internal class FillContractFromTemplateHandler(
                 FileUrl = s3Key,  // LƯU S3 KEY
                 FileSize = 0,
                 DocumentType = "filled_contract",
+                Category = templateDoc.Category,  // Tự động điền category từ template
                 Version = "pending_signature",
                 Tokens = securityToken,
                 TokenExpiredDay = tokenExpiredDay,
