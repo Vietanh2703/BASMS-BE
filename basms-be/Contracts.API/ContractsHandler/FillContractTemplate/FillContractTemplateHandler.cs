@@ -212,13 +212,13 @@ internal class FillContractFromTemplateHandler(
             if (request.Data != null)
             {
                 // Tìm email: CustomerEmail hoặc EmployeeEmail
-                if (request.Data.TryGetValue("CustomerEmail", out var customerEmailObj))
+                if (request.Data.TryGetValue("CompanyEmail", out var customerEmailObj))
                     documentEmail = ExtractStringValue(customerEmailObj);
                 else if (request.Data.TryGetValue("EmployeeEmail", out var employeeEmailObj))
                     documentEmail = ExtractStringValue(employeeEmailObj);
 
                 // Tìm name: CustomerName hoặc EmployeeName
-                if (request.Data.TryGetValue("CustomerName", out var customerNameObj))
+                if (request.Data.TryGetValue("Name", out var customerNameObj))
                     documentCustomerName = ExtractStringValue(customerNameObj);
                 else if (request.Data.TryGetValue("EmployeeName", out var employeeNameObj))
                     documentCustomerName = ExtractStringValue(employeeNameObj);
