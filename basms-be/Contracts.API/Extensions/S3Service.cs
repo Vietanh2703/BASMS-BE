@@ -34,7 +34,7 @@ public interface IS3Service
     /// <summary>
     /// Tạo pre-signed URL cho file (URL tạm thời để download trực tiếp từ S3)
     /// </summary>
-    string GetPresignedUrl(string fileUrlOrKey, int expirationMinutes = 30);
+    string GetPresignedUrl(string fileUrlOrKey, int expirationMinutes = 30, string? downloadFileName = null);
 }
 
 public class S3Service : IS3Service
@@ -255,7 +255,7 @@ public class S3Service : IS3Service
     /// <summary>
     /// Tạo pre-signed URL cho file - URL tạm thời cho phép download trực tiếp từ S3
     /// </summary>
-    public string GetPresignedUrl(string fileUrlOrKey, int expirationMinutes = 15)
+    public string GetPresignedUrl(string fileUrlOrKey, int expirationMinutes = 15, string? downloadFileName = null)
     {
         try
         {
@@ -276,6 +276,11 @@ public class S3Service : IS3Service
             _logger.LogInformation("Generating pre-signed URL for {FileKey}, expires in {Minutes} minutes",
                 fileKey, expirationMinutes);
 
+            // Tạo Content-Disposition header với tên file tùy chỉnh nếu có
+            var contentDisposition = string.IsNullOrEmpty(downloadFileName)
+                ? "attachment"
+                : $"attachment; filename=\"{downloadFileName}\"";
+
             var request = new GetPreSignedUrlRequest
             {
                 BucketName = _settings.BucketName,
@@ -284,13 +289,14 @@ public class S3Service : IS3Service
                 Protocol = Protocol.HTTPS,
                 ResponseHeaderOverrides = new ResponseHeaderOverrides
                 {
-                    ContentDisposition = "attachment"
+                    ContentDisposition = contentDisposition
                 }
             };
 
             var presignedUrl = _s3Client.GetPreSignedURL(request);
 
-            _logger.LogInformation("✓ Pre-signed URL generated successfully for {FileKey}", fileKey);
+            _logger.LogInformation("✓ Pre-signed URL generated successfully for {FileKey} with filename: {FileName}",
+                fileKey, downloadFileName ?? "default");
 
             return presignedUrl;
         }

@@ -326,8 +326,11 @@ public class EmailHandler
     {
         var signedDateStr = signedDate.ToString("dd/MM/yyyy HH:mm");
 
+        // Extract tên file ngắn từ s3Key để tránh lỗi Word khi mở file
+        var shortFileName = ExtractShortFileName(s3FileKey);
+
         // Tạo presigned URL từ S3 - hết hạn sau 7 ngày (10080 phút)
-        var downloadUrl = _s3Service.GetPresignedUrl(s3FileKey, expirationMinutes: 10080);
+        var downloadUrl = _s3Service.GetPresignedUrl(s3FileKey, expirationMinutes: 10080, downloadFileName: shortFileName);
 
         var template = @"
 <!DOCTYPE html>
@@ -428,5 +431,54 @@ public class EmailHandler
             .Replace("{contractNumber}", contractNumber)
             .Replace("{signedDateStr}", signedDateStr)
             .Replace("{downloadUrl}", downloadUrl);
+    }
+
+    /// <summary>
+    /// Extract tên file ngắn từ S3 key để tránh lỗi Word khi mở file
+    /// VD: contracts/signed/.../SIGNED_abc123_HOP_DONG_LAO_DONG_NV_BAO_VE_22_11_2025.docx
+    /// => HOP_DONG_LAO_DONG_NV_BAO_VE.docx
+    /// </summary>
+    private string ExtractShortFileName(string s3FileKey)
+    {
+        try
+        {
+            // Lấy filename từ S3 key (phần cuối sau dấu /)
+            var fileName = Path.GetFileName(s3FileKey);
+            var fileExtension = Path.GetExtension(fileName);
+            var nameWithoutExt = Path.GetFileNameWithoutExtension(fileName);
+
+            // Remove prefix SIGNED_ hoặc FILLED_
+            if (nameWithoutExt.StartsWith("SIGNED_"))
+                nameWithoutExt = nameWithoutExt.Substring("SIGNED_".Length);
+            else if (nameWithoutExt.StartsWith("FILLED_"))
+                nameWithoutExt = nameWithoutExt.Substring("FILLED_".Length);
+
+            // Split by underscore
+            var parts = nameWithoutExt.Split('_');
+
+            if (parts.Length <= 2)
+            {
+                // Nếu không đủ parts, trả về tên gốc
+                return fileName;
+            }
+
+            // Remove GUID (part[0]) và date (3 parts cuối: dd_MM_yyyy)
+            // Giữ lại phần giữa (template key: HOP_DONG_LAO_DONG_...)
+            var templateKeyParts = parts.Skip(1).Take(parts.Length - 4).ToArray();
+            var shortName = string.Join("_", templateKeyParts);
+
+            // Nếu shortName rỗng, fallback về tên gốc
+            if (string.IsNullOrEmpty(shortName))
+            {
+                return fileName;
+            }
+
+            return $"{shortName}{fileExtension}";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to extract short filename from {S3Key}, using original", s3FileKey);
+            return Path.GetFileName(s3FileKey);
+        }
     }
 }
