@@ -223,7 +223,8 @@ internal class SignContractFromDocumentHandler(
                         document.DocumentCustomerName,
                         document.DocumentEmail,
                         contractNumber,
-                        DateTime.UtcNow);
+                        DateTime.UtcNow,
+                        document.Id);
 
                     logger.LogInformation("✓ Sent confirmation email successfully to {Email}", document.DocumentEmail);
                 }

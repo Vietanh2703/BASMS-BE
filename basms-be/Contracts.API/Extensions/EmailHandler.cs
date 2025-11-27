@@ -104,9 +104,10 @@ public class EmailHandler
         string customerName,
         string email,
         string contractNumber,
-        DateTime signedDate)
+        DateTime signedDate,
+        Guid documentId)
     {
-        var emailBody = GenerateContractSignedConfirmationEmailBody(customerName, contractNumber, signedDate);
+        var emailBody = GenerateContractSignedConfirmationEmailBody(customerName, contractNumber, signedDate, documentId);
         var emailRequest = new EmailRequests
         {
             Email = email,
@@ -318,9 +319,11 @@ public class EmailHandler
     private string GenerateContractSignedConfirmationEmailBody(
         string customerName,
         string contractNumber,
-        DateTime signedDate)
+        DateTime signedDate,
+        Guid documentId)
     {
         var signedDateStr = signedDate.ToString("dd/MM/yyyy HH:mm");
+        var downloadUrl = $"https://anninhsinhtrac.com/api/contracts/documents/{documentId}/download";
 
         var template = @"
 <!DOCTYPE html>
@@ -362,6 +365,14 @@ public class EmailHandler
                 <strong>📋 Mã hợp đồng:</strong> {contractNumber}<br>
                 <strong>📅 Thời gian ký:</strong> {signedDateStr}<br>
                 <strong>✅ Trạng thái:</strong> <span class='highlight'>Đã ký - Chờ phê duyệt</span>
+            </div>
+
+            <div class='info-box'>
+                <strong>📥 Tải về hợp đồng đã ký</strong><br><br>
+                Quý khách có thể tải về bản hợp đồng đã ký (định dạng DOCX) để lưu trữ và tham khảo:<br><br>
+                <center>
+                    <a href='{downloadUrl}' class='button' style='background-color: #FF9800;'>📄 Tải về hợp đồng (DOCX)</a>
+                </center>
             </div>
 
             <div class='next-steps'>
@@ -410,6 +421,7 @@ public class EmailHandler
         return template
             .Replace("{customerName}", customerName)
             .Replace("{contractNumber}", contractNumber)
-            .Replace("{signedDateStr}", signedDateStr);
+            .Replace("{signedDateStr}", signedDateStr)
+            .Replace("{downloadUrl}", downloadUrl);
     }
 }
