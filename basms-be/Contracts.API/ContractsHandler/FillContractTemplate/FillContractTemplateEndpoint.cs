@@ -51,6 +51,9 @@ public class FillContractTemplateEndpoint : ICarterModule
                         {
                             try
                             {
+                                logger.LogInformation("Sending contract signing email to {Email} for document {DocumentId}",
+                                    customerEmail, result.FilledDocumentId.Value);
+
                                 await emailHandler.SendContractSigningEmailAsync(
                                     customerName: customerName ?? "Quý khách",
                                     email: customerEmail,
@@ -59,11 +62,23 @@ public class FillContractTemplateEndpoint : ICarterModule
                                     securityToken: result.SecurityToken,
                                     tokenExpiredDay: result.TokenExpiredDay ?? DateTime.UtcNow.AddDays(7)
                                 );
+
+                                logger.LogInformation("✓ Successfully sent contract signing email to {Email}", customerEmail);
                             }
-                            catch
+                            catch (Exception emailEx)
                             {
                                 // Không fail toàn bộ request nếu email gửi thất bại
+                                logger.LogError(emailEx,
+                                    "Failed to send contract signing email to {Email} for document {DocumentId}. Contract was filled successfully but customer will not receive email notification.",
+                                    customerEmail, result.FilledDocumentId);
                             }
+                        }
+                        else
+                        {
+                            logger.LogWarning("Skipping email notification - Missing required info: Email={Email}, DocumentId={DocumentId}, Token={HasToken}",
+                                customerEmail ?? "NULL",
+                                result.FilledDocumentId?.ToString() ?? "NULL",
+                                !string.IsNullOrEmpty(result.SecurityToken));
                         }
 
                         return Results.Ok(new
