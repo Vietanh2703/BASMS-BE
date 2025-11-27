@@ -224,7 +224,7 @@ internal class SignContractFromDocumentHandler(
                         document.DocumentEmail,
                         contractNumber,
                         DateTime.UtcNow,
-                        document.FileUrl);
+                        newS3Key);
 
                     logger.LogInformation("✓ Sent confirmation email successfully to {Email}", document.DocumentEmail);
                 }

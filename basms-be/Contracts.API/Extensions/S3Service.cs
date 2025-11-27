@@ -281,7 +281,11 @@ public class S3Service : IS3Service
                 BucketName = _settings.BucketName,
                 Key = fileKey,
                 Expires = DateTime.UtcNow.AddMinutes(expirationMinutes),
-                Protocol = Protocol.HTTPS
+                Protocol = Protocol.HTTPS,
+                ResponseHeaderOverrides = new ResponseHeaderOverrides
+                {
+                    ContentDisposition = "attachment"
+                }
             };
 
             var presignedUrl = _s3Client.GetPreSignedURL(request);
