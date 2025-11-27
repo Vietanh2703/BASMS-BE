@@ -318,7 +318,6 @@ public class WordContractService : IWordContractService
         string imageFileName,
         CancellationToken cancellationToken = default)
     {
-        MemoryStream? docMemoryStream = null;
         MemoryStream? imageMemoryStream = null;
 
         try
@@ -342,9 +341,13 @@ public class WordContractService : IWordContractService
             _logger.LogInformation("Detected image type: {ImageType}", imageType);
 
             // Copy document stream to memory
-            docMemoryStream = new MemoryStream();
+            var docMemoryStream = new MemoryStream();
             await documentStream.CopyToAsync(docMemoryStream, cancellationToken);
             docMemoryStream.Position = 0;
+
+            // CRITICAL: Create a NEW output stream to avoid corruption
+            // We'll write the modified document to this clean stream
+            var outputStream = new MemoryStream();
 
             // Open document with Open XML SDK
             using (var wordDoc = WordprocessingDocument.Open(docMemoryStream, true))
@@ -352,7 +355,8 @@ public class WordContractService : IWordContractService
                 var mainPart = wordDoc.MainDocumentPart;
                 if (mainPart == null)
                 {
-                    docMemoryStream?.Dispose();
+                    docMemoryStream.Dispose();
+                    outputStream.Dispose();
                     imageMemoryStream?.Dispose();
                     return (false, null, "Main document part not found");
                 }
@@ -369,7 +373,8 @@ public class WordContractService : IWordContractService
                 if (sdtElements == null || !sdtElements.Any())
                 {
                     _logger.LogWarning("Content control with tag '{Tag}' not found", contentControlTag);
-                    docMemoryStream?.Dispose();
+                    docMemoryStream.Dispose();
+                    outputStream.Dispose();
                     imageMemoryStream?.Dispose();
                     return (false, null, $"Content control with tag '{contentControlTag}' not found in document");
                 }
@@ -421,30 +426,30 @@ public class WordContractService : IWordContractService
                     }
                 }
 
-                // Save document changes to the main part
-                mainPart.Document.Save();
-
-                // CRITICAL FIX: Save the entire document package to ensure all changes are written to stream
-                // Without this, the document may be corrupted when uploaded to S3
-                wordDoc.Save();
-
-                _logger.LogInformation("Document saved successfully");
-            }
+                // Save changes - this will be auto-saved when disposed
+                _logger.LogInformation("Saving document changes...");
+            } // WordprocessingDocument is disposed here, changes are auto-saved to docMemoryStream
 
             // Clean up image stream
             imageMemoryStream?.Dispose();
 
-            // Return modified document stream
+            // CRITICAL FIX: Copy the modified stream to a clean output stream
+            // This ensures we have a fresh, uncorrupted stream
             docMemoryStream.Position = 0;
-            _logger.LogInformation("✓ Successfully inserted signature image. Stream size: {Size} bytes", docMemoryStream.Length);
-            return (true, docMemoryStream, null);
+            await docMemoryStream.CopyToAsync(outputStream, cancellationToken);
+            docMemoryStream.Dispose();
+
+            // Reset output stream position for reading
+            outputStream.Position = 0;
+
+            _logger.LogInformation("✓ Successfully inserted signature image. Output stream size: {Size} bytes", outputStream.Length);
+            return (true, outputStream, null);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to insert signature image into content control '{Tag}'", contentControlTag);
 
             // Clean up resources on error
-            docMemoryStream?.Dispose();
             imageMemoryStream?.Dispose();
 
             return (false, null, ex.Message);
