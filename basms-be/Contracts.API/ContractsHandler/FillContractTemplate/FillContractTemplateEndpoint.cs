@@ -1,4 +1,5 @@
 using Contracts.API.Extensions;
+using Dapper;
 
 namespace Contracts.API.ContractsHandler.FillContractTemplate;
 
@@ -19,7 +20,7 @@ public class FillContractTemplateEndpoint : ICarterModule
     {
         // Route: POST /api/contracts/template/fill-from-s3
         app.MapPost("/api/contracts/template/fill-from-s3",
-                async (FillContractFromS3Request request, ISender sender, EmailHandler emailHandler, ILogger<FillContractTemplateEndpoint> logger) =>
+                async (FillContractFromS3Request request, ISender sender, EmailHandler emailHandler, IDbConnectionFactory connectionFactory, ILogger<FillContractTemplateEndpoint> logger) =>
                 {
                     try
                     {
@@ -41,44 +42,68 @@ public class FillContractTemplateEndpoint : ICarterModule
                             });
                         }
 
-                        // Trích xuất thông tin customer từ data nếu không có trong request
-                        var customerEmail = request.CustomerEmail ?? ExtractFromData(request.Data, "Email", "email", "EMAIL", "CustomerEmail", "EmployeeEmail");
-                        var customerName = request.CustomerName ?? ExtractFromData(request.Data, "TenKhachHang", "CustomerName", "HoTen", "FullName", "EmployeeName");
-                        var contractNumber = request.ContractNumber ?? ExtractFromData(request.Data, "SoHopDong", "ContractNumber", "MaHopDong");
-
-                        // Gửi email ký hợp đồng điện tử nếu có thông tin customer
-                        if (!string.IsNullOrEmpty(customerEmail) && result.FilledDocumentId.HasValue && !string.IsNullOrEmpty(result.SecurityToken))
+                        // BƯỚC 2: SAU KHI LƯU DOCUMENT VÀO DATABASE, LẤY THÔNG TIN TỪ DATABASE ĐỂ GỬI EMAIL
+                        if (result.FilledDocumentId.HasValue)
                         {
                             try
                             {
-                                logger.LogInformation("Sending contract signing email to {Email} for document {DocumentId}",
-                                    customerEmail, result.FilledDocumentId.Value);
+                                using var connection = await connectionFactory.CreateConnectionAsync();
 
-                                await emailHandler.SendContractSigningEmailAsync(
-                                    customerName: customerName ?? "Quý khách",
-                                    email: customerEmail,
-                                    contractNumber: contractNumber ?? "N/A",
-                                    documentId: result.FilledDocumentId.Value,
-                                    securityToken: result.SecurityToken,
-                                    tokenExpiredDay: result.TokenExpiredDay ?? DateTime.UtcNow.AddDays(7)
-                                );
+                                // Query document từ database để lấy thông tin chính xác
+                                var savedDocument = await connection.QueryFirstOrDefaultAsync<ContractDocument>(
+                                    "SELECT * FROM contract_documents WHERE Id = @Id AND IsDeleted = 0",
+                                    new { Id = result.FilledDocumentId.Value });
 
-                                logger.LogInformation("✓ Successfully sent contract signing email to {Email}", customerEmail);
+                                if (savedDocument != null)
+                                {
+                                    logger.LogInformation("Retrieved saved document from database: {DocumentId}, Email: {Email}",
+                                        savedDocument.Id, savedDocument.DocumentEmail ?? "N/A");
+
+                                    // Gửi email nếu có DocumentEmail và SecurityToken
+                                    if (!string.IsNullOrEmpty(savedDocument.DocumentEmail) &&
+                                        !string.IsNullOrEmpty(savedDocument.Tokens) &&
+                                        savedDocument.TokenExpiredDay.HasValue)
+                                    {
+                                        // Trích xuất contractNumber từ request hoặc data
+                                        var contractNumber = request.ContractNumber ??
+                                            ExtractFromData(request.Data, "SoHopDong", "ContractNumber", "MaHopDong") ??
+                                            "N/A";
+
+                                        logger.LogInformation("Sending contract signing email to {Email} (from database) for document {DocumentId}",
+                                            savedDocument.DocumentEmail, savedDocument.Id);
+
+                                        await emailHandler.SendContractSigningEmailAsync(
+                                            customerName: savedDocument.DocumentCustomerName ?? "Quý khách",
+                                            email: savedDocument.DocumentEmail,
+                                            contractNumber: contractNumber,
+                                            documentId: savedDocument.Id,
+                                            securityToken: savedDocument.Tokens,
+                                            tokenExpiredDay: savedDocument.TokenExpiredDay.Value
+                                        );
+
+                                        logger.LogInformation("✓ Successfully sent contract signing email to {Email}", savedDocument.DocumentEmail);
+                                    }
+                                    else
+                                    {
+                                        logger.LogWarning("Skipping email notification - Missing required info in database: Email={Email}, Token={HasToken}, TokenExpiry={HasExpiry}",
+                                            savedDocument.DocumentEmail ?? "NULL",
+                                            !string.IsNullOrEmpty(savedDocument.Tokens),
+                                            savedDocument.TokenExpiredDay.HasValue);
+                                    }
+                                }
+                                else
+                                {
+                                    logger.LogWarning("Could not retrieve saved document {DocumentId} from database for email notification",
+                                        result.FilledDocumentId.Value);
+                                }
                             }
                             catch (Exception emailEx)
                             {
                                 // Không fail toàn bộ request nếu email gửi thất bại
                                 logger.LogError(emailEx,
-                                    "Failed to send contract signing email to {Email} for document {DocumentId}. Contract was filled successfully but customer will not receive email notification.",
-                                    customerEmail, result.FilledDocumentId);
+                                    "Failed to send contract signing email for document {DocumentId}. Contract was filled successfully but customer will not receive email notification.",
+                                    result.FilledDocumentId);
                             }
-                        }
-                        else
-                        {
-                            logger.LogWarning("Skipping email notification - Missing required info: Email={Email}, DocumentId={DocumentId}, Token={HasToken}",
-                                customerEmail ?? "NULL",
-                                result.FilledDocumentId?.ToString() ?? "NULL",
-                                !string.IsNullOrEmpty(result.SecurityToken));
                         }
 
                         return Results.Ok(new
