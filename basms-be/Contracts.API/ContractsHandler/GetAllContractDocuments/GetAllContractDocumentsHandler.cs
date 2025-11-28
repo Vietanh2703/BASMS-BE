@@ -21,7 +21,8 @@ public record ContractDocumentDto
     public string FileUrl { get; init; } = string.Empty;
     public long? FileSize { get; init; }
     public string Version { get; init; } = string.Empty;
-    public DateTime? DocumentDate { get; init; }
+    public DateTime? StartDate { get; init; }
+    public DateTime? EndDate { get; init; }
     public Guid? UploadedBy { get; init; }
     public DateTime CreatedAt { get; init; }
 
@@ -92,7 +93,8 @@ internal class GetAllContractDocumentsHandler(
                     FileUrl,
                     FileSize,
                     Version,
-                    DocumentDate,
+                    StartDate,
+                    EndDate,
                     UploadedBy,
                     CreatedAt
                 FROM contract_documents
@@ -117,7 +119,8 @@ internal class GetAllContractDocumentsHandler(
                 FileUrl = d.FileUrl,
                 FileSize = d.FileSize,
                 Version = d.Version,
-                DocumentDate = d.DocumentDate,
+                StartDate = d.StartDate,
+                EndDate = d.EndDate,
                 UploadedBy = d.UploadedBy,
                 CreatedAt = d.CreatedAt
             }).ToList();
