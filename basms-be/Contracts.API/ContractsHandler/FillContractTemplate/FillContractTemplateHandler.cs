@@ -205,9 +205,11 @@ internal class FillContractFromTemplateHandler(
             var securityToken = Guid.NewGuid().ToString(); // Token bảo mật để truy cập tài liệu
             var tokenExpiredDay = DateTime.UtcNow.AddDays(7); // Token hết hạn sau 7 ngày
 
-            // Extract customer info từ data để lưu vào document
+            // Extract customer info và contract dates từ data để lưu vào document
             string? documentEmail = null;
             string? documentCustomerName = null;
+            DateTime? contractStartDate = null;
+            DateTime? contractEndDate = null;
 
             if (request.Data != null)
             {
@@ -222,10 +224,28 @@ internal class FillContractFromTemplateHandler(
                     documentCustomerName = ExtractStringValue(customerNameObj);
                 else if (request.Data.TryGetValue("EmployeeName", out var employeeNameObj))
                     documentCustomerName = ExtractStringValue(employeeNameObj);
+
+                // Tìm contract dates: ContractStartDate và ContractEndDate
+                if (request.Data.TryGetValue("ContractStartDate", out var startDateObj))
+                {
+                    var startDateStr = ExtractStringValue(startDateObj);
+                    if (DateTime.TryParse(startDateStr, out var parsedStartDate))
+                        contractStartDate = parsedStartDate;
+                }
+
+                if (request.Data.TryGetValue("ContractEndDate", out var endDateObj))
+                {
+                    var endDateStr = ExtractStringValue(endDateObj);
+                    if (DateTime.TryParse(endDateStr, out var parsedEndDate))
+                        contractEndDate = parsedEndDate;
+                }
             }
 
-            logger.LogInformation("Extracted customer info - Email: {Email}, Name: {Name}",
-                documentEmail ?? "N/A", documentCustomerName ?? "N/A");
+            logger.LogInformation("Extracted info - Email: {Email}, Name: {Name}, StartDate: {StartDate}, EndDate: {EndDate}",
+                documentEmail ?? "N/A",
+                documentCustomerName ?? "N/A",
+                contractStartDate?.ToString("yyyy-MM-dd") ?? "N/A",
+                contractEndDate?.ToString("yyyy-MM-dd") ?? "N/A");
 
             var filledDocument = new ContractDocument
             {
@@ -241,6 +261,8 @@ internal class FillContractFromTemplateHandler(
                 UploadedBy = Guid.Empty,
                 DocumentEmail = documentEmail,
                 DocumentCustomerName = documentCustomerName,
+                StartDate = contractStartDate,  // Ngày bắt đầu hợp đồng
+                EndDate = contractEndDate,       // Ngày kết thúc hợp đồng
                 IsDeleted = false,
                 CreatedAt = DateTime.UtcNow
             };

@@ -171,6 +171,8 @@ internal class SignContractFromDocumentHandler(
             // ================================================================
             // BƯỚC 6: CẬP NHẬT DATABASE
             // ================================================================
+            var vietnamTime = Contracts.API.Extensions.DateTimeExtensions.GetVietnamTime();
+
             var updateSql = @"
                 UPDATE contract_documents
                 SET
@@ -180,6 +182,7 @@ internal class SignContractFromDocumentHandler(
                     Version = @Version,
                     Tokens = NULL,
                     TokenExpiredDay = NULL,
+                    SignDate = @SignDate,
                     CreatedAt = @CreatedAt
                 WHERE Id = @Id AND IsDeleted = 0";
 
@@ -190,6 +193,7 @@ internal class SignContractFromDocumentHandler(
                 DocumentName = newFileName,
                 FileUrl = newS3Key,
                 Version = "signed",
+                SignDate = vietnamTime,  // Ngày ký theo giờ Việt Nam (UTC+7)
                 CreatedAt = DateTime.UtcNow
             });
 
@@ -203,8 +207,8 @@ internal class SignContractFromDocumentHandler(
                 };
             }
 
-            logger.LogInformation("✓ Updated database: DocumentId={DocumentId}, NewFileName={FileName}, NewPath={Path}, Version=signed, Tokens=NULL",
-                document.Id, newFileName, newS3Key);
+            logger.LogInformation("✓ Updated database: DocumentId={DocumentId}, NewFileName={FileName}, NewPath={Path}, Version=signed, SignDate={SignDate}, Tokens=NULL",
+                document.Id, newFileName, newS3Key, vietnamTime);
 
             // ================================================================
             // BƯỚC 7: GỬI EMAIL XÁC NHẬN (NẾU CÓ THÔNG TIN CUSTOMER TRONG DATABASE)

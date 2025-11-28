@@ -71,6 +71,31 @@ public class ContractDocument
     /// </summary>
     public string? DocumentCustomerName { get; set; }
 
+    /// <summary>
+    /// Ngày bắt đầu hợp đồng (theo UTC+7 Vietnam)
+    /// </summary>
+    public DateTime? StartDate { get; set; }
+
+    /// <summary>
+    /// Ngày kết thúc hợp đồng (theo UTC+7 Vietnam)
+    /// </summary>
+    public DateTime? EndDate { get; set; }
+
+    /// <summary>
+    /// Ngày ký hợp đồng (theo UTC+7 Vietnam)
+    /// </summary>
+    public DateTime? SignDate { get; set; }
+
+    /// <summary>
+    /// Ngày Director/Manager approve hợp đồng (theo UTC+7 Vietnam)
+    /// </summary>
+    public DateTime? ApprovedAt { get; set; }
+
+    /// <summary>
+    /// User ID của người approve hợp đồng
+    /// </summary>
+    public Guid? ApprovedBy { get; set; }
+
     // ============================================================================
     // METADATA
     // ============================================================================

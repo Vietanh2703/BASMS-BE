@@ -62,13 +62,16 @@ public class ApproveContractDocumentHandler(
             }
 
             // ================================================================
-            // BƯỚC 2: UPDATE DOCUMENT TYPE VÀ VERSION
+            // BƯỚC 2: UPDATE DOCUMENT TYPE, VERSION, APPROVED INFO
             // ================================================================
             var previousType = document.DocumentType;
             var previousVersion = document.Version;
+            var vietnamTime = Contracts.API.Extensions.DateTimeExtensions.GetVietnamTime();
 
             document.DocumentType = "approved_document";
             document.Version = "completed";
+            document.ApprovedAt = vietnamTime;  // Thời gian approve theo giờ Việt Nam (UTC+7)
+            document.ApprovedBy = request.ApprovedBy;  // User ID của người approve
 
             await connection.UpdateAsync(document, transaction);
 
@@ -77,20 +80,20 @@ public class ApproveContractDocumentHandler(
                   - Document: {DocumentName}
                   - Type: {PreviousType} → {NewType}
                   - Version: {PreviousVersion} → {NewVersion}
+                  - Approved At: {ApprovedAt} (Vietnam Time UTC+7)
                   - Approved By: {ApprovedBy}",
                 document.DocumentName,
                 previousType,
                 document.DocumentType,
                 previousVersion,
                 document.Version,
+                vietnamTime,
                 request.ApprovedBy);
 
             // ================================================================
             // BƯỚC 3: COMMIT TRANSACTION
             // ================================================================
             transaction.Commit();
-
-            var approvedAt = DateTime.UtcNow;
 
             logger.LogInformation(
                 "✓✓✓ Contract document '{DocumentName}' approved successfully!",
@@ -103,7 +106,7 @@ public class ApproveContractDocumentHandler(
                 DocumentName = document.DocumentName,
                 DocumentType = document.DocumentType,
                 Version = document.Version,
-                ApprovedAt = approvedAt
+                ApprovedAt = vietnamTime  // Trả về Vietnam time
             };
         }
         catch (Exception ex)

@@ -188,12 +188,19 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     `UploadedBy` CHAR(36) NULL,
                     `DocumentEmail` VARCHAR(255) NULL COMMENT 'Email của khách hàng hoặc nhân viên',
                     `DocumentCustomerName` VARCHAR(255) NULL COMMENT 'Tên khách hàng hoặc nhân viên',
+                    `StartDate` DATETIME NULL COMMENT 'Ngày bắt đầu hợp đồng (UTC+7)',
+                    `EndDate` DATETIME NULL COMMENT 'Ngày kết thúc hợp đồng (UTC+7)',
+                    `SignDate` DATETIME NULL COMMENT 'Ngày ký hợp đồng (UTC+7)',
+                    `ApprovedAt` DATETIME NULL COMMENT 'Ngày approve hợp đồng (UTC+7)',
+                    `ApprovedBy` CHAR(36) NULL COMMENT 'User ID của người approve',
                     `IsDeleted` BOOLEAN NOT NULL DEFAULT FALSE,
                     `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     INDEX `idx_doc_type` (`DocumentType`),
                     INDEX `idx_doc_category` (`Category`),
                     INDEX `idx_doc_token` (`Tokens`),
-                    INDEX `idx_doc_email` (`DocumentEmail`)
+                    INDEX `idx_doc_email` (`DocumentEmail`),
+                    INDEX `idx_doc_dates` (`StartDate`, `EndDate`),
+                    INDEX `idx_doc_approved` (`ApprovedBy`, `ApprovedAt`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 COMMENT='Tài liệu hợp đồng';
              ");
