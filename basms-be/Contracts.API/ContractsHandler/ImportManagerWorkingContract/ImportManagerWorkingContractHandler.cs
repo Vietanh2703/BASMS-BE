@@ -27,7 +27,6 @@ internal class ImportManagerWorkingContractHandler(
     IDbConnectionFactory connectionFactory,
     IS3Service s3Service,
     IWordContractService wordService,
-    IDigitalSignatureService signatureService,
     IRequestClient<CreateUserRequest> createUserClient,
     ILogger<ImportManagerWorkingContractHandler> logger)
     : ICommandHandler<ImportManagerWorkingContractCommand, ImportManagerWorkingContractResult>
@@ -60,47 +59,9 @@ internal class ImportManagerWorkingContractHandler(
                 };
 
             // ================================================================
-            // KIỂM TRA CHỮ KÝ (Ít nhất 1 chữ ký: Bên B - Người lao động)
-            // ================================================================
-
-            var (downloadSuccess, fileStream, downloadError) = await s3Service.DownloadFileAsync(
-                document.FileUrl,
-                cancellationToken);
-
-            if (!downloadSuccess || fileStream == null)
-                return new ImportManagerWorkingContractResult
-                {
-                    Success = false,
-                    ErrorMessage = downloadError ?? "Failed to download file from S3"
-                };
-
-            // Kiểm tra số chữ ký
-            var (countSuccess, signatureCount, countError) = await signatureService.CountSignaturesAsync(
-                fileStream,
-                cancellationToken);
-
-            if (!countSuccess)
-                return new ImportManagerWorkingContractResult
-                {
-                    Success = false,
-                    ErrorMessage = countError ?? "Failed to count signatures"
-                };
-
-            if (signatureCount < 1)
-                return new ImportManagerWorkingContractResult
-                {
-                    Success = false,
-                    ErrorMessage =
-                        $"Document must have at least 1 signature (Manager - Party B). Found: {signatureCount}"
-                };
-
-            logger.LogInformation("✓ Document has {Count} signature(s) - proceeding with import", signatureCount);
-
-            // ================================================================
             // EXTRACT TEXT TỪ WORD DOCUMENT
             // ================================================================
 
-            // Download lại file để extract text
             var (downloadSuccess2, fileStream2, downloadError2) = await s3Service.DownloadFileAsync(
                 document.FileUrl,
                 cancellationToken);
