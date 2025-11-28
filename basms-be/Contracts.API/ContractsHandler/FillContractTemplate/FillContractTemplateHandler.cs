@@ -213,6 +213,9 @@ internal class FillContractFromTemplateHandler(
 
             if (request.Data != null)
             {
+                // DEBUG: Log tất cả keys trong data
+                logger.LogInformation("Available keys in Data: {Keys}", string.Join(", ", request.Data.Keys));
+
                 // Tìm email: CustomerEmail hoặc EmployeeEmail
                 if (request.Data.TryGetValue("CompanyEmail", out var customerEmailObj))
                     documentEmail = ExtractStringValue(customerEmailObj);
@@ -225,27 +228,65 @@ internal class FillContractFromTemplateHandler(
                 else if (request.Data.TryGetValue("EmployeeName", out var employeeNameObj))
                     documentCustomerName = ExtractStringValue(employeeNameObj);
 
-                // Tìm contract dates: ContractStartDate và ContractEndDate
-                if (request.Data.TryGetValue("ContractStartDate", out var startDateObj))
+                // Tìm contract dates với nhiều key names khả thi
+                // Thử các key: ContractStartDate, StartDate, contractStartDate, startDate
+                var startDateKeys = new[] { "ContractStartDate", "StartDate", "contractStartDate", "startDate", "ContractStart" };
+                foreach (var key in startDateKeys)
                 {
-                    var startDateStr = ExtractStringValue(startDateObj);
-                    if (DateTime.TryParse(startDateStr, out var parsedStartDate))
-                        contractStartDate = parsedStartDate;
+                    if (request.Data.TryGetValue(key, out var startDateObj))
+                    {
+                        logger.LogInformation("Found StartDate with key: {Key}, Value: {Value}", key, startDateObj);
+                        var startDateStr = ExtractStringValue(startDateObj);
+
+                        if (!string.IsNullOrEmpty(startDateStr))
+                        {
+                            // Thử parse với nhiều formats: dd/MM/yyyy, yyyy-MM-dd, MM/dd/yyyy
+                            var parsedDate = TryParseMultipleFormats(startDateStr);
+                            if (parsedDate.HasValue)
+                            {
+                                contractStartDate = parsedDate.Value;
+                                logger.LogInformation("Successfully parsed StartDate: {Date} from '{Input}'", parsedDate.Value, startDateStr);
+                                break;
+                            }
+                            else
+                            {
+                                logger.LogWarning("Failed to parse StartDate string: '{DateStr}'", startDateStr);
+                            }
+                        }
+                    }
                 }
 
-                if (request.Data.TryGetValue("ContractEndDate", out var endDateObj))
+                var endDateKeys = new[] { "ContractEndDate", "EndDate", "contractEndDate", "endDate", "ContractEnd" };
+                foreach (var key in endDateKeys)
                 {
-                    var endDateStr = ExtractStringValue(endDateObj);
-                    if (DateTime.TryParse(endDateStr, out var parsedEndDate))
-                        contractEndDate = parsedEndDate;
+                    if (request.Data.TryGetValue(key, out var endDateObj))
+                    {
+                        logger.LogInformation("Found EndDate with key: {Key}, Value: {Value}", key, endDateObj);
+                        var endDateStr = ExtractStringValue(endDateObj);
+
+                        if (!string.IsNullOrEmpty(endDateStr))
+                        {
+                            var parsedDate = TryParseMultipleFormats(endDateStr);
+                            if (parsedDate.HasValue)
+                            {
+                                contractEndDate = parsedDate.Value;
+                                logger.LogInformation("Successfully parsed EndDate: {Date} from '{Input}'", parsedDate.Value, endDateStr);
+                                break;
+                            }
+                            else
+                            {
+                                logger.LogWarning("Failed to parse EndDate string: '{DateStr}'", endDateStr);
+                            }
+                        }
+                    }
                 }
             }
 
             logger.LogInformation("Extracted info - Email: {Email}, Name: {Name}, StartDate: {StartDate}, EndDate: {EndDate}",
                 documentEmail ?? "N/A",
                 documentCustomerName ?? "N/A",
-                contractStartDate?.ToString("yyyy-MM-dd") ?? "N/A",
-                contractEndDate?.ToString("yyyy-MM-dd") ?? "N/A");
+                contractStartDate?.ToString("yyyy-MM-dd HH:mm:ss") ?? "N/A",
+                contractEndDate?.ToString("yyyy-MM-dd HH:mm:ss") ?? "N/A");
 
             var filledDocument = new ContractDocument
             {
@@ -436,5 +477,50 @@ internal class FillContractFromTemplateHandler(
         var folderPath = $"contracts/filled/{folderName}";
 
         return (folderPath, fileName);
+    }
+
+    /// <summary>
+    /// Thử parse datetime string với nhiều formats phổ biến
+    /// Hỗ trợ: dd/MM/yyyy, yyyy-MM-dd, MM/dd/yyyy, dd-MM-yyyy, yyyy/MM/dd
+    /// </summary>
+    private DateTime? TryParseMultipleFormats(string dateString)
+    {
+        if (string.IsNullOrWhiteSpace(dateString))
+            return null;
+
+        // Danh sách các formats cần thử
+        var formats = new[]
+        {
+            "dd/MM/yyyy",      // 30/11/2025 (Vietnam format - ưu tiên)
+            "yyyy-MM-dd",      // 2025-11-30 (ISO format)
+            "MM/dd/yyyy",      // 11/30/2025 (US format)
+            "dd-MM-yyyy",      // 30-11-2025
+            "yyyy/MM/dd",      // 2025/11/30
+            "dd/MM/yyyy HH:mm:ss",  // With time
+            "yyyy-MM-dd HH:mm:ss",
+            "dd-MM-yyyy HH:mm:ss"
+        };
+
+        // Thử parse với từng format
+        foreach (var format in formats)
+        {
+            if (DateTime.TryParseExact(
+                dateString,
+                format,
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None,
+                out var result))
+            {
+                return result;
+            }
+        }
+
+        // Fallback: Thử parse tự động với current culture
+        if (DateTime.TryParse(dateString, out var autoResult))
+        {
+            return autoResult;
+        }
+
+        return null;
     }
 }
