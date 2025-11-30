@@ -132,12 +132,16 @@ public record ContractShiftScheduleDto
     public Guid? LocationId { get; init; }
     public string ScheduleName { get; init; } = string.Empty;
     public string ScheduleType { get; init; } = string.Empty;
+
+    // Time
     public TimeSpan ShiftStartTime { get; init; }
     public TimeSpan ShiftEndTime { get; init; }
     public bool CrossesMidnight { get; init; }
     public decimal DurationHours { get; init; }
     public int BreakMinutes { get; init; }
     public int GuardsPerShift { get; init; }
+
+    // Recurrence
     public string RecurrenceType { get; init; } = string.Empty;
     public bool AppliesMonday { get; init; }
     public bool AppliesTuesday { get; init; }
@@ -146,12 +150,30 @@ public record ContractShiftScheduleDto
     public bool AppliesFriday { get; init; }
     public bool AppliesSaturday { get; init; }
     public bool AppliesSunday { get; init; }
+    public string? MonthlyDates { get; init; }
+
+    // Special Days
     public bool AppliesOnPublicHolidays { get; init; }
+    public bool AppliesOnCustomerHolidays { get; init; }
     public bool AppliesOnWeekends { get; init; }
+    public bool SkipWhenLocationClosed { get; init; }
+
+    // Requirements
+    public bool RequiresArmedGuard { get; init; }
+    public bool RequiresSupervisor { get; init; }
+    public int MinimumExperienceMonths { get; init; }
+    public string? RequiredCertifications { get; init; }
+
+    // Auto Generate
     public bool AutoGenerateEnabled { get; init; }
+    public int GenerateAdvanceDays { get; init; }
+
+    // Effective Period
     public DateTime EffectiveFrom { get; init; }
     public DateTime? EffectiveTo { get; init; }
     public bool IsActive { get; init; }
+    public string? Notes { get; init; }
+    public Guid? CreatedBy { get; init; }
 }
 
 /// <summary>
@@ -165,10 +187,30 @@ public record PublicHolidayDto
     public string HolidayName { get; init; } = string.Empty;
     public string? HolidayNameEn { get; init; }
     public string HolidayCategory { get; init; } = string.Empty;
+
+    // Tet Period
     public bool IsTetPeriod { get; init; }
     public bool IsTetHoliday { get; init; }
+    public int? TetDayNumber { get; init; }
+    public DateTime? HolidayStartDate { get; init; }
+    public DateTime? HolidayEndDate { get; init; }
+    public int? TotalHolidayDays { get; init; }
+
+    // Official & Observed
     public bool IsOfficialHoliday { get; init; }
+    public bool IsObserved { get; init; }
+    public DateTime? OriginalDate { get; init; }
+    public DateTime? ObservedDate { get; init; }
+
+    // Scope
     public bool AppliesNationwide { get; init; }
+    public string? AppliesToRegions { get; init; }
+
+    // Impact
+    public bool StandardWorkplacesClosed { get; init; }
+    public bool EssentialServicesOperating { get; init; }
+
+    public string? Description { get; init; }
     public int Year { get; init; }
 }
 
@@ -187,10 +229,39 @@ public record ContractDto
     public DateTime StartDate { get; init; }
     public DateTime EndDate { get; init; }
     public int DurationMonths { get; init; }
-    public string Status { get; init; } = string.Empty;
+
+    // Coverage & Calendar
+    public string CoverageModel { get; init; } = string.Empty;
+    public bool FollowsCustomerCalendar { get; init; }
+    public bool WorkOnPublicHolidays { get; init; }
+    public bool WorkOnCustomerClosedDays { get; init; }
+
+    // Renewal
+    public bool IsRenewable { get; init; }
+    public bool AutoRenewal { get; init; }
+    public int RenewalNoticeDays { get; init; }
+    public int RenewalCount { get; init; }
+
+    // Auto Generate Shifts
     public bool AutoGenerateShifts { get; init; }
+    public int GenerateShiftsAdvanceDays { get; init; }
+
+    // Status & Approval
+    public string Status { get; init; } = string.Empty;
+    public Guid? ApprovedBy { get; init; }
+    public DateTime? ApprovedAt { get; init; }
     public DateTime? SignedDate { get; init; }
     public DateTime? ActivatedAt { get; init; }
+
+    // Termination
+    public DateTime? TerminationDate { get; init; }
+    public string? TerminationType { get; init; }
+    public string? TerminationReason { get; init; }
+    public Guid? TerminatedBy { get; init; }
+
+    // Files & Notes
+    public string? ContractFileUrl { get; init; }
+    public string? Notes { get; init; }
     public DateTime CreatedAt { get; init; }
 
     // Related data
@@ -289,7 +360,12 @@ internal class GetCustomerByIdHandler(
                 SELECT
                     Id, CustomerId, DocumentId, ContractNumber, ContractTitle,
                     ContractType, ServiceScope, StartDate, EndDate, DurationMonths,
-                    Status, AutoGenerateShifts, SignedDate, ActivatedAt, CreatedAt
+                    CoverageModel, FollowsCustomerCalendar, WorkOnPublicHolidays, WorkOnCustomerClosedDays,
+                    IsRenewable, AutoRenewal, RenewalNoticeDays, RenewalCount,
+                    AutoGenerateShifts, GenerateShiftsAdvanceDays,
+                    Status, ApprovedBy, ApprovedAt, SignedDate, ActivatedAt,
+                    TerminationDate, TerminationType, TerminationReason, TerminatedBy,
+                    ContractFileUrl, Notes, CreatedAt
                 FROM contracts
                 WHERE CustomerId = @CustomerId AND IsDeleted = 0
                 ORDER BY CreatedAt DESC
@@ -381,9 +457,11 @@ internal class GetCustomerByIdHandler(
                         ShiftStartTime, ShiftEndTime, CrossesMidnight, DurationHours,
                         BreakMinutes, GuardsPerShift, RecurrenceType,
                         AppliesMonday, AppliesTuesday, AppliesWednesday, AppliesThursday,
-                        AppliesFriday, AppliesSaturday, AppliesSunday,
-                        AppliesOnPublicHolidays, AppliesOnWeekends,
-                        AutoGenerateEnabled, EffectiveFrom, EffectiveTo, IsActive
+                        AppliesFriday, AppliesSaturday, AppliesSunday, MonthlyDates,
+                        AppliesOnPublicHolidays, AppliesOnCustomerHolidays, AppliesOnWeekends, SkipWhenLocationClosed,
+                        RequiresArmedGuard, RequiresSupervisor, MinimumExperienceMonths, RequiredCertifications,
+                        AutoGenerateEnabled, GenerateAdvanceDays,
+                        EffectiveFrom, EffectiveTo, IsActive, Notes, CreatedBy
                     FROM contract_shift_schedules
                     WHERE ContractId = @ContractId AND IsDeleted = 0
                     ORDER BY ScheduleName
@@ -414,23 +492,37 @@ internal class GetCustomerByIdHandler(
                     AppliesFriday = ss.AppliesFriday,
                     AppliesSaturday = ss.AppliesSaturday,
                     AppliesSunday = ss.AppliesSunday,
+                    MonthlyDates = ss.MonthlyDates,
                     AppliesOnPublicHolidays = ss.AppliesOnPublicHolidays,
+                    AppliesOnCustomerHolidays = ss.AppliesOnCustomerHolidays,
                     AppliesOnWeekends = ss.AppliesOnWeekends,
+                    SkipWhenLocationClosed = ss.SkipWhenLocationClosed,
+                    RequiresArmedGuard = ss.RequiresArmedGuard,
+                    RequiresSupervisor = ss.RequiresSupervisor,
+                    MinimumExperienceMonths = ss.MinimumExperienceMonths,
+                    RequiredCertifications = ss.RequiredCertifications,
                     AutoGenerateEnabled = ss.AutoGenerateEnabled,
+                    GenerateAdvanceDays = ss.GenerateAdvanceDays,
                     EffectiveFrom = ss.EffectiveFrom,
                     EffectiveTo = ss.EffectiveTo,
-                    IsActive = ss.IsActive
+                    IsActive = ss.IsActive,
+                    Notes = ss.Notes,
+                    CreatedBy = ss.CreatedBy
                 }).ToList();
 
                 // Get public holidays for this contract
                 var publicHolidaysQuery = @"
                     SELECT
                         Id, ContractId, HolidayDate, HolidayName, HolidayNameEn,
-                        HolidayCategory, IsTetPeriod, IsTetHoliday,
-                        IsOfficialHoliday, AppliesNationwide, Year
+                        HolidayCategory, IsTetPeriod, IsTetHoliday, TetDayNumber,
+                        HolidayStartDate, HolidayEndDate, TotalHolidayDays,
+                        IsOfficialHoliday, IsObserved, OriginalDate, ObservedDate,
+                        AppliesNationwide, AppliesToRegions,
+                        StandardWorkplacesClosed, EssentialServicesOperating,
+                        Description, Year
                     FROM public_holidays
                     WHERE (ContractId = @ContractId OR ContractId IS NULL)
-                    AND Year >= YEAR(GETDATE())
+                    AND Year >= YEAR(NOW())
                     ORDER BY HolidayDate
                 ";
 
@@ -448,8 +540,19 @@ internal class GetCustomerByIdHandler(
                     HolidayCategory = ph.HolidayCategory,
                     IsTetPeriod = ph.IsTetPeriod,
                     IsTetHoliday = ph.IsTetHoliday,
+                    TetDayNumber = ph.TetDayNumber,
+                    HolidayStartDate = ph.HolidayStartDate,
+                    HolidayEndDate = ph.HolidayEndDate,
+                    TotalHolidayDays = ph.TotalHolidayDays,
                     IsOfficialHoliday = ph.IsOfficialHoliday,
+                    IsObserved = ph.IsObserved,
+                    OriginalDate = ph.OriginalDate,
+                    ObservedDate = ph.ObservedDate,
                     AppliesNationwide = ph.AppliesNationwide,
+                    AppliesToRegions = ph.AppliesToRegions,
+                    StandardWorkplacesClosed = ph.StandardWorkplacesClosed,
+                    EssentialServicesOperating = ph.EssentialServicesOperating,
+                    Description = ph.Description,
                     Year = ph.Year
                 }).ToList();
 
@@ -465,10 +568,27 @@ internal class GetCustomerByIdHandler(
                     StartDate = contract.StartDate,
                     EndDate = contract.EndDate,
                     DurationMonths = contract.DurationMonths,
-                    Status = contract.Status,
+                    CoverageModel = contract.CoverageModel,
+                    FollowsCustomerCalendar = contract.FollowsCustomerCalendar,
+                    WorkOnPublicHolidays = contract.WorkOnPublicHolidays,
+                    WorkOnCustomerClosedDays = contract.WorkOnCustomerClosedDays,
+                    IsRenewable = contract.IsRenewable,
+                    AutoRenewal = contract.AutoRenewal,
+                    RenewalNoticeDays = contract.RenewalNoticeDays,
+                    RenewalCount = contract.RenewalCount,
                     AutoGenerateShifts = contract.AutoGenerateShifts,
+                    GenerateShiftsAdvanceDays = contract.GenerateShiftsAdvanceDays,
+                    Status = contract.Status,
+                    ApprovedBy = contract.ApprovedBy,
+                    ApprovedAt = contract.ApprovedAt,
                     SignedDate = contract.SignedDate,
                     ActivatedAt = contract.ActivatedAt,
+                    TerminationDate = contract.TerminationDate,
+                    TerminationType = contract.TerminationType,
+                    TerminationReason = contract.TerminationReason,
+                    TerminatedBy = contract.TerminatedBy,
+                    ContractFileUrl = contract.ContractFileUrl,
+                    Notes = contract.Notes,
                     CreatedAt = contract.CreatedAt,
                     Document = documentDto,
                     Locations = contractLocationDtos,
