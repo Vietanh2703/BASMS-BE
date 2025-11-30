@@ -1,0 +1,139 @@
+services:
+  # ============================================================================
+  # MYSQL - Shared Database for microservices
+  # ============================================================================
+  mysql:
+    image: mysql:8.0
+    container_name: basms-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "12345"
+      MYSQL_DATABASE: users_db
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    networks:
+      - basms-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p12345"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: --default-authentication-plugin=mysql_native_password
+
+  # ============================================================================
+  # RABBITMQ - Message Broker for inter-service communication
+  # ============================================================================
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: basms-rabbitmq
+    ports:
+      - "5672:5672"   # AMQP port
+      - "15672:15672" # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - basms-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ============================================================================
+  # USERS.API - User Management Service
+  # ============================================================================
+  users.api:
+    image: users.api
+    container_name: basms-users-api
+    build:
+      context: .
+      dockerfile: Users.API/Dockerfile
+    ports:
+      - "5001:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__Database=Server=mysql;Port=3306;Database=users_db;User=root;Password=12345;SslMode=none;
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Username=guest
+      - RabbitMQ__Password=guest
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - basms-network
+
+  # ============================================================================
+  # CONTRACTS.API - Contract & Customer Management Service
+  # ============================================================================
+  contracts.api:
+    image: contracts.api
+    container_name: basms-contracts-api
+    build:
+      context: .
+      dockerfile: Contracts.API/Dockerfile
+    ports:
+      - "5002:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__Database=Server=mysql;Port=3306;Database=contracts_db;User=root;Password=12345;SslMode=none;
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Username=guest
+      - RabbitMQ__Password=guest
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - basms-network
+
+  # ============================================================================
+  # SHIFTS.API - Shift & Team Management Service
+  # ============================================================================
+  shifts.api:
+    image: shifts.api
+    container_name: basms-shifts-api
+    build:
+      context: .
+      dockerfile: Shifts.API/Dockerfile
+    ports:
+      - "5003:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__Database=Server=mysql;Port=3306;Database=shifts_db;User=root;Password=12345;SslMode=none;
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Username=guest
+      - RabbitMQ__Password=guest
+      - ContractsApi__BaseUrl=http://contracts.api:8080
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      contracts.api:
+        condition: service_started
+    networks:
+      - basms-network
+
+# ============================================================================
+# NETWORKS
+# ============================================================================
+networks:
+  basms-network:
+    driver: bridge
+
+# ============================================================================
+# VOLUMES
+# ============================================================================
+volumes:
+  mysql_data:
+    driver: local
+  rabbitmq_data:
+    driver: local

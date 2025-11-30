@@ -1,0 +1,38 @@
+# This is a generated file. Not intended for manual editing.
+services:
+  shifts.api:
+    build:
+      context: "D:\\Projects\\BASMS-BE\\basms-be"
+      dockerfile: "Shifts.API/Dockerfile"
+      target: "base"
+    command: []
+    entrypoint:
+    - "dotnet"
+    - "/app/bin/Debug/net8.0/Shifts.API.dll"
+    environment:
+      DOTNET_USE_POLLING_FILE_WATCHER: "true"
+    image: "shifts.api:dev"
+    ports: []
+    volumes:
+    - "D:\\Projects\\BASMS-BE\\basms-be\\Shifts.API:/app:rw"
+    - "D:\\Projects\\BASMS-BE\\basms-be:/src:rw"
+    - "C:\\Users\\FIRST_LOVE\\.nuget\\packages:/home/app/.nuget/packages"
+    working_dir: "/app"
+  users.api:
+    build:
+      context: "D:\\Projects\\BASMS-BE\\basms-be"
+      dockerfile: "Users.API/Dockerfile"
+      target: "base"
+    command: []
+    entrypoint:
+    - "dotnet"
+    - "/app/bin/Debug/net8.0/Users.API.dll"
+    environment:
+      DOTNET_USE_POLLING_FILE_WATCHER: "true"
+    image: "users.api:dev"
+    ports: []
+    volumes:
+    - "D:\\Projects\\BASMS-BE\\basms-be\\Users.API:/app:rw"
+    - "D:\\Projects\\BASMS-BE\\basms-be:/src:rw"
+    - "C:\\Users\\FIRST_LOVE\\.nuget\\packages:/home/app/.nuget/packages"
+    working_dir: "/app"
