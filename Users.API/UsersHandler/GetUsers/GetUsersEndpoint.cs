@@ -14,7 +14,7 @@ public class GetUsersEndpoint : ICarterModule
             var result = await sender.Send(query);
             return Results.Ok(result);
         })
-        .RequireAuthorization()
+        .AllowAnonymous()
         .AddEndpointFilter(new RoleAuthorizationFilter("ddbd5fad-ba6e-11f0-bcac-00155dca8f48"))
         .WithTags("Users")
         .WithName("GetUsers")
