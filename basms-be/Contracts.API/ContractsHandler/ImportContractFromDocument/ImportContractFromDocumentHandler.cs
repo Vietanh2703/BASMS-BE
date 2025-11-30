@@ -2504,7 +2504,7 @@ if (nationalDayMatch.Success && DateTime.TryParse(nationalDayMatch.Groups[1].Val
                 ContactPersonTitle = contactPersonTitle ?? "Chưa cập nhật",
                 IdentityNumber = identityNumber,
                 Gender = gender,
-                Status = "active",
+                Status = "assigning_manager",
                 IsDeleted = false,
                 CreatedAt = DateTime.UtcNow
             };
@@ -2668,56 +2668,7 @@ if (nationalDayMatch.Success && DateTime.TryParse(nationalDayMatch.Groups[1].Val
 
         return addr;
     }
-
-    /// <summary>
-    ///     Viewbox cho các quận TP.HCM phổ biến (minlon,minlat,maxlon,maxlat)
-    /// </summary>
-    private string? GetDistrictViewbox(string? district, string city)
-    {
-        if (string.IsNullOrEmpty(district)) return null;
-
-        // Chỉ áp dụng cho TP.HCM
-        if (!city.Contains("Ho Chi Minh") && !city.Contains("Hồ Chí Minh") && !city.Contains("Sài Gòn"))
-            return null;
-
-        var districtNum = district.Replace("Quận ", "").Replace("Q.", "").Trim();
-
-        return districtNum switch
-        {
-            "1" => "106.690,10.760,106.710,10.785", // Quận 1
-            "3" => "106.665,10.765,106.695,10.795", // Quận 3
-            "4" => "106.695,10.745,106.720,10.770", // Quận 4
-            "5" => "106.655,10.745,106.685,10.770", // Quận 5
-            "10" => "106.655,10.765,106.685,10.795", // Quận 10
-            "Bình Thạnh" or "Binh Thanh" => "106.690,10.790,106.730,10.830", // Bình Thạnh
-            "Phú Nhuận" or "Phu Nhuan" => "106.670,10.790,106.705,10.820", // Phú Nhuận
-            "Tân Bình" or "Tan Binh" => "106.620,10.775,106.670,10.825", // Tân Bình
-            _ => "106.60,10.70,106.80,10.85" // Bounding box toàn TP.HCM
-        };
-    }
-
-    /// <summary>
-    ///     Bỏ dấu tiếng Việt
-    /// </summary>
-    private string RemoveVietnameseDiacritics(string? text)
-    {
-        if (string.IsNullOrEmpty(text)) return "";
-
-        var withoutDiacritics = text.Normalize(NormalizationForm.FormD);
-        var sb = new StringBuilder();
-
-        foreach (var c in withoutDiacritics)
-        {
-            var category = CharUnicodeInfo.GetUnicodeCategory(c);
-            if (category != UnicodeCategory.NonSpacingMark) sb.Append(c);
-        }
-
-        // Replace đ -> d, Đ -> D
-        return sb.ToString()
-            .Replace("đ", "d")
-            .Replace("Đ", "D")
-            .Normalize(NormalizationForm.FormC);
-    }
+    
 
     /// <summary>
     ///     Chuẩn hóa tên thành phố đơn giản (không thêm ", Vietnam")
