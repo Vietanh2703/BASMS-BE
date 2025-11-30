@@ -14,6 +14,7 @@
     </ItemGroup>
 
     <ItemGroup>
+      <Folder Include="ContractsHandler\GetAllCustomers\" />
       <Folder Include="ContractsHandler\GetContractById\" />
       <Folder Include="Data\" />
       <Folder Include="Models\" />
