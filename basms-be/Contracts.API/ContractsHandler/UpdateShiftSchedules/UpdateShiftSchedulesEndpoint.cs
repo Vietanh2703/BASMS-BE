@@ -22,7 +22,6 @@ public class UpdateShiftSchedulesEndpoint : ICarterModule
                 var command = new UpdateShiftSchedulesCommand
                 {
                     ShiftScheduleId = shiftScheduleId,
-                    LocationId = request.LocationId,
                     ScheduleName = request.ScheduleName,
                     ScheduleType = request.ScheduleType,
                     ShiftStartTime = request.ShiftStartTime,
@@ -90,17 +89,15 @@ public class UpdateShiftSchedulesEndpoint : ICarterModule
         .WithSummary("Update thông tin shift schedule")
         .WithDescription(@"
             Endpoint này cập nhật thông tin của một shift schedule template.
-            Tất cả các fields đều có thể update, trừ ShiftScheduleId và ContractId.
+            Tất cả các fields đều có thể update, trừ ShiftScheduleId, ContractId và LocationId.
 
             FLOW:
             1. Validate dữ liệu đầu vào
             2. Kiểm tra shift schedule có tồn tại không
-            3. Kiểm tra location có tồn tại không (nếu được chỉ định)
-            4. Update shift schedule trong database
-            5. Trả về kết quả
+            3. Update shift schedule trong database
+            4. Trả về kết quả
 
             INPUT (UpdateShiftSchedulesRequest):
-            - locationId: GUID của location (optional - null = áp dụng cho tất cả locations)
             - scheduleName: Tên mẫu ca (required, max 200 chars)
             - scheduleType: Loại ca - regular/overtime/standby/emergency/event (default: regular)
             - shiftStartTime: Giờ bắt đầu ca (TimeSpan, format HH:mm:ss)
@@ -138,7 +135,6 @@ public class UpdateShiftSchedulesEndpoint : ICarterModule
             ```json
             PUT /api/contracts/shift-schedules/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d
             {
-              ""locationId"": null,
               ""scheduleName"": ""Morning Shift - Updated"",
               ""scheduleType"": ""regular"",
               ""shiftStartTime"": ""07:00:00"",
@@ -197,21 +193,20 @@ public class UpdateShiftSchedulesEndpoint : ICarterModule
             VALIDATION RULES:
             =================
             1. ShiftScheduleId: Bắt buộc (từ URL path), shift schedule phải tồn tại
-            2. LocationId: Optional, nếu có thì location phải tồn tại
-            3. ScheduleName: Bắt buộc, tối đa 200 ký tự
-            4. ScheduleType: Bắt buộc, phải là regular/overtime/standby/emergency/event
-            5. ShiftStartTime & ShiftEndTime: Phải trong khoảng 00:00:00 - 23:59:59
-            6. DurationHours: Phải > 0 và <= 24
-            7. BreakMinutes: Phải >= 0 và <= 480
-            8. GuardsPerShift: Phải >= 1 và <= 100
-            9. RecurrenceType: Bắt buộc, phải là daily/weekly/bi_weekly/monthly/specific_dates
-            10. Weekly recurrence: Phải chọn ít nhất 1 ngày trong tuần
-            11. MonthlyDates: Phải là số từ 1-31, phân cách bằng dấu phẩy
-            12. MinimumExperienceMonths: Phải >= 0 và <= 600
-            13. GenerateAdvanceDays: Phải >= 1 và <= 365
-            14. EffectiveFrom: Bắt buộc
-            15. EffectiveTo: Optional, nếu có thì phải sau EffectiveFrom
-            16. Notes: Tối đa 1000 ký tự
+            2. ScheduleName: Bắt buộc, tối đa 200 ký tự
+            3. ScheduleType: Bắt buộc, phải là regular/overtime/standby/emergency/event
+            4. ShiftStartTime & ShiftEndTime: Phải trong khoảng 00:00:00 - 23:59:59
+            5. DurationHours: Phải > 0 và <= 24
+            6. BreakMinutes: Phải >= 0 và <= 480
+            7. GuardsPerShift: Phải >= 1 và <= 100
+            8. RecurrenceType: Bắt buộc, phải là daily/weekly/bi_weekly/monthly/specific_dates
+            9. Weekly recurrence: Phải chọn ít nhất 1 ngày trong tuần
+            10. MonthlyDates: Phải là số từ 1-31, phân cách bằng dấu phẩy
+            11. MinimumExperienceMonths: Phải >= 0 và <= 600
+            12. GenerateAdvanceDays: Phải >= 1 và <= 365
+            13. EffectiveFrom: Bắt buộc
+            14. EffectiveTo: Optional, nếu có thì phải sau EffectiveFrom
+            15. Notes: Tối đa 1000 ký tự
 
             USE CASES:
             ==========
@@ -224,9 +219,8 @@ public class UpdateShiftSchedulesEndpoint : ICarterModule
 
             LƯU Ý:
             =======
-            - KHÔNG thể thay đổi ContractId của shift schedule
+            - KHÔNG thể thay đổi ContractId và LocationId của shift schedule
             - Update sẽ set UpdatedAt = DateTime.UtcNow tự động
-            - LocationId = null nghĩa là áp dụng cho tất cả locations trong contract
             - Nếu thay đổi recurrence pattern, các shifts đã tạo trước đó KHÔNG bị ảnh hưởng
             - Chỉ các shifts mới được generate sau khi update mới theo pattern mới
         ");
@@ -238,7 +232,6 @@ public class UpdateShiftSchedulesEndpoint : ICarterModule
 /// </summary>
 public record UpdateShiftSchedulesRequest
 {
-    public Guid? LocationId { get; init; }
     public string ScheduleName { get; init; } = string.Empty;
     public string ScheduleType { get; init; } = "regular";
     public TimeSpan ShiftStartTime { get; init; }

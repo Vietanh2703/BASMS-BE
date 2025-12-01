@@ -22,6 +22,7 @@
       <Folder Include="ContractsHandler\GetContractIdByCustomer\" />
       <Folder Include="ContractsHandler\GetCustomerById\" />
       <Folder Include="ContractsHandler\GetLocationByCustomer\" />
+      <Folder Include="ContractsHandler\GetShiftScheduleByContractId\" />
       <Folder Include="ContractsHandler\UpdateShiftSchedules\" />
       <Folder Include="Data\" />
       <Folder Include="Models\" />

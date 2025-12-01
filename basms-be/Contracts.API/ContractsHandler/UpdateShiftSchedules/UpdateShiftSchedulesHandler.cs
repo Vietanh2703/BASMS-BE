@@ -10,7 +10,6 @@ namespace Contracts.API.ContractsHandler.UpdateShiftSchedules;
 public record UpdateShiftSchedulesCommand : ICommand<UpdateShiftSchedulesResult>
 {
     public Guid ShiftScheduleId { get; init; }
-    public Guid? LocationId { get; init; }
     public string ScheduleName { get; init; } = string.Empty;
     public string ScheduleType { get; init; } = "regular";
 
@@ -109,31 +108,10 @@ internal class UpdateShiftSchedulesHandler(
             }
 
             // ================================================================
-            // 2. CHECK IF LOCATION EXISTS (if provided)
-            // ================================================================
-            if (request.LocationId.HasValue)
-            {
-                var locationExists = await connection.ExecuteScalarAsync<bool>(
-                    "SELECT COUNT(*) > 0 FROM customer_locations WHERE Id = @LocationId AND IsDeleted = 0",
-                    new { LocationId = request.LocationId.Value });
-
-                if (!locationExists)
-                {
-                    logger.LogWarning("Location not found: {LocationId}", request.LocationId);
-                    return new UpdateShiftSchedulesResult
-                    {
-                        Success = false,
-                        ErrorMessage = $"Location with ID {request.LocationId} not found"
-                    };
-                }
-            }
-
-            // ================================================================
-            // 3. UPDATE SHIFT SCHEDULE
+            // 2. UPDATE SHIFT SCHEDULE
             // ================================================================
             var updateQuery = @"
                 UPDATE contract_shift_schedules SET
-                    LocationId = @LocationId,
                     ScheduleName = @ScheduleName,
                     ScheduleType = @ScheduleType,
                     ShiftStartTime = @ShiftStartTime,
@@ -172,7 +150,6 @@ internal class UpdateShiftSchedulesHandler(
             var rowsAffected = await connection.ExecuteAsync(updateQuery, new
             {
                 ShiftScheduleId = request.ShiftScheduleId,
-                LocationId = request.LocationId,
                 ScheduleName = request.ScheduleName,
                 ScheduleType = request.ScheduleType,
                 ShiftStartTime = request.ShiftStartTime,

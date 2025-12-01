@@ -73,7 +73,8 @@ internal class ImportContractFromDocumentHandler(
                     ErrorMessage = $"Document with ID {request.DocumentId} not found"
                 };
 
-            logger.LogInformation("Found document: {DocumentName} at {FileUrl}", document.DocumentName, document.FileUrl);
+            logger.LogInformation("Found document: {DocumentName} at {FileUrl}", document.DocumentName,
+                document.FileUrl);
 
             // ================================================================
             // BƯỚC 1: DOWNLOAD FILE TỪ S3 VÀ EXTRACT TEXT
@@ -93,9 +94,13 @@ internal class ImportContractFromDocumentHandler(
             var fileExtension = Path.GetExtension(document.DocumentName).ToLower();
 
             if (fileExtension == ".docx")
+            {
                 rawText = await ExtractTextFromWordAsync(fileStream);
+            }
             else if (fileExtension == ".pdf")
+            {
                 rawText = await ExtractTextFromPdfAsync(fileStream);
+            }
             else
             {
                 fileStream.Dispose();
@@ -334,8 +339,7 @@ internal class ImportContractFromDocumentHandler(
                     contract.Id,
                     periodStartDate ?? startDate,
                     periodEndDate ?? endDate,
-                    periodDuration,
-                    false);
+                    periodDuration);
 
                 // 3.3: Tạo Default Location nếu có thông tin guards required
                 var locationIds = new List<Guid>();
@@ -650,7 +654,7 @@ internal class ImportContractFromDocumentHandler(
                             // Xóa record từ database
                             await connection.ExecuteAsync(
                                 "DELETE FROM contract_documents WHERE Id = @Id",
-                                new { Id = tempDoc.Id },
+                                new { tempDoc.Id },
                                 transaction);
 
                             logger.LogInformation(
@@ -908,7 +912,7 @@ internal class ImportContractFromDocumentHandler(
             @"(\d{3,4}/\d{4}/HĐDV-BV/[A-Z]+/[A-Z]+)",
 
             // Pattern 3: Format cũ - HĐ số hoặc Contract No
-            @"(?:Số\s*HĐ|Hợp\s*đồng\s*số|Contract\s*No\.?)\s*[:：]\s*([A-Z0-9\-/]+)",
+            @"(?:Số\s*HĐ|Hợp\s*đồng\s*số|Contract\s*No\.?)\s*[:：]\s*([A-Z0-9\-/]+)"
         };
 
 
@@ -920,24 +924,18 @@ internal class ImportContractFromDocumentHandler(
 
             // Với pattern 5 (CTR), cần ghép groups
             if (match.Groups.Count > 2 && !string.IsNullOrEmpty(match.Groups[2].Value))
-            {
                 // VD: CTR2025-001
                 return $"{match.Groups[1].Value}-{match.Groups[2].Value}".Trim();
-            }
 
             var value = match.Groups[1].Value.Trim();
 
             // Nếu là dạng mới DDMMYYYY/CTANCH thì tự động thêm /HDDVBV
-            if (Regex.IsMatch(value, @"^\d{8}/CTANCH$", RegexOptions.IgnoreCase))
-            {
-                value += "/HDDVBV";
-            }
+            if (Regex.IsMatch(value, @"^\d{8}/CTANCH$", RegexOptions.IgnoreCase)) value += "/HDDVBV";
 
             return value;
         }
 
         return string.Empty;
-        
     }
 
 
@@ -1470,60 +1468,50 @@ internal class ImportContractFromDocumentHandler(
         {
             logger.LogInformation("🌍 Getting GPS for: {Address}", address);
 
-            // Lấy Goong API key từ configuration
-            var goongApiKey = configuration["GoongSettings:ApiKey"];
-            var goongEndpoint = configuration["GoongSettings:GeocodingEndpoint"] ?? "https://rsapi.goong.io/geocode";
+            var hereApiKey = configuration["HereApiSettings:ApiKey"];
+            var hereEndpoint = configuration["HereApiSettings:GeocodingEndpoint"] ??
+                               "https://geocode.search.hereapi.com/v1/geocode";
 
-            if (string.IsNullOrWhiteSpace(goongApiKey))
+            if (string.IsNullOrWhiteSpace(hereApiKey))
             {
-                logger.LogWarning("Goong API key not configured");
+                logger.LogWarning("HERE API key not configured");
                 return null;
             }
 
             using var httpClient = new HttpClient();
             httpClient.DefaultRequestHeaders.Add("User-Agent", "BASMS-Contracts-API/1.0");
 
-            // Tạo URL cho Goong Geocoding API
+            // Tạo URL cho HERE Geocoding API
             var encodedAddress = Uri.EscapeDataString(address);
-            var url = $"{goongEndpoint}?address={encodedAddress}&api_key={goongApiKey}";
+            var url = $"{hereEndpoint}?q={encodedAddress}&apiKey={hereApiKey}";
 
-            logger.LogInformation("  🔍 Querying Goong API...");
+            logger.LogInformation("  🔍 Querying HERE API...");
 
             var response = await httpClient.GetStringAsync(url);
             var json = JsonDocument.Parse(response);
 
-            // Kiểm tra status
-            if (!json.RootElement.TryGetProperty("status", out var status) ||
-                status.GetString() != "OK")
-            {
-                var statusMsg = status.GetString() ?? "UNKNOWN";
-                logger.LogWarning("  ✗ Goong API returned status: {Status}", statusMsg);
-                return null;
-            }
-
-            // Lấy results array
-            if (!json.RootElement.TryGetProperty("results", out var results) ||
-                results.GetArrayLength() == 0)
+            // Kiểm tra có items không
+            if (!json.RootElement.TryGetProperty("items", out var items) ||
+                items.GetArrayLength() == 0)
             {
                 logger.LogWarning("  ✗ No results found for address: {Address}", address);
                 return null;
             }
 
             // Lấy kết quả đầu tiên (best match)
-            var firstResult = results[0];
+            var firstResult = items[0];
 
-            if (!firstResult.TryGetProperty("geometry", out var geometry) ||
-                !geometry.TryGetProperty("location", out var location))
+            if (!firstResult.TryGetProperty("position", out var position))
             {
-                logger.LogWarning("  ✗ No geometry/location in result");
+                logger.LogWarning("  ✗ No position in result");
                 return null;
             }
 
             // Parse latitude và longitude
-            if (!location.TryGetProperty("lat", out var latProp) ||
-                !location.TryGetProperty("lng", out var lngProp))
+            if (!position.TryGetProperty("lat", out var latProp) ||
+                !position.TryGetProperty("lng", out var lngProp))
             {
-                logger.LogWarning("  ✗ Missing lat/lng in location");
+                logger.LogWarning("  ✗ Missing lat/lng in position");
                 return null;
             }
 
@@ -1531,22 +1519,24 @@ internal class ImportContractFromDocumentHandler(
             var lng = lngProp.GetDecimal();
 
             // Lấy thêm thông tin để log
-            var formattedAddress = firstResult.TryGetProperty("formatted_address", out var fa)
-                ? fa.GetString()
-                : "N/A";
-            var placeId = firstResult.TryGetProperty("place_id", out var pid)
-                ? pid.GetString()
+            var formattedAddress = firstResult.TryGetProperty("address", out var addrProp) &&
+                                   addrProp.TryGetProperty("label", out var labelProp)
+                ? labelProp.GetString()
                 : "N/A";
 
-            logger.LogInformation("  ✓ [GOONG] {Lat}, {Lng}", lat, lng);
+            var resultType = firstResult.TryGetProperty("resultType", out var typeProp)
+                ? typeProp.GetString()
+                : "N/A";
+
+            logger.LogInformation("  ✓ [HERE] {Lat}, {Lng}", lat, lng);
             logger.LogInformation("    Formatted: {FormattedAddress}", formattedAddress);
-            logger.LogInformation("    PlaceID: {PlaceId}", placeId);
+            logger.LogInformation("    ResultType: {ResultType}", resultType);
 
             return (lat, lng);
         }
         catch (HttpRequestException httpEx)
         {
-            logger.LogError(httpEx, "HTTP error when calling Goong API for address: {Address}", address);
+            logger.LogError(httpEx, "HTTP error when calling HERE API for address: {Address}", address);
             return null;
         }
         catch (Exception ex)
@@ -2136,78 +2126,78 @@ internal class ImportContractFromDocumentHandler(
 
 
 // 2. Giỗ Tổ Hùng Vương
-var hungVuongPattern = @"Giỗ\s+Tổ\s+Hùng\s+Vương.*?(\d{1,2}/\d{1,2}/\d{4})";
-var hungVuongMatch = Regex.Match(section34, hungVuongPattern, RegexOptions.IgnoreCase);
-if (hungVuongMatch.Success && DateTime.TryParse(hungVuongMatch.Groups[1].Value, out var hungVuongDate))
-    holidays.Add(new Dieu3PublicHoliday
-    {
-        HolidayDate = hungVuongDate,
-        HolidayName = "Giỗ Tổ Hùng Vương",
-        HolidayNameEn = "Hung Kings' Festival",
-        HolidayCategory = "national",
-        Year = hungVuongDate.Year,
-        HolidayStartDate = hungVuongDate,      
-        HolidayEndDate = hungVuongDate,       
-        TotalHolidayDays = (hungVuongDate - hungVuongDate).Days + 1                  
-    });
+        var hungVuongPattern = @"Giỗ\s+Tổ\s+Hùng\s+Vương.*?(\d{1,2}/\d{1,2}/\d{4})";
+        var hungVuongMatch = Regex.Match(section34, hungVuongPattern, RegexOptions.IgnoreCase);
+        if (hungVuongMatch.Success && DateTime.TryParse(hungVuongMatch.Groups[1].Value, out var hungVuongDate))
+            holidays.Add(new Dieu3PublicHoliday
+            {
+                HolidayDate = hungVuongDate,
+                HolidayName = "Giỗ Tổ Hùng Vương",
+                HolidayNameEn = "Hung Kings' Festival",
+                HolidayCategory = "national",
+                Year = hungVuongDate.Year,
+                HolidayStartDate = hungVuongDate,
+                HolidayEndDate = hungVuongDate,
+                TotalHolidayDays = (hungVuongDate - hungVuongDate).Days + 1
+            });
 
 // 3. Ngày 30/4 - Giải phóng miền Nam
-var day304Pattern = @"(?:30/4|Giải\s*phóng\s*miền\s*Nam).*?(\d{1,2}/04/\d{4})";
-var day304Match = Regex.Match(section34, day304Pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
-if (day304Match.Success && DateTime.TryParseExact(day304Match.Groups[1].Value,
-        new[] { "d/M/yyyy", "dd/MM/yyyy", "d/MM/yyyy", "dd/M/yyyy" },
-        CultureInfo.InvariantCulture, DateTimeStyles.None, out var day304))
-{
-    holidays.Add(new Dieu3PublicHoliday
-    {
-        HolidayDate = day304,
-        HolidayName = "Ngày Giải phóng miền Nam",
-        HolidayNameEn = "Reunification Day",
-        HolidayCategory = "national",
-        Year = day304.Year,
-        HolidayStartDate = day304,             
-        HolidayEndDate = day304,               
-        TotalHolidayDays = (day304 - day304).Days + 1  
-    });
-    logger.LogInformation("  ✓ Found 30/4: {Date:dd/MM/yyyy}", day304);
-}
+        var day304Pattern = @"(?:30/4|Giải\s*phóng\s*miền\s*Nam).*?(\d{1,2}/04/\d{4})";
+        var day304Match = Regex.Match(section34, day304Pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        if (day304Match.Success && DateTime.TryParseExact(day304Match.Groups[1].Value,
+                new[] { "d/M/yyyy", "dd/MM/yyyy", "d/MM/yyyy", "dd/M/yyyy" },
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out var day304))
+        {
+            holidays.Add(new Dieu3PublicHoliday
+            {
+                HolidayDate = day304,
+                HolidayName = "Ngày Giải phóng miền Nam",
+                HolidayNameEn = "Reunification Day",
+                HolidayCategory = "national",
+                Year = day304.Year,
+                HolidayStartDate = day304,
+                HolidayEndDate = day304,
+                TotalHolidayDays = (day304 - day304).Days + 1
+            });
+            logger.LogInformation("  ✓ Found 30/4: {Date:dd/MM/yyyy}", day304);
+        }
 
 // 4. Ngày 1/5 - Quốc tế Lao động
-var day015Pattern = @"(?:01/5|1/5|Quốc\s*tế\s*Lao\s*động|Lao\s*động).*?(\d{1,2}/05/\d{4})";
-var day015Match = Regex.Match(section34, day015Pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
-if (day015Match.Success && DateTime.TryParseExact(day015Match.Groups[1].Value,
-        new[] { "d/M/yyyy", "dd/MM/yyyy", "d/MM/yyyy", "dd/M/yyyy" },
-        CultureInfo.InvariantCulture, DateTimeStyles.None, out var day015))
-{
-    holidays.Add(new Dieu3PublicHoliday
-    {
-        HolidayDate = day015,
-        HolidayName = "Ngày Quốc tế Lao động",
-        HolidayNameEn = "International Labor Day",
-        HolidayCategory = "national",
-        Year = day015.Year,
-        HolidayStartDate = day015,             
-        HolidayEndDate = day015,              
-        TotalHolidayDays = (day015 - day015).Days + 1                     
-    });
-    logger.LogInformation("  ✓ Found 1/5: {Date:dd/MM/yyyy}", day015);
-}
+        var day015Pattern = @"(?:01/5|1/5|Quốc\s*tế\s*Lao\s*động|Lao\s*động).*?(\d{1,2}/05/\d{4})";
+        var day015Match = Regex.Match(section34, day015Pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        if (day015Match.Success && DateTime.TryParseExact(day015Match.Groups[1].Value,
+                new[] { "d/M/yyyy", "dd/MM/yyyy", "d/MM/yyyy", "dd/M/yyyy" },
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out var day015))
+        {
+            holidays.Add(new Dieu3PublicHoliday
+            {
+                HolidayDate = day015,
+                HolidayName = "Ngày Quốc tế Lao động",
+                HolidayNameEn = "International Labor Day",
+                HolidayCategory = "national",
+                Year = day015.Year,
+                HolidayStartDate = day015,
+                HolidayEndDate = day015,
+                TotalHolidayDays = (day015 - day015).Days + 1
+            });
+            logger.LogInformation("  ✓ Found 1/5: {Date:dd/MM/yyyy}", day015);
+        }
 
 // 6. Quốc khánh 2/9
-var nationalDayPattern = @"Quốc\s*khánh.*?(\d{1,2}/09/\d{4})";
-var nationalDayMatch = Regex.Match(section34, nationalDayPattern, RegexOptions.IgnoreCase);
-if (nationalDayMatch.Success && DateTime.TryParse(nationalDayMatch.Groups[1].Value, out var nationalDay))
-    holidays.Add(new Dieu3PublicHoliday
-    {
-        HolidayDate = nationalDay,
-        HolidayName = "Ngày Quốc khánh",
-        HolidayNameEn = "National Day",
-        HolidayCategory = "national",
-        Year = nationalDay.Year,
-        HolidayStartDate = nationalDay,        
-        HolidayEndDate = nationalDay,          
-        TotalHolidayDays = (nationalDay - nationalDay).Days + 1                 
-    });
+        var nationalDayPattern = @"Quốc\s*khánh.*?(\d{1,2}/09/\d{4})";
+        var nationalDayMatch = Regex.Match(section34, nationalDayPattern, RegexOptions.IgnoreCase);
+        if (nationalDayMatch.Success && DateTime.TryParse(nationalDayMatch.Groups[1].Value, out var nationalDay))
+            holidays.Add(new Dieu3PublicHoliday
+            {
+                HolidayDate = nationalDay,
+                HolidayName = "Ngày Quốc khánh",
+                HolidayNameEn = "National Day",
+                HolidayCategory = "national",
+                Year = nationalDay.Year,
+                HolidayStartDate = nationalDay,
+                HolidayEndDate = nationalDay,
+                TotalHolidayDays = (nationalDay - nationalDay).Days + 1
+            });
 
         // 7. Tết Dương lịch
         var newYearPattern = @"Tết\s+Dương\s+lịch.*?(\d{1,2}/01/\d{4})";
@@ -2357,21 +2347,25 @@ if (nationalDayMatch.Success && DateTime.TryParse(nationalDayMatch.Groups[1].Val
                     existing.ContactPersonName = contactPersonName;
                     updated = true;
                 }
+
                 if (string.IsNullOrEmpty(existing.ContactPersonTitle) && !string.IsNullOrEmpty(contactPersonTitle))
                 {
                     existing.ContactPersonTitle = contactPersonTitle;
                     updated = true;
                 }
+
                 if (string.IsNullOrEmpty(existing.IdentityNumber) && !string.IsNullOrEmpty(identityNumber))
                 {
                     existing.IdentityNumber = identityNumber;
                     updated = true;
                 }
+
                 if (string.IsNullOrEmpty(existing.Gender) && !string.IsNullOrEmpty(gender))
                 {
                     existing.Gender = gender;
                     updated = true;
                 }
+
                 if (string.IsNullOrEmpty(existing.Address) && !string.IsNullOrEmpty(address))
                 {
                     existing.Address = address;
@@ -2525,7 +2519,7 @@ if (nationalDayMatch.Success && DateTime.TryParse(nationalDayMatch.Groups[1].Val
             // CRITICAL FIX: Query OUTSIDE transaction để thấy committed data từ UserCreatedConsumer
             // Retry với exponential backoff để đợi UserCreatedConsumer commit
 
-            for (int retry = 0; retry < 5; retry++)
+            for (var retry = 0; retry < 5; retry++)
             {
                 // Wait với exponential backoff: 100ms, 200ms, 400ms, 800ms, 1600ms
                 if (retry > 0)
@@ -2668,7 +2662,7 @@ if (nationalDayMatch.Success && DateTime.TryParse(nationalDayMatch.Groups[1].Val
 
         return addr;
     }
-    
+
 
     /// <summary>
     ///     Chuẩn hóa tên thành phố đơn giản (không thêm ", Vietnam")
@@ -2699,38 +2693,6 @@ if (nationalDayMatch.Success && DateTime.TryParse(nationalDayMatch.Groups[1].Val
         return normalized;
     }
 
-    private record ContractTypeInfo
-    {
-        public string ContractType { get; set; } = "long_term";
-        public string ServiceScope { get; set; } = "shift_based";
-        public int DurationMonths { get; set; }
-        public int TotalDays { get; set; }
-        public bool AutoGenerateShifts { get; set; } = true;
-        public int GenerateShiftsAdvanceDays { get; set; } = 30;
-        public bool IsRenewable { get; set; } = true;
-        public bool AutoRenewal { get; set; }
-    }
-
-    private record ShiftInfo
-    {
-        public string? ShiftName { get; init; }
-        public TimeSpan? StartTime { get; init; }
-        public TimeSpan? EndTime { get; init; }
-        public int? GuardsPerShift { get; init; }
-    }
-
-    /// <summary>
-    ///     Model cho địa chỉ Việt Nam
-    /// </summary>
-    private class VietnameseAddress
-    {
-        public string HouseNumber { get; set; } = "";
-        public string Street { get; set; } = "";
-        public string? Ward { get; set; }
-        public string District { get; set; } = "";
-        public string City { get; set; } = "Ho Chi Minh City";
-    }
-
     // ============================================================================
     // HELPER CLASSES CHO ĐIỀU 3
     // ============================================================================
@@ -2743,7 +2705,7 @@ if (nationalDayMatch.Success && DateTime.TryParse(nationalDayMatch.Groups[1].Val
     // ================================================================
 
     /// <summary>
-    /// Helper: Query customer by UserId (replaces 5 duplicate queries)
+    ///     Helper: Query customer by UserId (replaces 5 duplicate queries)
     /// </summary>
     private async Task<Customer?> FindCustomerByUserIdAsync(
         IDbConnection connection,
@@ -2760,7 +2722,7 @@ if (nationalDayMatch.Success && DateTime.TryParse(nationalDayMatch.Groups[1].Val
     }
 
     /// <summary>
-    /// Helper: Query customer by Email
+    ///     Helper: Query customer by Email
     /// </summary>
     private async Task<Customer?> FindCustomerByEmailAsync(
         IDbConnection connection,
@@ -2777,7 +2739,7 @@ if (nationalDayMatch.Success && DateTime.TryParse(nationalDayMatch.Groups[1].Val
     }
 
     /// <summary>
-    /// Helper: Query customer by CompanyName
+    ///     Helper: Query customer by CompanyName
     /// </summary>
     private async Task<Customer?> FindCustomerByCompanyNameAsync(
         IDbConnection connection,
@@ -2794,7 +2756,7 @@ if (nationalDayMatch.Success && DateTime.TryParse(nationalDayMatch.Groups[1].Val
     }
 
     /// <summary>
-    /// Helper: Extract "Bên B" section from contract (replaces 7 duplicate extractions)
+    ///     Helper: Extract "Bên B" section from contract (replaces 7 duplicate extractions)
     /// </summary>
     private string? ExtractBenBSection(string text, int maxLength = 1000)
     {
@@ -2810,8 +2772,8 @@ if (nationalDayMatch.Success && DateTime.TryParse(nationalDayMatch.Groups[1].Val
     }
 
     /// <summary>
-    /// Helper: Merge customer info from contract document (replaces 3 duplicate update blocks)
-    /// Updates customer fields only if they are currently empty
+    ///     Helper: Merge customer info from contract document (replaces 3 duplicate update blocks)
+    ///     Updates customer fields only if they are currently empty
     /// </summary>
     private async Task<bool> MergeCustomerInfoAsync(
         IDbConnection connection,
@@ -2868,7 +2830,7 @@ if (nationalDayMatch.Success && DateTime.TryParse(nationalDayMatch.Groups[1].Val
     }
 
     /// <summary>
-    /// Helper: Parse Vietnamese date formats (replaces 10+ duplicate parsing)
+    ///     Helper: Parse Vietnamese date formats (replaces 10+ duplicate parsing)
     /// </summary>
     private bool TryParseVietnameseDate(string? dateString, out DateTime result)
     {
@@ -2892,7 +2854,7 @@ if (nationalDayMatch.Success && DateTime.TryParse(nationalDayMatch.Groups[1].Val
     }
 
     /// <summary>
-    /// Helper: Factory method for creating public holidays (replaces 7 duplicate object creations)
+    ///     Helper: Factory method for creating public holidays (replaces 7 duplicate object creations)
     /// </summary>
     private Dieu3PublicHoliday CreatePublicHoliday(
         DateTime date,
@@ -2919,6 +2881,38 @@ if (nationalDayMatch.Success && DateTime.TryParse(nationalDayMatch.Groups[1].Val
             IsTetHoliday = isTet,
             TetDayNumber = tetDayNumber
         };
+    }
+
+    private record ContractTypeInfo
+    {
+        public string ContractType { get; set; } = "long_term";
+        public string ServiceScope { get; set; } = "shift_based";
+        public int DurationMonths { get; set; }
+        public int TotalDays { get; set; }
+        public bool AutoGenerateShifts { get; set; } = true;
+        public int GenerateShiftsAdvanceDays { get; set; } = 30;
+        public bool IsRenewable { get; set; } = true;
+        public bool AutoRenewal { get; set; }
+    }
+
+    private record ShiftInfo
+    {
+        public string? ShiftName { get; init; }
+        public TimeSpan? StartTime { get; init; }
+        public TimeSpan? EndTime { get; init; }
+        public int? GuardsPerShift { get; init; }
+    }
+
+    /// <summary>
+    ///     Model cho địa chỉ Việt Nam
+    /// </summary>
+    private class VietnameseAddress
+    {
+        public string HouseNumber { get; set; } = "";
+        public string Street { get; set; } = "";
+        public string? Ward { get; set; }
+        public string District { get; set; } = "";
+        public string City { get; set; } = "Ho Chi Minh City";
     }
 
     // ================================================================

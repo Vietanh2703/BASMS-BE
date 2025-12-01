@@ -91,6 +91,7 @@ services:
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
       - EmailSettings__Sender=${EMAIL_SENDER}
       - EmailSettings__Password=${EMAIL_PASSWORD}
+      - HERE_API_KEY=${HERE_API_KEY}
     depends_on:
       - mysql
       - rabbitmq
@@ -116,7 +117,6 @@ services:
       - RABBITMQ_HOST=${RABBITMQ_HOST}
       - RABBITMQ_USERNAME=${RABBITMQ_USERNAME}
       - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
-      - GOONG_API_KEY=${GOONG_API_KEY}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
       - EmailSettings__Sender=${EMAIL_SENDER}
       - EmailSettings__Password=${EMAIL_PASSWORD}
