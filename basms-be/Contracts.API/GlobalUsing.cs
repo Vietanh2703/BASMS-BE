@@ -30,3 +30,4 @@ global using MySql.Data.MySqlClient;
 global using MailKit.Net.Smtp;
 global using MailKit.Security;
 global using MimeKit;
+global using FluentValidation;
