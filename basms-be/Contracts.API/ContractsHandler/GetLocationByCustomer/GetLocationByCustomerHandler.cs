@@ -18,9 +18,8 @@ public record LocationDto
     public string LocationCode { get; init; } = string.Empty;
     public string LocationName { get; init; } = string.Empty;
     public string Address { get; init; } = string.Empty;
-    public string? City { get; init; }
-    public string? District { get; init; }
-    public string? Ward { get; init; }
+    public double Latitude { get; init; }
+    public double Longitude { get; init; }
     public string LocationType { get; init; } = string.Empty;
     public bool IsActive { get; init; }
 }
@@ -91,9 +90,8 @@ internal class GetLocationByCustomerHandler(
                     LocationCode,
                     LocationName,
                     Address,
-                    City,
-                    District,
-                    Ward,
+                    Latitude,
+                    Longitude,
                     LocationType,
                     IsActive
                 FROM customer_locations
