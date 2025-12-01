@@ -112,7 +112,6 @@ public class GetShiftScheduleByContractIdEndpoint : ICarterModule
               - effectiveTo: Có hiệu lực đến ngày (null = vô thời hạn)
               - isActive: Trạng thái active
               - notes: Ghi chú
-              - createdBy: Người tạo
 
             VÍ DỤ REQUEST:
             ==============
@@ -163,8 +162,7 @@ public class GetShiftScheduleByContractIdEndpoint : ICarterModule
                   ""effectiveFrom"": ""2025-01-01T00:00:00"",
                   ""effectiveTo"": null,
                   ""isActive"": true,
-                  ""notes"": ""Ca sáng cho ngày thường"",
-                  ""createdBy"": ""admin@company.com""
+                  ""notes"": ""Ca sáng cho ngày thường""
                 },
                 {
                   ""id"": ""g2f3e4d5-c6b7-5f06-af05-2c157e8e5ee8"",
@@ -200,8 +198,7 @@ public class GetShiftScheduleByContractIdEndpoint : ICarterModule
                   ""effectiveFrom"": ""2025-01-01T00:00:00"",
                   ""effectiveTo"": null,
                   ""isActive"": true,
-                  ""notes"": ""Ca chiều, yêu cầu bảo vệ có vũ trang"",
-                  ""createdBy"": ""admin@company.com""
+                  ""notes"": ""Ca chiều, yêu cầu bảo vệ có vũ trang""
                 },
                 {
                   ""id"": ""h3g4f5e6-d7c8-6f07-bf06-3d268f9f6ff9"",
@@ -237,8 +234,7 @@ public class GetShiftScheduleByContractIdEndpoint : ICarterModule
                   ""effectiveFrom"": ""2025-01-01T00:00:00"",
                   ""effectiveTo"": ""2025-12-31T23:59:59"",
                   ""isActive"": true,
-                  ""notes"": ""Ca cuối tuần cho location cụ thể, yêu cầu supervisor"",
-                  ""createdBy"": ""manager@company.com""
+                  ""notes"": ""Ca cuối tuần cho location cụ thể, yêu cầu supervisor""
                 }
               ]
             }

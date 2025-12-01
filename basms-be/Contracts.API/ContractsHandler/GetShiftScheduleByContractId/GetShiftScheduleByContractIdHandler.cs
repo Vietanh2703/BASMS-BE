@@ -62,7 +62,6 @@ public record ShiftScheduleDto
     public DateTime? EffectiveTo { get; init; }
     public bool IsActive { get; init; }
     public string? Notes { get; init; }
-    public string? CreatedBy { get; init; }
 }
 
 /// <summary>
@@ -135,7 +134,7 @@ internal class GetShiftScheduleByContractIdHandler(
                     AppliesOnPublicHolidays, AppliesOnCustomerHolidays, AppliesOnWeekends, SkipWhenLocationClosed,
                     RequiresArmedGuard, RequiresSupervisor, MinimumExperienceMonths, RequiredCertifications,
                     AutoGenerateEnabled, GenerateAdvanceDays,
-                    EffectiveFrom, EffectiveTo, IsActive, Notes, CreatedBy
+                    EffectiveFrom, EffectiveTo, IsActive, Notes
                 FROM contract_shift_schedules
                 WHERE ContractId = @ContractId AND IsDeleted = 0
                 ORDER BY ScheduleName
