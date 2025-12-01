@@ -14,9 +14,15 @@
     </ItemGroup>
 
     <ItemGroup>
+      <Folder Include="ContractsHandler\CreatePublicHoliday\" />
+      <Folder Include="ContractsHandler\CreateShiftSchedules\" />
+      <Folder Include="ContractsHandler\DeleteShiftSchedules\" />
       <Folder Include="ContractsHandler\GetAllCustomers\" />
       <Folder Include="ContractsHandler\GetContractById\" />
+      <Folder Include="ContractsHandler\GetContractIdByCustomer\" />
       <Folder Include="ContractsHandler\GetCustomerById\" />
+      <Folder Include="ContractsHandler\GetLocationByCustomer\" />
+      <Folder Include="ContractsHandler\UpdateShiftSchedules\" />
       <Folder Include="Data\" />
       <Folder Include="Models\" />
       <Folder Include="Consumers\" />

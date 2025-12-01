@@ -16,19 +16,8 @@ public record UpdateCustomerCommand : ICommand<UpdateCustomerResult>
     public string IdentityNumber { get; init; } = string.Empty;
     public DateTime? IdentityIssueDate { get; init; }
     public string? IdentityIssuePlace { get; init; }
-    public string Email { get; init; } = string.Empty;
-    public string Phone { get; init; } = string.Empty;
-    public string? AvatarUrl { get; init; }
-    public string? Gender { get; init; }
     public DateTime DateOfBirth { get; init; }
     public string Address { get; init; } = string.Empty;
-    public string? City { get; init; }
-    public string? District { get; init; }
-    public string? Industry { get; init; }
-    public string? CompanySize { get; init; }
-    public string Status { get; init; } = string.Empty;
-    public bool FollowsNationalHolidays { get; init; }
-    public string? Notes { get; init; }
 }
 
 /// <summary>
@@ -88,32 +77,7 @@ internal class UpdateCustomerHandler(
             }
 
             // ================================================================
-            // 2. CHECK EMAIL UNIQUENESS (if changed)
-            // ================================================================
-            var emailCheckQuery = @"
-                SELECT COUNT(*)
-                FROM customers
-                WHERE Email = @Email
-                AND Id != @CustomerId
-                AND IsDeleted = 0
-            ";
-
-            var emailExists = await connection.ExecuteScalarAsync<int>(
-                emailCheckQuery,
-                new { Email = request.Email, CustomerId = request.CustomerId });
-
-            if (emailExists > 0)
-            {
-                logger.LogWarning("Email already exists: {Email}", request.Email);
-                return new UpdateCustomerResult
-                {
-                    Success = false,
-                    ErrorMessage = $"Email {request.Email} is already in use by another customer"
-                };
-            }
-
-            // ================================================================
-            // 3. CHECK IDENTITY NUMBER UNIQUENESS (if changed)
+            // 2. CHECK IDENTITY NUMBER UNIQUENESS (if changed)
             // ================================================================
             var identityCheckQuery = @"
                 SELECT COUNT(*)
@@ -138,7 +102,7 @@ internal class UpdateCustomerHandler(
             }
 
             // ================================================================
-            // 4. UPDATE CUSTOMER
+            // 3. UPDATE CUSTOMER
             // ================================================================
             var updateQuery = @"
                 UPDATE customers SET
@@ -148,19 +112,8 @@ internal class UpdateCustomerHandler(
                     IdentityNumber = @IdentityNumber,
                     IdentityIssueDate = @IdentityIssueDate,
                     IdentityIssuePlace = @IdentityIssuePlace,
-                    Email = @Email,
-                    Phone = @Phone,
-                    AvatarUrl = @AvatarUrl,
-                    Gender = @Gender,
                     DateOfBirth = @DateOfBirth,
                     Address = @Address,
-                    City = @City,
-                    District = @District,
-                    Industry = @Industry,
-                    CompanySize = @CompanySize,
-                    Status = @Status,
-                    FollowsNationalHolidays = @FollowsNationalHolidays,
-                    Notes = @Notes,
                     UpdatedAt = @UpdatedAt
                 WHERE Id = @CustomerId AND IsDeleted = 0
             ";
@@ -174,19 +127,8 @@ internal class UpdateCustomerHandler(
                 IdentityNumber = request.IdentityNumber,
                 IdentityIssueDate = request.IdentityIssueDate,
                 IdentityIssuePlace = request.IdentityIssuePlace,
-                Email = request.Email,
-                Phone = request.Phone,
-                AvatarUrl = request.AvatarUrl,
-                Gender = request.Gender,
                 DateOfBirth = request.DateOfBirth,
                 Address = request.Address,
-                City = request.City,
-                District = request.District,
-                Industry = request.Industry,
-                CompanySize = request.CompanySize,
-                Status = request.Status,
-                FollowsNationalHolidays = request.FollowsNationalHolidays,
-                Notes = request.Notes,
                 UpdatedAt = DateTime.UtcNow
             });
 

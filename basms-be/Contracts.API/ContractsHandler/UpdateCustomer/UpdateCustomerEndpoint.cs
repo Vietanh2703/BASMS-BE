@@ -28,19 +28,8 @@ public class UpdateCustomerEndpoint : ICarterModule
                     IdentityNumber = request.IdentityNumber,
                     IdentityIssueDate = request.IdentityIssueDate,
                     IdentityIssuePlace = request.IdentityIssuePlace,
-                    Email = request.Email,
-                    Phone = request.Phone,
-                    AvatarUrl = request.AvatarUrl,
-                    Gender = request.Gender,
                     DateOfBirth = request.DateOfBirth,
-                    Address = request.Address,
-                    City = request.City,
-                    District = request.District,
-                    Industry = request.Industry,
-                    CompanySize = request.CompanySize,
-                    Status = request.Status,
-                    FollowsNationalHolidays = request.FollowsNationalHolidays,
-                    Notes = request.Notes
+                    Address = request.Address
                 };
 
                 var result = await sender.Send(command);
@@ -81,9 +70,9 @@ public class UpdateCustomerEndpoint : ICarterModule
             Endpoint này cập nhật thông tin customer trong hệ thống.
 
             FLOW:
-            1. Validate dữ liệu đầu vào (email, phone, identity number...)
+            1. Validate dữ liệu đầu vào (identity number, date of birth...)
             2. Kiểm tra customer có tồn tại không
-            3. Kiểm tra email và identity number có bị trùng với customer khác không
+            3. Kiểm tra identity number có bị trùng với customer khác không
             4. Update thông tin customer vào database
             5. Trả về kết quả
 
@@ -94,19 +83,8 @@ public class UpdateCustomerEndpoint : ICarterModule
             - identityNumber: Số CCCD (required, 9 hoặc 12 số)
             - identityIssueDate: Ngày cấp CCCD (optional, không được trong tương lai)
             - identityIssuePlace: Nơi cấp CCCD (optional, max 200 chars)
-            - email: Email (required, valid email format, max 100 chars)
-            - phone: Số điện thoại (required, format +84XXXXXXXXX hoặc 0XXXXXXXXX)
-            - avatarUrl: URL avatar (optional, max 500 chars)
-            - gender: Giới tính (optional, values: 'male', 'female', 'other')
             - dateOfBirth: Ngày sinh (required, phải trong quá khứ)
             - address: Địa chỉ (required, max 500 chars)
-            - city: Thành phố (optional, max 100 chars)
-            - district: Quận/Huyện (optional, max 100 chars)
-            - industry: Ngành nghề (optional, values: retail, office, manufacturing, hospital, school, residential)
-            - companySize: Quy mô (optional, values: small, medium, large, enterprise)
-            - status: Trạng thái (required, values: active, inactive, suspended, assigning_manager)
-            - followsNationalHolidays: Có theo ngày lễ quốc gia không (required, boolean)
-            - notes: Ghi chú (optional, max 1000 chars)
 
             OUTPUT (UpdateCustomerResult):
             - success: true/false
@@ -125,19 +103,8 @@ public class UpdateCustomerEndpoint : ICarterModule
               ""identityNumber"": ""082938465729"",
               ""identityIssueDate"": ""2015-01-15T00:00:00"",
               ""identityIssuePlace"": ""Cục Cảnh sát ĐKQL cư trú và DLQG về dân cư"",
-              ""email"": ""minhpdse150908@fpt.edu.vn"",
-              ""phone"": ""+84329465423"",
-              ""avatarUrl"": ""https://example.com/avatar.jpg"",
-              ""gender"": ""male"",
               ""dateOfBirth"": ""1990-01-15T00:00:00"",
-              ""address"": ""138 Nguyễn Thị Búp, Tân Chánh Hiệp, Quận 12, Thành phố Hồ Chí Minh"",
-              ""city"": ""Hồ Chí Minh"",
-              ""district"": ""Quận 12"",
-              ""industry"": ""retail"",
-              ""companySize"": ""small"",
-              ""status"": ""active"",
-              ""followsNationalHolidays"": true,
-              ""notes"": ""Khách hàng VIP""
+              ""address"": ""138 Nguyễn Thị Búp, Tân Chánh Hiệp, Quận 12, Thành phố Hồ Chí Minh""
             }
             ```
 
@@ -167,15 +134,12 @@ public class UpdateCustomerEndpoint : ICarterModule
             =================
             1. CompanyName: Bắt buộc, tối đa 200 ký tự
             2. ContactPersonName: Bắt buộc, tối đa 100 ký tự
-            3. IdentityNumber: Bắt buộc, phải là 9 hoặc 12 số, không được trùng
-            4. Email: Bắt buộc, format hợp lệ, không được trùng
-            5. Phone: Bắt buộc, format +84XXXXXXXXX hoặc 0XXXXXXXXX
-            6. DateOfBirth: Phải trong quá khứ
-            7. Address: Bắt buộc, tối đa 500 ký tự
-            8. Gender: Chỉ chấp nhận 'male', 'female', hoặc 'other'
-            9. Industry: Chỉ chấp nhận retail, office, manufacturing, hospital, school, residential
-            10. CompanySize: Chỉ chấp nhận small, medium, large, enterprise
-            11. Status: Bắt buộc, chỉ chấp nhận active, inactive, suspended, assigning_manager
+            3. ContactPersonTitle: Optional, tối đa 100 ký tự
+            4. IdentityNumber: Bắt buộc, phải là 9 hoặc 12 số, không được trùng với customer khác
+            5. IdentityIssueDate: Optional, không được trong tương lai
+            6. IdentityIssuePlace: Optional, tối đa 200 ký tự
+            7. DateOfBirth: Bắt buộc, phải trong quá khứ, không quá 150 năm trước
+            8. Address: Bắt buộc, tối đa 500 ký tự
 
             CÁCH SỬ DỤNG:
             =============
@@ -194,8 +158,6 @@ public class UpdateCustomerEndpoint : ICarterModule
                 ""gender"": ""male"",
                 ""dateOfBirth"": ""1990-01-15T00:00:00"",
                 ""address"": ""138 Nguyễn Thị Búp, Tân Chánh Hiệp, Quận 12"",
-                ""status"": ""active"",
-                ""followsNationalHolidays"": true
               }'
             ```
 
@@ -231,7 +193,9 @@ public class UpdateCustomerEndpoint : ICarterModule
               dateOfBirth: '1990-01-15T00:00:00',
               address: '138 Nguyễn Thị Búp, Tân Chánh Hiệp, Quận 12',
               status: 'active',
-              followsNationalHolidays: true
+              followsNationalHolidays: true,
+              latitude: 10.762622,
+              longitude: 106.660172
             });
             ```
 
@@ -281,11 +245,13 @@ public class UpdateCustomerEndpoint : ICarterModule
 
             LƯU Ý:
             =======
-            - Chỉ update thông tin cơ bản của customer
+            - Update thông tin cơ bản của customer và GPS coordinates của location
             - Không update CustomerCode (auto-generated)
             - Không update CustomerSince (giá trị ban đầu)
             - Email và IdentityNumber phải unique (không trùng với customer khác)
-            - UpdatedAt sẽ được tự động cập nhật
+            - Latitude/Longitude sẽ được update vào location đầu tiên của customer
+            - Nếu chỉ cung cấp latitude hoặc longitude, field còn lại giữ nguyên
+            - UpdatedAt sẽ được tự động cập nhật cho cả customer và location
             - Validation được thực hiện bởi FluentValidation
         ");
     }
@@ -302,17 +268,6 @@ public record UpdateCustomerRequest
     public string IdentityNumber { get; init; } = string.Empty;
     public DateTime? IdentityIssueDate { get; init; }
     public string? IdentityIssuePlace { get; init; }
-    public string Email { get; init; } = string.Empty;
-    public string Phone { get; init; } = string.Empty;
-    public string? AvatarUrl { get; init; }
-    public string? Gender { get; init; }
     public DateTime DateOfBirth { get; init; }
     public string Address { get; init; } = string.Empty;
-    public string? City { get; init; }
-    public string? District { get; init; }
-    public string? Industry { get; init; }
-    public string? CompanySize { get; init; }
-    public string Status { get; init; } = string.Empty;
-    public bool FollowsNationalHolidays { get; init; }
-    public string? Notes { get; init; }
 }
