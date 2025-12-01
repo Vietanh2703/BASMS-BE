@@ -103,16 +103,16 @@ internal class GetShiftScheduleByContractIdHandler(
             // 1. CHECK IF CONTRACT EXISTS
             // ================================================================
             var contractQuery = @"
-                SELECT ContractCode
+                SELECT ContractNumber
                 FROM contracts
                 WHERE Id = @ContractId AND IsDeleted = 0
             ";
 
-            var contractCode = await connection.QuerySingleOrDefaultAsync<string>(
+            var contractNumber = await connection.QuerySingleOrDefaultAsync<string>(
                 contractQuery,
                 new { ContractId = request.ContractId });
 
-            if (contractCode == null)
+            if (contractNumber == null)
             {
                 logger.LogWarning("Contract not found: {ContractId}", request.ContractId);
                 return new GetShiftScheduleByContractIdResult
@@ -148,14 +148,14 @@ internal class GetShiftScheduleByContractIdHandler(
             var shiftSchedulesList = shiftSchedules.ToList();
 
             logger.LogInformation(
-                "Successfully retrieved {Count} shift schedule(s) for contract {ContractCode}",
-                shiftSchedulesList.Count, contractCode);
+                "Successfully retrieved {Count} shift schedule(s) for contract {ContractNumber}",
+                shiftSchedulesList.Count, contractNumber);
 
             return new GetShiftScheduleByContractIdResult
             {
                 Success = true,
                 ContractId = request.ContractId,
-                ContractCode = contractCode,
+                ContractCode = contractNumber,
                 ShiftSchedules = shiftSchedulesList
             };
         }
