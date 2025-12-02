@@ -28,7 +28,6 @@ internal class CheckFirstLoginHandler(
 
         try
         {
-            // ✅ MySQL syntax - dùng backticks hoặc không dùng quotes
             const string sql = """
                 SELECT `Id`, `Email`, `LoginCount`, `IsDeleted`, `IsActive`
                 FROM `users`
@@ -57,9 +56,8 @@ internal class CheckFirstLoginHandler(
                 logger.LogWarning("User is inactive: {Email}", query.Email);
                 throw new BadRequestException("User account is inactive", "USER_INACTIVE");
             }
-
-            // Check if LoginCount == 1 → First login
-            var isFirstLogin = user.LoginCount == 1;
+            
+            var isFirstLogin = user.LoginCount == 0;
 
             logger.LogInformation(
                 "First login check result for {Email}: IsFirstLogin={IsFirstLogin}, LoginCount={LoginCount}",
