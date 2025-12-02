@@ -57,7 +57,7 @@ internal class CheckFirstLoginHandler(
                 throw new BadRequestException("User account is inactive", "USER_INACTIVE");
             }
             
-            var isFirstLogin = user.LoginCount == 0;
+            var isFirstLogin = user.LoginCount == 1;
 
             logger.LogInformation(
                 "First login check result for {Email}: IsFirstLogin={IsFirstLogin}, LoginCount={LoginCount}",
