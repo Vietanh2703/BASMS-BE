@@ -57,6 +57,163 @@ public class EmailHandler
         }
     }
     
+    public async Task SendGuardLoginInfoEmailAsync(
+        string guardName,
+        string guardEmail,
+        string password,
+        string contractNumber)
+    {
+        var emailBody = GenerateGuardLoginEmailBody(guardName, guardEmail, password, contractNumber);
+        var emailRequest = new EmailRequests
+        {
+            Email = guardEmail,
+            Subject = "Thông tin đăng nhập ứng dụng BASMS",
+            EmailBody = emailBody
+        };
+
+        await SendEmailAsync(emailRequest);
+    }
+    
+    private string GenerateGuardLoginEmailBody(
+    string guardName,
+    string email,
+    string password,
+    string contractNumber)
+{
+    return $@"
+<!DOCTYPE html>
+<html lang=""vi"">
+<head>
+    <meta charset=""UTF-8"">
+    <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
+    <title>Thông tin đăng nhập Hệ thống quản lý bảo vệ</title>
+</head>
+<body style=""margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f4f4f4;"">
+    <table width=""100%"" cellpadding=""0"" cellspacing=""0"" style=""background-color: #f4f4f4; padding: 20px;"">
+        <tr>
+            <td align=""center"">
+                <table width=""600"" cellpadding=""0"" cellspacing=""0"" style=""background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"">
+                    <!-- Header -->
+                    <tr>
+                        <td style=""background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 8px 8px 0 0;"">
+                            <h1 style=""color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;"">
+                                Chào mừng đến với Hệ thống quản lý bảo vệ
+                            </h1>
+                        </td>
+                    </tr>
+
+                    <!-- Content -->
+                    <tr>
+                        <td style=""padding: 40px 30px;"">
+                            <p style=""color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;"">
+                                Xin chào <strong>{guardName}</strong>,
+                            </p>
+                            
+                            <p style=""color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;"">
+                                Tài khoản <strong>Nhân viên bảo vệ</strong> của bạn đã được tạo thành công trong hệ thống BASMS 
+                                cho <strong>Hợp đồng {contractNumber}</strong>.
+                            </p>
+
+                            <div style=""background-color: #f8f9fa; border-left: 4px solid #667eea; padding: 20px; margin: 20px 0; border-radius: 4px;"">
+                                <h2 style=""color: #667eea; margin: 0 0 15px 0; font-size: 18px;"">
+                                    📋 Thông tin đăng nhập
+                                </h2>
+                                
+                                <table style=""width: 100%; border-collapse: collapse;"">
+                                    <tr>
+                                        <td style=""padding: 8px 0; color: #666666; font-size: 14px; width: 30%;"">
+                                            <strong>Email:</strong>
+                                        </td>
+                                        <td style=""padding: 8px 0; color: #333333; font-size: 14px;"">
+                                            <code style=""background-color: #e9ecef; padding: 4px 8px; border-radius: 4px; font-family: 'Courier New', monospace;"">{email}</code>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style=""padding: 8px 0; color: #666666; font-size: 14px;"">
+                                            <strong>Mật khẩu:</strong>
+                                        </td>
+                                        <td style=""padding: 8px 0; color: #333333; font-size: 14px;"">
+                                            <code style=""background-color: #fff3cd; padding: 4px 8px; border-radius: 4px; font-family: 'Courier New', monospace; color: #856404;"">{password}</code>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style=""padding: 8px 0; color: #666666; font-size: 14px;"">
+                                            <strong>Vai trò:</strong>
+                                        </td>
+                                        <td style=""padding: 8px 0; color: #333333; font-size: 14px;"">
+                                            <span style=""background-color: #cfe2ff; color: #084298; padding: 4px 12px; border-radius: 12px; font-size: 13px; font-weight: 600;"">
+                                                Guard (Nhân viên bảo vệ)
+                                            </span>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </div>
+
+                            <div style=""background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 4px;"">
+                                <p style=""color: #856404; margin: 0; font-size: 14px; line-height: 1.6;"">
+                                    <strong>Quan trọng:</strong> Đây là mật khẩu tạm thời. 
+                                    Vui lòng đổi mật khẩu ngay sau khi đăng nhập lần đầu để đảm bảo bảo mật tài khoản.
+                                </p>
+                            </div>
+
+                            <div style=""background-color: #e7f3ff; border-left: 4px solid #2196F3; padding: 20px; margin: 20px 0; border-radius: 4px; text-align: center;"">
+                                <h3 style=""color: #2196F3; margin: 0 0 15px 0; font-size: 18px;"">
+                                  Đăng nhập qua ứng dụng di động
+                                </h3>
+                                <p style=""color: #333333; font-size: 14px; line-height: 1.6; margin: 0 0 15px 0;"">
+                                    Vui lòng tải và cài đặt ứng dụng BASMS trên điện thoại của bạn:
+                                </p>
+                                <div style=""margin: 20px 0;"">
+                                    <p style=""margin: 10px 0;"">
+                                        <strong>📲 Android:</strong> Tìm kiếm ""BASMS"" trên Google Play Store
+                                    </p>
+                                    <p style=""margin: 10px 0;"">
+                                        <strong>📲 iOS:</strong> Tìm kiếm ""BASMS"" trên App Store
+                                    </p>
+                                </div>
+                                <p style=""color: #666666; font-size: 13px; margin: 0; font-style: italic;"">
+                                    Sau khi cài đặt, sử dụng email và mật khẩu ở trên để đăng nhập
+                                </p>
+                            </div>
+
+                            <div style=""background-color: #e8f5e9; border-left: 4px solid #4CAF50; padding: 15px; margin: 20px 0; border-radius: 4px;"">
+                                <h3 style=""color: #4CAF50; margin: 0 0 10px 0; font-size: 16px;"">
+                                    🎯 Chức năng của ứng dụng
+                                </h3>
+                                <ul style=""color: #333333; font-size: 14px; line-height: 1.8; margin: 0; padding-left: 20px;"">
+                                    <li>Xem lịch trực và ca làm việc của bạn</li>
+                                    <li>Check-in/Check-out khi bắt đầu và kết thúc ca trực</li>
+                                    <li>Báo cáo sự cố và tình huống bất thường</li>
+                                    <li>Nhận thông báo về lịch trực và thay đổi ca</li>
+                                    <li>Gửi yêu cầu nghỉ phép hoặc đổi ca</li>
+                                </ul>
+                            </div>
+
+                            <p style=""color: #666666; font-size: 14px; line-height: 1.6; margin: 20px 0 0 0;"">
+                                Nếu bạn có bất kỳ câu hỏi nào hoặc cần hỗ trợ, vui lòng liên hệ với quản lý của bạn.
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style=""background-color: #f8f9fa; padding: 20px 30px; border-radius: 0 0 8px 8px;"">
+                            <p style=""color: #666666; font-size: 12px; line-height: 1.6; margin: 0 0 10px 0; text-align: center;"">
+                                Email này được gửi tự động từ hệ thống BASMS<br>
+                                Vui lòng không trả lời email này
+                            </p>
+                            <p style=""color: #999999; font-size: 11px; margin: 0; text-align: center;"">
+                                © 2025 BASMS - Building & Apartment Security Management System
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>";
+}
 
     public async Task SendManagerLoginInfoEmailAsync(
         string managerName,

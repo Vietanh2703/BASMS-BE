@@ -28,6 +28,7 @@ internal class ImportWorkingContractHandler(
     IS3Service s3Service,
     IWordContractService wordService,
     IRequestClient<CreateUserRequest> createUserClient,
+    EmailHandler emailHandler,
     ILogger<ImportWorkingContractHandler> logger)
     : ICommandHandler<ImportWorkingContractCommand, ImportWorkingContractResult>
 {
@@ -145,8 +146,8 @@ internal class ImportWorkingContractHandler(
                 BirthDay = employeeData.BirthDay,
                 BirthMonth = employeeData.BirthMonth,
                 BirthYear = employeeData.BirthYear,
-                Gender = "male", // Default, có thể cải thiện sau
-                RoleName = "guard", // ✅ FIX: Phải gửi RoleName thay vì RoleId
+                Gender = "male", 
+                RoleName = "guard", 
                 AuthProvider = "email",
                 Status = "active",
                 EmailVerified = false,
@@ -172,6 +173,32 @@ internal class ImportWorkingContractHandler(
                 userId,
                 employeeData.Email);
 
+            
+// ================================================================
+// GỬI EMAIL THÔNG TIN ĐĂNG NHẬP CHO GUARD
+// ================================================================
+            if (!string.IsNullOrEmpty(employeeData.Email) && !string.IsNullOrEmpty(randomPassword))
+            {
+                try
+                {
+                    await emailHandler.SendGuardLoginInfoEmailAsync(
+                        employeeData.FullName ?? "Guard",
+                        employeeData.Email,
+                        randomPassword,
+                        contractData.ContractNumber);
+
+                    logger.LogInformation(
+                        "Login info email sent successfully to guard: {Email}",
+                        employeeData.Email);
+                }
+                catch (Exception emailEx)
+                {
+                    logger.LogWarning(emailEx,
+                        "Failed to send login info email to {Email}, but import was successful. " +
+                        "Guard can request password reset later.",
+                        employeeData.Email);
+                }
+            }
             // ================================================================
             // TẠO CONTRACT TRONG DATABASE (không cần CustomerId)
             // ================================================================
