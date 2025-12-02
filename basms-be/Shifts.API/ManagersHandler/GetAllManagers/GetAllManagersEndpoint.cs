@@ -6,7 +6,7 @@ public class GetAllManagersEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/managers", async (ISender sender) =>
+        app.MapGet("/api/shifts/managers", async (ISender sender) =>
         {
             var query = new GetAllManagersQuery();
             var result = await sender.Send(query);
