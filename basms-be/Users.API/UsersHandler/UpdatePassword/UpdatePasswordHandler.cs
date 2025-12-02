@@ -10,7 +10,8 @@ public record UpdatePasswordCommand(
 
 public record UpdatePasswordResult(
     bool Success,
-    string Message
+    string Message,
+    int NewLoginCount
 );
 
 internal class UpdatePasswordHandler(
@@ -62,8 +63,14 @@ internal class UpdatePasswordHandler(
             // Cập nhật password
             user.Password = BCrypt.Net.BCrypt.HashPassword(command.NewPassword);
             user.UpdatedAt = DateTime.UtcNow;
+            user.LoginCount += 1;
 
             await connection.UpdateAsync(user, transaction);
+
+            logger.LogInformation(
+                "Password updated for user: {UserId}. LoginCount increased to {LoginCount}",
+                user.Id,
+                user.LoginCount);
 
             // Vô hiệu hóa các password reset tokens cũ (nếu có)
             var existingTokens = await connection.GetAllAsync<PasswordResetTokens>(transaction);
@@ -84,8 +91,10 @@ internal class UpdatePasswordHandler(
             logger.LogInformation("Password updated successfully for user: {UserId}", user.Id);
 
             return new UpdatePasswordResult(
-                true,
-                "Password updated successfully");
+                Success: true,
+                Message: "Password updated successfully",
+                NewLoginCount: user.LoginCount
+            );
         }
         catch (Exception ex)
         {
