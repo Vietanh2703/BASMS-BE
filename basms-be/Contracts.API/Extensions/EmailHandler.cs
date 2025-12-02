@@ -56,6 +56,166 @@ public class EmailHandler
             throw;
         }
     }
+    
+
+    public async Task SendManagerLoginInfoEmailAsync(
+        string managerName,
+        string managerEmail,
+        string password,
+        string contractNumber)
+    {
+        var emailBody = GenerateManagerLoginEmailBody(managerName, managerEmail, password, contractNumber);
+        var emailRequest = new EmailRequests
+        {
+            Email = managerEmail,
+            Subject = "Thông tin đăng nhập hệ thống BASMS",
+            EmailBody = emailBody
+        };
+
+        await SendEmailAsync(emailRequest);
+    }
+    
+    private string GenerateManagerLoginEmailBody(
+    string managerName,
+    string email,
+    string password,
+    string contractNumber)
+    
+{
+    var loginUrl = "https://anninhsinhtrac.com/login";
+    
+    return $@"
+<!DOCTYPE html>
+<html lang=""vi"">
+<head>
+    <meta charset=""UTF-8"">
+    <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
+    <title>Thông tin đăng nhập BASMS</title>
+</head>
+<body style=""margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f4f4f4;"">
+    <table width=""100%"" cellpadding=""0"" cellspacing=""0"" style=""background-color: #f4f4f4; padding: 20px;"">
+        <tr>
+            <td align=""center"">
+                <table width=""600"" cellpadding=""0"" cellspacing=""0"" style=""background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"">
+                    <!-- Header -->
+                    <tr>
+                        <td style=""background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 8px 8px 0 0;"">
+                            <h1 style=""color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;"">
+                                🎉 Chào mừng đến với BASMS
+                            </h1>
+                            <p style=""color: #ffffff; margin: 10px 0 0 0; font-size: 16px;"">
+                                Hệ thống quản lý bảo vệ thông minh
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Content -->
+                    <tr>
+                        <td style=""padding: 40px 30px;"">
+                            <p style=""color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;"">
+                                Xin chào <strong>{managerName}</strong>,
+                            </p>
+                            
+                            <p style=""color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;"">
+                                Tài khoản <strong>Quản lý</strong> của bạn đã được tạo thành công trong hệ thống BASMS 
+                                cho <strong>Hợp đồng {contractNumber}</strong>.
+                            </p>
+
+                            <div style=""background-color: #f8f9fa; border-left: 4px solid #667eea; padding: 20px; margin: 20px 0; border-radius: 4px;"">
+                                <h2 style=""color: #667eea; margin: 0 0 15px 0; font-size: 18px;"">
+                                    📋 Thông tin đăng nhập
+                                </h2>
+                                
+                                <table style=""width: 100%; border-collapse: collapse;"">
+                                    <tr>
+                                        <td style=""padding: 8px 0; color: #666666; font-size: 14px; width: 30%;"">
+                                            <strong>Email:</strong>
+                                        </td>
+                                        <td style=""padding: 8px 0; color: #333333; font-size: 14px;"">
+                                            <code style=""background-color: #e9ecef; padding: 4px 8px; border-radius: 4px; font-family: 'Courier New', monospace;"">{email}</code>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style=""padding: 8px 0; color: #666666; font-size: 14px;"">
+                                            <strong>Mật khẩu:</strong>
+                                        </td>
+                                        <td style=""padding: 8px 0; color: #333333; font-size: 14px;"">
+                                            <code style=""background-color: #fff3cd; padding: 4px 8px; border-radius: 4px; font-family: 'Courier New', monospace; color: #856404;"">{password}</code>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style=""padding: 8px 0; color: #666666; font-size: 14px;"">
+                                            <strong>Vai trò:</strong>
+                                        </td>
+                                        <td style=""padding: 8px 0; color: #333333; font-size: 14px;"">
+                                            <span style=""background-color: #d4edda; color: #155724; padding: 4px 12px; border-radius: 12px; font-size: 13px; font-weight: 600;"">
+                                                Manager (Quản lý)
+                                            </span>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </div>
+
+                            <div style=""background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 4px;"">
+                                <p style=""color: #856404; margin: 0; font-size: 14px; line-height: 1.6;"">
+                                    <strong>⚠️ Quan trọng:</strong> Đây là mật khẩu tạm thời. 
+                                    Vui lòng đổi mật khẩu ngay sau khi đăng nhập lần đầu để đảm bảo bảo mật tài khoản.
+                                </p>
+                            </div>
+
+                            <div style=""text-align: center; margin: 30px 0;"">
+                                <a href=""{loginUrl}"" 
+                                   style=""background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                                          color: #ffffff; 
+                                          padding: 14px 40px; 
+                                          text-decoration: none; 
+                                          border-radius: 6px; 
+                                          font-size: 16px; 
+                                          font-weight: bold; 
+                                          display: inline-block;
+                                          box-shadow: 0 4px 6px rgba(102, 126, 234, 0.25);"">
+                                    🔐 Đăng nhập ngay
+                                </a>
+                            </div>
+
+                            <div style=""background-color: #e7f3ff; border-left: 4px solid #2196F3; padding: 15px; margin: 20px 0; border-radius: 4px;"">
+                                <h3 style=""color: #2196F3; margin: 0 0 10px 0; font-size: 16px;"">
+                                    🎯 Vai trò và quyền hạn của bạn
+                                </h3>
+                                <ul style=""color: #333333; font-size: 14px; line-height: 1.8; margin: 0; padding-left: 20px;"">
+                                    <li>Quản lý lịch làm việc của đội ngũ bảo vệ</li>
+                                    <li>Giám sát ca trực và phân công nhân viên</li>
+                                    <li>Xem báo cáo và thống kê hoạt động</li>
+                                    <li>Quản lý thông tin nhân viên bảo vệ</li>
+                                    <li>Xử lý các yêu cầu nghỉ phép và thay đổi ca</li>
+                                </ul>
+                            </div>
+
+                            <p style=""color: #666666; font-size: 14px; line-height: 1.6; margin: 20px 0 0 0;"">
+                                Nếu bạn có bất kỳ câu hỏi nào hoặc cần hỗ trợ, vui lòng liên hệ với chúng tôi.
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style=""background-color: #f8f9fa; padding: 20px 30px; border-radius: 0 0 8px 8px;"">
+                            <p style=""color: #666666; font-size: 12px; line-height: 1.6; margin: 0 0 10px 0; text-align: center;"">
+                                Email này được gửi tự động từ hệ thống BASMS<br>
+                                Vui lòng không trả lời email này
+                            </p>
+                            <p style=""color: #999999; font-size: 11px; margin: 0; text-align: center;"">
+                                © 2025 BASMS - Building & Apartment Security Management System
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>";
+}
 
     /// <summary>
     /// Gửi email thông tin đăng nhập cho customer mới
@@ -70,7 +230,7 @@ public class EmailHandler
         var emailRequest = new EmailRequests
         {
             Email = email,
-            Subject = "Thông tin đăng nhập hệ thống BASMS 🔐",
+            Subject = "Thông tin đăng nhập hệ thống BASMS",
             EmailBody = emailBody
         };
 
@@ -92,7 +252,7 @@ public class EmailHandler
         var emailRequest = new EmailRequests
         {
             Email = email,
-            Subject = "Yêu cầu ký hợp đồng điện tử - BASMS ✍️",
+            Subject = "Yêu cầu ký hợp đồng điện tử",
             EmailBody = emailBody
         };
 
@@ -113,7 +273,7 @@ public class EmailHandler
         var emailRequest = new EmailRequests
         {
             Email = email,
-            Subject = "Xác nhận chữ ký hợp đồng thành công - BASMS ✅",
+            Subject = "Xác nhận chữ ký hợp đồng thành công - BASMS",
             EmailBody = emailBody
         };
 
@@ -189,7 +349,7 @@ public class EmailHandler
             </ul>
 
             <center>
-                <a href='http://localhost:3000/login' class='button'>Đăng nhập ngay</a>
+                <a href='https://anninhsinhtrac.com/login' class='button'>Đăng nhập ngay</a>
             </center>
 
             <p style='margin-top: 30px;'>Nếu có bất kỳ thắc mắc nào, vui lòng liên hệ:</p>

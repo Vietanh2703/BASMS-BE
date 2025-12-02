@@ -28,6 +28,7 @@ internal class ImportManagerWorkingContractHandler(
     IS3Service s3Service,
     IWordContractService wordService,
     IRequestClient<CreateUserRequest> createUserClient,
+    EmailHandler emailHandler,
     ILogger<ImportManagerWorkingContractHandler> logger)
     : ICommandHandler<ImportManagerWorkingContractCommand, ImportManagerWorkingContractResult>
 {
@@ -171,6 +172,33 @@ internal class ImportManagerWorkingContractHandler(
                 "UserCreatedConsumer in Shifts.API will automatically create Manager record.",
                 userId,
                 employeeData.Email);
+            
+            // ================================================================
+// GỬI EMAIL THÔNG TIN ĐĂNG NHẬP CHO MANAGER
+// ================================================================
+            if (!string.IsNullOrEmpty(employeeData.Email) && !string.IsNullOrEmpty(randomPassword))
+            {
+                try
+                {
+                    await emailHandler.SendManagerLoginInfoEmailAsync(
+                        employeeData.FullName ?? "Manager",
+                        employeeData.Email,
+                        randomPassword,
+                        contractData.ContractNumber);
+
+                    logger.LogInformation(
+                        "✅ Login info email sent successfully to manager: {Email}",
+                        employeeData.Email);
+                }
+                catch (Exception emailEx)
+                {
+                    // Log warning nhưng không fail - email không critical
+                    logger.LogWarning(emailEx,
+                        "⚠️ Failed to send login info email to {Email}, but import was successful. " +
+                        "Manager can request password reset later.",
+                        employeeData.Email);
+                }
+            }
 
             // ================================================================
             // TẠO CONTRACT TRONG DATABASE (không cần CustomerId)
@@ -205,6 +233,8 @@ internal class ImportManagerWorkingContractHandler(
 
             await connection.InsertAsync(contract);
 
+            
+            
             logger.LogInformation(
                 "✓ Created manager working contract: ContractId={ContractId}, Number={Number}, UserId={UserId}",
                 contract.Id,
