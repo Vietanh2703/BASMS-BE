@@ -4,25 +4,33 @@ public class UpdatePasswordValidator : AbstractValidator<UpdatePasswordCommand>
 {
     public UpdatePasswordValidator()
     {
+        // Email validation
         RuleFor(x => x.Email)
-            .NotEmpty().WithMessage("Email is required")
-            .EmailAddress().WithMessage("Invalid email format");
+            .NotEmpty()
+            .WithMessage("Email is required")
+            .EmailAddress()
+            .WithMessage("Invalid email format");
 
-        RuleFor(x => x.OldPassword)
-            .NotEmpty().WithMessage("Current password is required");
-
+        // New password validation
         RuleFor(x => x.NewPassword)
-            .NotEmpty().WithMessage("New password is required")
-            .MinimumLength(6).WithMessage("New password must be at least 6 characters")
-            .MaximumLength(100).WithMessage("New password must not exceed 100 characters");
+            .NotEmpty()
+            .WithMessage("New password is required")
+            .MinimumLength(8)
+            .WithMessage("Password must be at least 8 characters")
+            .Matches(@"[A-Z]")
+            .WithMessage("Password must contain at least one uppercase letter")
+            .Matches(@"[a-z]")
+            .WithMessage("Password must contain at least one lowercase letter")
+            .Matches(@"[0-9]")
+            .WithMessage("Password must contain at least one number")
+            .Matches(@"[^a-zA-Z0-9]")
+            .WithMessage("Password must contain at least one special character");
 
-        RuleFor(x => x.RetypePassword)
-            .NotEmpty().WithMessage("Retype password is required")
-            .Equal(x => x.NewPassword).WithMessage("Passwords do not match");
-
-        RuleFor(x => x)
-            .Must(x => x.NewPassword != x.OldPassword)
-            .WithMessage("New password must be different from current password")
-            .When(x => !string.IsNullOrEmpty(x.NewPassword) && !string.IsNullOrEmpty(x.OldPassword));
+        // Confirm password validation
+        RuleFor(x => x.ConfirmPassword)
+            .NotEmpty()
+            .WithMessage("Confirm password is required")
+            .Equal(x => x.NewPassword)
+            .WithMessage("Passwords do not match");
     }
 }
