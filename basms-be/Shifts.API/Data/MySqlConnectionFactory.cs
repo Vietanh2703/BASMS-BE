@@ -289,6 +289,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `shift_templates` (
                     `Id` CHAR(36) PRIMARY KEY,
+                    `ManagerId` CHAR(36) NULL,
                     `ContractId` CHAR(36) NULL,
                     `TemplateCode` VARCHAR(50) NOT NULL,
                     `TemplateName` VARCHAR(200) NOT NULL,
@@ -317,6 +318,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     `LocationAddress` TEXT NULL,
                     `LocationLatitude` DECIMAL(10,8) NULL,
                     `LocationLongitude` DECIMAL(11,8) NULL,
+                    `Status` VARCHAR(50) NOT NULL DEFAULT 'await_create_shift',
                     `IsActive` BOOLEAN NOT NULL DEFAULT TRUE,
                     `EffectiveFrom` DATETIME NULL,
                     `EffectiveTo` DATETIME NULL,
@@ -327,6 +329,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     `IsDeleted` BOOLEAN NOT NULL DEFAULT FALSE,
 
                     INDEX `idx_templates_code` (`TemplateCode`),
+                    INDEX `idx_templates_manager` (`ManagerId`, `IsActive`),
                     INDEX `idx_templates_contract` (`ContractId`, `IsActive`),
                     INDEX `idx_templates_location` (`LocationId`, `IsActive`),
                     INDEX `idx_templates_active` (`IsActive`, `IsDeleted`)

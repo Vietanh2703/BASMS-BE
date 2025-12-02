@@ -235,6 +235,7 @@ public class ActivateContractHandler(
                 ContractTitle = contract.ContractTitle,
                 CustomerId = contract.CustomerId ?? Guid.Empty,
                 CustomerName = customer?.CompanyName ?? "N/A",
+                ManagerId = request.ManagerId,
                 StartDate = contract.StartDate,
                 EndDate = contract.EndDate,
                 AutoGenerateShifts = contract.AutoGenerateShifts,
@@ -261,7 +262,23 @@ public class ActivateContractHandler(
                 contract.AutoGenerateShifts);
 
             // ================================================================
-            // BƯỚC 6: COMMIT TRANSACTION
+            // BƯỚC 6: CẬP NHẬT CUSTOMER STATUS → SCHEDULE_SHIFTS
+            // ================================================================
+            if (customer != null)
+            {
+                customer.Status = "schedule_shifts";
+                customer.UpdatedAt = DateTime.UtcNow;
+                customer.UpdatedBy = request.ActivatedBy;
+
+                await connection.UpdateAsync(customer, transaction);
+
+                logger.LogInformation(
+                    "✓ Customer {CustomerName} status updated to SCHEDULE_SHIFTS",
+                    customer.CompanyName);
+            }
+
+            // ================================================================
+            // BƯỚC 7: COMMIT TRANSACTION
             // ================================================================
             transaction.Commit();
 

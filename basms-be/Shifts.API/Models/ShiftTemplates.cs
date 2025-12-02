@@ -18,6 +18,12 @@ public class ShiftTemplates
     // ============================================================================
 
     /// <summary>
+    /// Manager ID - Quản lý/tạo template này
+    /// Link với bảng managers để tracking ownership
+    /// </summary>
+    public Guid? ManagerId { get; set; }
+
+    /// <summary>
     /// Contract ID từ Contracts.API
     /// Link template với contract để tracking và auto-generation
     /// </summary>
@@ -182,6 +188,16 @@ public class ShiftTemplates
     /// Kinh độ GPS (để check-in/check-out)
     /// </summary>
     public decimal? LocationLongitude { get; set; }
+
+    // ============================================================================
+    // TRẠNG THÁI
+    // ============================================================================
+
+    /// <summary>
+    /// Trạng thái template: await_create_shift, active, inactive, archived
+    /// await_create_shift = đã import từ contract, chờ tạo shifts
+    /// </summary>
+    public string Status { get; set; } = "await_create_shift";
 
     public bool IsActive { get; set; } = true;
 

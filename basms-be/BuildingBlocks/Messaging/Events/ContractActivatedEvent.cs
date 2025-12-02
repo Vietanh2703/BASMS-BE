@@ -41,6 +41,11 @@ public record ContractActivatedEvent
     /// </summary>
     public string CustomerName { get; init; } = string.Empty;
 
+    /// <summary>
+    /// Manager ID phụ trách contract
+    /// </summary>
+    public Guid? ManagerId { get; init; }
+
     // ========================================================================
     // THỜI HẠN HỢP ĐỒNG
     // ========================================================================

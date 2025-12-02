@@ -69,6 +69,7 @@ public class ContractActivatedConsumer : IConsumer<ContractActivatedEvent>
                 ContractNumber: @event.ContractNumber,
                 ShiftSchedules: @event.ShiftSchedules,
                 Locations: @event.Locations,
+                ManagerId: @event.ManagerId,
                 ImportedBy: @event.ActivatedBy
             );
 

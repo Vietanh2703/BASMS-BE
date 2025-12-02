@@ -26,6 +26,7 @@ public class ActivateContractEndpoint : ICarterModule
             var command = new ActivateContractCommand(
                 ContractId: id,
                 ActivatedBy: request?.ActivatedBy,
+                ManagerId: request?.ManagerId,
                 Notes: request?.Notes
             );
 
@@ -101,6 +102,11 @@ public record ActivateContractRequest
     /// ID của user activate (manager)
     /// </summary>
     public Guid? ActivatedBy { get; init; }
+
+    /// <summary>
+    /// Manager ID phụ trách contract này (để điền vào ShiftTemplate)
+    /// </summary>
+    public Guid? ManagerId { get; init; }
 
     /// <summary>
     /// Ghi chú khi activate

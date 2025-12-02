@@ -9,6 +9,7 @@ namespace Contracts.API.ContractsHandler.ActivateContract;
 public record ActivateContractCommand(
     Guid ContractId,
     Guid? ActivatedBy = null,
+    Guid? ManagerId = null,
     string? Notes = null
 ) : ICommand<ActivateContractResult>;
 

@@ -417,7 +417,8 @@ public class ImportShiftTemplatesHandler(
         return new ShiftTemplates
         {
             Id = Guid.NewGuid(),
-            ContractId = request.ContractId, // ✨ Set ContractId from event
+            ContractId = request.ContractId,
+            ManagerId = request.ManagerId, 
             TemplateCode = templateCode,
             TemplateName = schedule.ScheduleName,
             Description = $"Imported from Contract {request.ContractNumber}",
@@ -425,7 +426,7 @@ public class ImportShiftTemplatesHandler(
             // TIME - Sử dụng giá trị đã validate
             StartTime = schedule.ShiftStartTime,
             EndTime = schedule.ShiftEndTime,
-            DurationHours = validation.ActualDurationHours, // Sử dụng calculated value
+            DurationHours = validation.ActualDurationHours,
             BreakDurationMinutes = schedule.BreakMinutes,
             PaidBreakMinutes = 0, // Default
             UnpaidBreakMinutes = schedule.BreakMinutes,
@@ -446,7 +447,7 @@ public class ImportShiftTemplatesHandler(
 
             // STAFFING
             MinGuardsRequired = schedule.GuardsPerShift,
-            MaxGuardsAllowed = schedule.GuardsPerShift, // Same as min for now
+            MaxGuardsAllowed = schedule.GuardsPerShift, 
             OptimalGuards = schedule.GuardsPerShift,
 
             // LOCATION INFO (Cached from contract)
@@ -460,6 +461,9 @@ public class ImportShiftTemplatesHandler(
             EffectiveFrom = schedule.EffectiveFrom,
             EffectiveTo = schedule.EffectiveTo,
             IsActive = true,
+
+            // STATUS
+            Status = "await_create_shift", // ✨ Set status after import from contract
 
             // AUDIT
             CreatedAt = DateTime.UtcNow,

@@ -12,6 +12,7 @@ public record ImportShiftTemplatesCommand(
     string ContractNumber,
     List<ContractShiftScheduleDto> ShiftSchedules,
     List<ContractLocationDto> Locations,
+    Guid? ManagerId = null,
     Guid? ImportedBy = null
 ) : ICommand<ImportShiftTemplatesResult>;
 
