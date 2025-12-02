@@ -1,4 +1,5 @@
 using BuildingBlocks.Exceptions;
+
 namespace Users.API.UsersHandler.CheckFirstLogin;
 
 public record CheckFirstLoginQuery(string Email) : IQuery<CheckFirstLoginResult>;
@@ -27,11 +28,11 @@ internal class CheckFirstLoginHandler(
 
         try
         {
-            // Query user by email
+            // ✅ MySQL syntax - dùng backticks hoặc không dùng quotes
             const string sql = """
-                SELECT "Id", "Email", "LoginCount", "IsDeleted", "IsActive"
-                FROM "users"
-                WHERE "Email" = @Email
+                SELECT `Id`, `Email`, `LoginCount`, `IsDeleted`, `IsActive`
+                FROM `users`
+                WHERE `Email` = @Email
                 LIMIT 1
             """;
 

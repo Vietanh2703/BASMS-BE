@@ -1,7 +1,3 @@
-using Carter;
-using MediatR;
-using Microsoft.AspNetCore.Mvc;
-
 namespace Users.API.UsersHandler.CheckFirstLogin;
 
 public record CheckFirstLoginRequest(string Email);
