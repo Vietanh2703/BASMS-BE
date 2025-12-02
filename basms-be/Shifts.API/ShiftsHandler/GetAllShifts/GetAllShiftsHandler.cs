@@ -4,6 +4,7 @@ namespace Shifts.API.ShiftsHandler.GetAllShifts;
 
 /// <summary>
 /// Query để lấy danh sách tất cả shifts với filtering
+/// Sắp xếp theo: Ngày → Ca sáng → Ca chiều → Ca tối
 /// </summary>
 public record GetAllShiftsQuery(
     DateTime? FromDate = null,
@@ -11,24 +12,20 @@ public record GetAllShiftsQuery(
     Guid? ManagerId = null,
     Guid? LocationId = null,
     Guid? ContractId = null,
+    Guid? ShiftTemplateId = null,
     string? Status = null,
     string? ShiftType = null,
-    bool? IsNightShift = null,
-    int PageNumber = 1,
-    int PageSize = 50
+    bool? IsNightShift = null
 ) : IQuery<GetAllShiftsResult>;
 
 /// <summary>
-/// Result chứa danh sách shifts
+/// Result chứa danh sách shifts - sắp xếp theo ngày và thời gian ca
 /// </summary>
 public record GetAllShiftsResult
 {
     public bool Success { get; init; }
     public List<ShiftDto> Shifts { get; init; } = new();
     public int TotalCount { get; init; }
-    public int PageNumber { get; init; }
-    public int PageSize { get; init; }
-    public int TotalPages { get; init; }
     public string? ErrorMessage { get; init; }
 }
 
@@ -141,13 +138,12 @@ internal class GetAllShiftsHandler(
         try
         {
             logger.LogInformation(
-                "Getting shifts: FromDate={FromDate}, ToDate={ToDate}, ManagerId={ManagerId}, Status={Status}, Page={Page}, PageSize={PageSize}",
+                "Getting all shifts sorted by date and time: ShiftTemplateId={ShiftTemplateId}, FromDate={FromDate}, ToDate={ToDate}, ManagerId={ManagerId}, Status={Status}",
+                request.ShiftTemplateId?.ToString() ?? "ALL",
                 request.FromDate?.ToString("yyyy-MM-dd") ?? "ALL",
                 request.ToDate?.ToString("yyyy-MM-dd") ?? "ALL",
                 request.ManagerId?.ToString() ?? "ALL",
-                request.Status ?? "ALL",
-                request.PageNumber,
-                request.PageSize);
+                request.Status ?? "ALL");
 
             using var connection = await dbFactory.CreateConnectionAsync();
 
@@ -157,6 +153,12 @@ internal class GetAllShiftsHandler(
             var whereClauses = new List<string> { "IsDeleted = 0" };
             var parameters = new DynamicParameters();
 
+            if (request.ShiftTemplateId.HasValue)
+            {
+                whereClauses.Add("ShiftTemplateId = @ShiftTemplateId");
+                parameters.Add("ShiftTemplateId", request.ShiftTemplateId.Value);
+            }
+            
             if (request.FromDate.HasValue)
             {
                 whereClauses.Add("ShiftDate >= @FromDate");
@@ -216,19 +218,14 @@ internal class GetAllShiftsHandler(
                 WHERE {whereClause}";
 
             var totalCount = await connection.ExecuteScalarAsync<int>(countSql, parameters);
-            var totalPages = (int)Math.Ceiling((double)totalCount / request.PageSize);
 
             logger.LogInformation(
-                "Total shifts found: {TotalCount}, Total pages: {TotalPages}",
-                totalCount,
-                totalPages);
+                "Total shifts found: {TotalCount}",
+                totalCount);
 
             // ================================================================
-            // GET PAGINATED DATA
+            // GET ALL DATA - SORTED BY DATE AND SHIFT TIME
             // ================================================================
-            var offset = (request.PageNumber - 1) * request.PageSize;
-            parameters.Add("Offset", offset);
-            parameters.Add("PageSize", request.PageSize);
 
             var sql = $@"
                 SELECT
@@ -299,25 +296,22 @@ internal class GetAllShiftsHandler(
                     Version
                 FROM shifts
                 WHERE {whereClause}
-                ORDER BY ShiftDate DESC, ShiftStart DESC
-                LIMIT @PageSize OFFSET @Offset";
+                ORDER BY
+                    ShiftDate ASC,           -- Sắp xếp theo ngày tăng dần
+                    ShiftStart ASC";
 
             var shifts = await connection.QueryAsync<ShiftDto>(sql, parameters);
             var shiftsList = shifts.ToList();
 
             logger.LogInformation(
-                "Retrieved {Count} shifts for page {PageNumber}",
-                shiftsList.Count,
-                request.PageNumber);
+                "Retrieved {Count} shifts sorted by date and shift time (morning → afternoon → evening)",
+                shiftsList.Count);
 
             return new GetAllShiftsResult
             {
                 Success = true,
                 Shifts = shiftsList,
-                TotalCount = totalCount,
-                PageNumber = request.PageNumber,
-                PageSize = request.PageSize,
-                TotalPages = totalPages
+                TotalCount = totalCount
             };
         }
         catch (Exception ex)
@@ -329,9 +323,6 @@ internal class GetAllShiftsHandler(
                 Success = false,
                 Shifts = new List<ShiftDto>(),
                 TotalCount = 0,
-                PageNumber = request.PageNumber,
-                PageSize = request.PageSize,
-                TotalPages = 0,
                 ErrorMessage = $"Failed to get shifts: {ex.Message}"
             };
         }
