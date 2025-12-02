@@ -7,7 +7,7 @@ public class GetAllShiftsEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/shifts", async (
+        app.MapGet("/api/shifts/get-all", async (
             [FromQuery] DateTime? fromDate,
             [FromQuery] DateTime? toDate,
             [FromQuery] Guid? managerId,
