@@ -8,12 +8,11 @@ public class GetAllShiftsEndpoint : ICarterModule
     public void AddRoutes(IEndpointRouteBuilder app)
     {
         app.MapGet("/api/shifts/get-all", async (
+    [FromQuery] Guid? contractId,
     [FromQuery] DateTime? fromDate,
     [FromQuery] DateTime? toDate,
     [FromQuery] Guid? managerId,
     [FromQuery] Guid? locationId,
-    [FromQuery] Guid? contractId,
-    [FromQuery] Guid? shiftTemplateId,  
     [FromQuery] string? status,
     [FromQuery] string? shiftType,
     [FromQuery] bool? isNightShift,
@@ -22,15 +21,14 @@ public class GetAllShiftsEndpoint : ICarterModule
     CancellationToken cancellationToken) =>
 {
     logger.LogInformation(
-        "GET /api/shifts - Getting all shifts with filters");
+        "GET /api/shifts/get-all - Getting all shifts for contract");
 
     var query = new GetAllShiftsQuery(
+        ContractId: contractId,
         FromDate: fromDate,
         ToDate: toDate,
         ManagerId: managerId,
         LocationId: locationId,
-        ContractId: contractId,
-        ShiftTemplateId: shiftTemplateId, 
         Status: status,
         ShiftType: shiftType,
         IsNightShift: isNightShift
@@ -61,14 +59,14 @@ public class GetAllShiftsEndpoint : ICarterModule
         data = result.Shifts,
         totalCount = result.TotalCount,
         message = "Shifts sorted by date (ascending) → shift time (morning → afternoon → evening)",
+        note = "One contract can have multiple shift templates (multiple shifts per day)",
         filters = new
         {
+            contractId = contractId?.ToString() ?? "all",
             fromDate = fromDate?.ToString("yyyy-MM-dd") ?? "all",
             toDate = toDate?.ToString("yyyy-MM-dd") ?? "all",
             managerId = managerId?.ToString() ?? "all",
             locationId = locationId?.ToString() ?? "all",
-            contractId = contractId?.ToString() ?? "all",
-            shiftTemplateId = shiftTemplateId?.ToString() ?? "all",
             status = status ?? "all",
             shiftType = shiftType ?? "all",
             isNightShift = isNightShift?.ToString() ?? "all"
@@ -80,33 +78,36 @@ public class GetAllShiftsEndpoint : ICarterModule
         .WithTags("Shifts")
         .Produces(200)
         .Produces(400)
-        .WithSummary("Get all shifts with filtering")
+        .WithSummary("Get all shifts by contract with filtering")
         .WithDescription(@"
-            Returns all shifts sorted by date (ascending) and shift time (morning → afternoon → evening).
+            Returns all shifts for a contract sorted by date (ascending) and shift time (morning → afternoon → evening).
+
+            Important Note:
+            - One contract can have multiple shift templates (e.g., morning shift, afternoon shift, night shift)
+            - This endpoint returns ALL shifts from ALL templates in the contract
+            - Shifts are automatically sorted chronologically by date and time
 
             Sorting logic:
             - First: By date (earliest to latest)
             - Then: By shift start time (morning shifts first, then afternoon, then evening/night)
 
             Query Parameters:
+            - contractId (optional but recommended): Filter by contract ID - gets all shifts from all templates in this contract
             - fromDate (optional): Filter shifts from this date (yyyy-MM-dd)
             - toDate (optional): Filter shifts until this date (yyyy-MM-dd)
             - managerId (optional): Filter by manager ID
             - locationId (optional): Filter by location ID
-            - contractId (optional): Filter by contract ID
             - status (optional): Filter by status (DRAFT, SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED, PARTIAL)
             - shiftType (optional): Filter by shift type (REGULAR, OVERTIME, EMERGENCY, REPLACEMENT, TRAINING)
             - isNightShift (optional): Filter by night shift (true/false)
-            - shiftTemplateId (optional): Filter by shift template ID
 
             Examples:
-            GET /api/shifts/get-all
-            GET /api/shifts/get-all?fromDate=2025-01-01&toDate=2025-01-31
-            GET /api/shifts/get-all?managerId={guid}
-            GET /api/shifts/get-all?locationId={guid}&status=SCHEDULED
-            GET /api/shifts/get-all?fromDate=2025-01-01&status=COMPLETED
+            GET /api/shifts/get-all?contractId={guid}
+            GET /api/shifts/get-all?contractId={guid}&fromDate=2025-01-01&toDate=2025-01-31
+            GET /api/shifts/get-all?contractId={guid}&status=SCHEDULED
+            GET /api/shifts/get-all?contractId={guid}&locationId={guid}
             GET /api/shifts/get-all?contractId={guid}&isNightShift=true
-            GET /api/shifts/get-all?shiftTemplateId={guid}
+            GET /api/shifts/get-all?managerId={guid}
         ");
     }
 }

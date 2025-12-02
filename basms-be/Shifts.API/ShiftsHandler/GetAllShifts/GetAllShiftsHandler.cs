@@ -3,16 +3,16 @@ using Dapper;
 namespace Shifts.API.ShiftsHandler.GetAllShifts;
 
 /// <summary>
-/// Query để lấy danh sách tất cả shifts với filtering
+/// Query để lấy danh sách tất cả shifts theo contract
+/// Một contract có thể có nhiều shift templates (nhiều ca)
 /// Sắp xếp theo: Ngày → Ca sáng → Ca chiều → Ca tối
 /// </summary>
 public record GetAllShiftsQuery(
+    Guid? ContractId = null,
     DateTime? FromDate = null,
     DateTime? ToDate = null,
     Guid? ManagerId = null,
     Guid? LocationId = null,
-    Guid? ContractId = null,
-    Guid? ShiftTemplateId = null,
     string? Status = null,
     string? ShiftType = null,
     bool? IsNightShift = null
@@ -138,8 +138,8 @@ internal class GetAllShiftsHandler(
         try
         {
             logger.LogInformation(
-                "Getting all shifts sorted by date and time: ShiftTemplateId={ShiftTemplateId}, FromDate={FromDate}, ToDate={ToDate}, ManagerId={ManagerId}, Status={Status}",
-                request.ShiftTemplateId?.ToString() ?? "ALL",
+                "Getting all shifts sorted by date and time: ContractId={ContractId}, FromDate={FromDate}, ToDate={ToDate}, ManagerId={ManagerId}, Status={Status}",
+                request.ContractId?.ToString() ?? "ALL",
                 request.FromDate?.ToString("yyyy-MM-dd") ?? "ALL",
                 request.ToDate?.ToString("yyyy-MM-dd") ?? "ALL",
                 request.ManagerId?.ToString() ?? "ALL",
@@ -153,12 +153,13 @@ internal class GetAllShiftsHandler(
             var whereClauses = new List<string> { "IsDeleted = 0" };
             var parameters = new DynamicParameters();
 
-            if (request.ShiftTemplateId.HasValue)
+            // ContractId filter - một contract có thể có nhiều shift templates
+            if (request.ContractId.HasValue)
             {
-                whereClauses.Add("ShiftTemplateId = @ShiftTemplateId");
-                parameters.Add("ShiftTemplateId", request.ShiftTemplateId.Value);
+                whereClauses.Add("ContractId = @ContractId");
+                parameters.Add("ContractId", request.ContractId.Value);
             }
-            
+
             if (request.FromDate.HasValue)
             {
                 whereClauses.Add("ShiftDate >= @FromDate");
@@ -181,12 +182,6 @@ internal class GetAllShiftsHandler(
             {
                 whereClauses.Add("LocationId = @LocationId");
                 parameters.Add("LocationId", request.LocationId.Value);
-            }
-
-            if (request.ContractId.HasValue)
-            {
-                whereClauses.Add("ContractId = @ContractId");
-                parameters.Add("ContractId", request.ContractId.Value);
             }
 
             if (!string.IsNullOrWhiteSpace(request.Status))
