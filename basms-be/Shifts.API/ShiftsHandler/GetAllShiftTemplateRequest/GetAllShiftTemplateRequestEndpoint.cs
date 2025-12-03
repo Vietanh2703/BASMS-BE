@@ -4,7 +4,7 @@ public class GetAllShiftTemplateRequestEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/shift-templates/pending/{managerId}", async (
+        app.MapGet("/api/shifts/shift-templates/pending/{managerId}", async (
             Guid managerId,
             ISender sender) =>
         {
