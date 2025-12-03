@@ -20,6 +20,7 @@
       <Folder Include="GuardsHandler\GetGuardById\" />
       <Folder Include="GuardsHandler\RequestGuardToManager\" />
       <Folder Include="ManagersHandler\ConfirmGuardJoinRequest\" />
+      <Folder Include="ManagersHandler\ConfirmJoinRequest\" />
       <Folder Include="ManagersHandler\GetAllManagers\" />
       <Folder Include="ManagersHandler\GetGuardJoinRequest\" />
       <Folder Include="ManagersHandler\GetManagerByEmail\" />

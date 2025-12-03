@@ -5,7 +5,7 @@ public class GetGuardJoinRequestEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/managers/{managerId}/guard-join-requests", async (
+        app.MapGet("/api/shifts/managers/{managerId}/guard-join-requests", async (
             Guid managerId,
             ISender sender) =>
         {
