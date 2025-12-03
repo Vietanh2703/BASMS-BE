@@ -4,7 +4,7 @@ public class GetAllGuardsEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/guards", async (ISender sender) =>
+        app.MapGet("/api/shifts/guards", async (ISender sender) =>
         {
             var query = new GetAllGuardsQuery();
             var result = await sender.Send(query);

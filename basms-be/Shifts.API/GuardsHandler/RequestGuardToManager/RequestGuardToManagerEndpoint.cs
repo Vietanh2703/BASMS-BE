@@ -13,7 +13,7 @@ public class RequestGuardToManagerEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/guards/request-join-manager", async (
+        app.MapPost("/api/shifts/guards/request-join-manager", async (
             RequestGuardToManagerRequest request,
             ISender sender) =>
         {
