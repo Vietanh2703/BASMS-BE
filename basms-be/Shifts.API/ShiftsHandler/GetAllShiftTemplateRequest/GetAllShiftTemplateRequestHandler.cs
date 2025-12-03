@@ -186,6 +186,37 @@ internal class GetAllShiftTemplateRequestHandler(
                 templatesList.Count);
 
             // ================================================================
+            // BƯỚC 2.1: FILTER OUT CONTRACTS WITH ANY "created_shift" TEMPLATES
+            // Loại bỏ các contracts nếu có bất kỳ template nào có status = "created_shift"
+            // ================================================================
+            var contractsWithCreatedShifts = await connection.QueryAsync<Guid?>(
+                @"SELECT DISTINCT ContractId
+                  FROM shift_templates
+                  WHERE ManagerId = @ManagerId
+                    AND Status = 'created_shift'
+                    AND IsDeleted = 0
+                    AND ContractId IS NOT NULL",
+                new { request.ManagerId });
+
+            var excludedContractIds = contractsWithCreatedShifts.ToHashSet();
+
+            if (excludedContractIds.Any())
+            {
+                logger.LogInformation(
+                    "Excluding {Count} contracts that have templates with status 'created_shift'",
+                    excludedContractIds.Count);
+
+                // Filter out templates belonging to excluded contracts
+                templatesList = templatesList
+                    .Where(t => !t.ContractId.HasValue || !excludedContractIds.Contains(t.ContractId))
+                    .ToList();
+
+                logger.LogInformation(
+                    "After filtering: {Count} templates remaining",
+                    templatesList.Count);
+            }
+
+            // ================================================================
             // BƯỚC 3: GROUP BY ContractId
             // ================================================================
             var contractGroups = templatesList

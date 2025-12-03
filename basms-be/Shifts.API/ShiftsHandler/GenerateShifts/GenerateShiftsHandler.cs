@@ -173,6 +173,30 @@ public class GenerateShiftsHandler(
                 logger.LogInformation(
                     "✓ Bulk inserted {Count} shifts in single transaction",
                     createdShifts.Count);
+
+                // ================================================================
+                // BƯỚC 6.1: UPDATE SHIFT TEMPLATE STATUS
+                // Sau khi tạo shifts thành công, update status từ "await_create_shift" sang "created_shift"
+                // ================================================================
+                var templatesWithShifts = createdShifts
+                    .Select(s => s.ShiftTemplateId)
+                    .Where(id => id.HasValue)
+                    .Select(id => id!.Value)
+                    .Distinct()
+                    .ToList();
+
+                if (templatesWithShifts.Any())
+                {
+                    var updatedCount = await UpdateShiftTemplateStatus(
+                        connection,
+                        templatesWithShifts,
+                        "created_shift",
+                        command.ManagerId);
+
+                    logger.LogInformation(
+                        "✓ Updated {Count} shift templates from 'await_create_shift' to 'created_shift'",
+                        updatedCount);
+                }
             }
 
             // ================================================================
@@ -515,6 +539,48 @@ public class GenerateShiftsHandler(
         {
             transaction.Rollback();
             throw;
+        }
+    }
+
+    /// <summary>
+    /// UPDATE SHIFT TEMPLATE STATUS sau khi tạo shifts thành công
+    /// Chuyển status từ "await_create_shift" sang "created_shift"
+    /// </summary>
+    private async Task<int> UpdateShiftTemplateStatus(
+        IDbConnection connection,
+        List<Guid> templateIds,
+        string newStatus,
+        Guid managerId)
+    {
+        try
+        {
+            var sql = @"
+                UPDATE shift_templates
+                SET Status = @NewStatus,
+                    UpdatedAt = @UpdatedAt,
+                    UpdatedBy = @UpdatedBy
+                WHERE Id IN @TemplateIds
+                  AND Status = 'await_create_shift'
+                  AND IsDeleted = 0";
+
+            var affectedRows = await connection.ExecuteAsync(sql, new
+            {
+                NewStatus = newStatus,
+                UpdatedAt = DateTime.UtcNow,
+                UpdatedBy = managerId,
+                TemplateIds = templateIds
+            });
+
+            return affectedRows;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "Failed to update shift template status for {Count} templates",
+                templateIds.Count);
+
+            // Don't throw - status update failure shouldn't fail the entire operation
+            return 0;
         }
     }
 
