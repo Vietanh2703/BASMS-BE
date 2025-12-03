@@ -1,5 +1,3 @@
-// Endpoint API để lấy danh sách tất cả guards
-// Trả về cache guards từ Shifts database
 namespace Shifts.API.GuardsHandler.GetAllGuards;
 
 public class GetAllGuardsEndpoint : ICarterModule
