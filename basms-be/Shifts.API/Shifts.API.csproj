@@ -21,6 +21,7 @@
       <Folder Include="ManagersHandler\ConfirmGuardJoinRequest\" />
       <Folder Include="ManagersHandler\GetAllManagers\" />
       <Folder Include="ManagersHandler\GetGuardJoinRequest\" />
+      <Folder Include="ManagersHandler\GetManagerByEmail\" />
       <Folder Include="ManagersHandler\GetManagerById\" />
       <Folder Include="Models\" />
       <Folder Include="ShiftsHandler\GetShiftTemplateByManager\" />
