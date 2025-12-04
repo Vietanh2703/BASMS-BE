@@ -23,6 +23,12 @@ services:
       - ./mysql-init:/docker-entrypoint-initdb.d:ro
     networks:
       - basms-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "basms_user", "-p${MYSQL_USER_PASSWORD}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 40s
 
   # RabbitMQ
   rabbitmq:
@@ -67,8 +73,10 @@ services:
       # Mount Firebase credentials từ VPS vào container
       - ~/basms/config/firebase-credentials.json:/app/config/firebase-credentials.json:ro
     depends_on:
-      - mysql
-      - rabbitmq
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
     networks:
       - basms-network
 
@@ -102,8 +110,10 @@ services:
       - EmailSettings__Password=${EMAIL_PASSWORD}
       - HERE_API_KEY=${HERE_API_KEY}
     depends_on:
-      - mysql
-      - rabbitmq
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
     networks:
       - basms-network
 
@@ -130,8 +140,10 @@ services:
       - EmailSettings__Sender=${EMAIL_SENDER}
       - EmailSettings__Password=${EMAIL_PASSWORD}
     depends_on:
-      - mysql
-      - rabbitmq
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
     networks:
       - basms-network
 
