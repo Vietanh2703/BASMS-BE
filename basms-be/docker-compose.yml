@@ -19,7 +19,8 @@ services:
       - "127.0.0.1:3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./mysql-init:/docker-entrypoint-initdb.d:ro
+      # Init scripts (comment out if mysql-init directory doesn't exist on deployment)
+      # - ./mysql-init:/docker-entrypoint-initdb.d:ro
     networks:
       - basms-network
 

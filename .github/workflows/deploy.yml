@@ -115,7 +115,7 @@ jobs:
           AWS_SECRET_KEY=${AWS_SECRET_KEY}
           SIGNATURE_CERT_PATH=${SIGNATURE_CERT_PATH}
           SIGNATURE_CERT_PASSWORD=${SIGNATURE_CERT_PASSWORD}
-          GOONG_API_KEY=${GOONG_API_KEY}
+          HERE_API_KEY=${HERE_API_KEY}
           ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
           GOOGLE_APPLICATION_CREDENTIALS=/app/config/firebase-credentials.json
           EOF
@@ -163,7 +163,7 @@ jobs:
           AWS_SECRET_KEY: ${{ secrets.AWS_SECRET_KEY }}
           SIGNATURE_CERT_PATH: ${{ secrets.SIGNATURE_CERT_PATH }}
           SIGNATURE_CERT_PASSWORD: ${{ secrets.SIGNATURE_CERT_PASSWORD }}
-          GOONG_API_KEY: ${{ secrets.GOONG_API_KEY }}
+          HERE_API_KEY: ${{ secrets.HERE_API_KEY }}
           ALLOWED_ORIGINS: ${{ secrets.ALLOWED_ORIGINS }}
 
       - name: Create deployment package
