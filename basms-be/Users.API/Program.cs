@@ -203,23 +203,19 @@ builder.Services.AddCors(options =>
 });
 var app = builder.Build();
 
-// Thêm Global Exception Handler Middleware
-// Middleware này phải đặt đầu tiên để catch tất cả exceptions
+// Initialize database tables
+using (var scope = app.Services.CreateScope())
+{
+    var dbFactory = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>();
+    if (dbFactory is MySqlConnectionFactory mysqlFactory)
+    {
+        await mysqlFactory.EnsureTablesCreatedAsync();
+        Console.WriteLine("Users database tables initialized successfully");
+    }
+}
 app.UseGlobalExceptionHandler();
-
-// IMPORTANT: CORS phải đặt TRƯỚC Authentication/Authorization
-// Để handle CORS preflight (OPTIONS) requests đúng cách
 app.UseCors("AllowFrontend");
-
-// Thêm Authentication middleware
-// Middleware này đọc JWT token từ header và authenticate user
 app.UseAuthentication();
-
-// Thêm Authorization middleware
-// Middleware này kiểm tra user có quyền truy cập endpoint không
 app.UseAuthorization();
-
-// Map tất cả Carter endpoints - SAU CÙNG
 app.MapCarter();
-
 app.Run();

@@ -277,9 +277,7 @@ jobs:
             cd ~/basms/current
             docker compose down --remove-orphans 2>/dev/null || echo "No compose containers to stop"
 
-            # IMPORTANT: Remove MySQL volume to force re-initialization
-            echo "Removing MySQL volume to force user creation..."
-            docker volume rm basms_mysql_data 2>/dev/null || docker volume rm current_mysql_data 2>/dev/null || echo "No MySQL volume to remove"
+            # Note: MySQL volume is NOT removed to preserve data across deployments
 
             # Remove orphan containers
             echo "Removing orphan containers..."

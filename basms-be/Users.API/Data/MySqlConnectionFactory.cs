@@ -1,3 +1,5 @@
+using MySql.Data.MySqlClient;
+
 namespace Users.API.Data;
 
 public class MySqlConnectionFactory : IDbConnectionFactory
@@ -26,7 +28,24 @@ public class MySqlConnectionFactory : IDbConnectionFactory
         try
         {
             if (_tablesCreated) return;
+            var connectionStringBuilder = new MySqlConnectionStringBuilder(_connectionString);
+            var databaseName = connectionStringBuilder.Database;
+            connectionStringBuilder.Database = null; 
 
+            using (var tempConnection = new MySqlConnection(connectionStringBuilder.ConnectionString))
+            {
+                await tempConnection.OpenAsync();
+
+                // Tạo database nếu chưa tồn tại
+                await tempConnection.ExecuteAsync($@"
+                    CREATE DATABASE IF NOT EXISTS `{databaseName}`
+                    CHARACTER SET utf8mb4
+                    COLLATE utf8mb4_unicode_ci;
+                ");
+
+                Console.WriteLine($"✓ Database '{databaseName}' ready");
+            }
+            
             using var connection = await CreateConnectionAsync();
 
             // Check if users table exists
