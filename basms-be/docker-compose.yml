@@ -8,7 +8,6 @@ services:
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: basms
       MYSQL_USER: basms_user
       MYSQL_PASSWORD: ${MYSQL_USER_PASSWORD}
     command: >
@@ -22,16 +21,9 @@ services:
       - "127.0.0.1:3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      # Init scripts - creates databases and grants privileges to basms_user
       - ./mysql-init:/docker-entrypoint-initdb.d:ro
     networks:
       - basms-network
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "basms_user", "-p${MYSQL_USER_PASSWORD}"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 40s
 
   # RabbitMQ
   rabbitmq:
