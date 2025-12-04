@@ -93,34 +93,60 @@ jobs:
         run: |
           cd basms-be
 
-          cat > .env.production <<EOF
-          MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
-          MYSQL_USER_PASSWORD=${MYSQL_USER_PASSWORD}
-          DB_CONNECTION_STRING_USERS=${DB_CONNECTION_STRING_USERS}
-          DB_CONNECTION_STRING_CONTRACTS=${DB_CONNECTION_STRING_CONTRACTS}
-          DB_CONNECTION_STRING_SHIFTS=${DB_CONNECTION_STRING_SHIFTS}
-          FIREBASE_API_KEY=${FIREBASE_API_KEY}
-          FIREBASE_URL=${FIREBASE_URL}
-          EMAIL_SENDER=${EMAIL_SENDER}
-          EMAIL_PASSWORD=${EMAIL_PASSWORD}
-          JWT_SECRET_KEY=${JWT_SECRET_KEY}
-          JWT_ISSUER=${JWT_ISSUER}
-          JWT_AUDIENCE=${JWT_AUDIENCE}
-          RABBITMQ_HOST=rabbitmq
-          RABBITMQ_USERNAME=${RABBITMQ_USERNAME}
-          RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
-          AWS_BUCKET_NAME=${AWS_BUCKET_NAME}
-          AWS_REGION=${AWS_REGION}
-          AWS_ACCESS_KEY=${AWS_ACCESS_KEY}
-          AWS_SECRET_KEY=${AWS_SECRET_KEY}
-          SIGNATURE_CERT_PATH=${SIGNATURE_CERT_PATH}
-          SIGNATURE_CERT_PASSWORD=${SIGNATURE_CERT_PASSWORD}
-          HERE_API_KEY=${HERE_API_KEY}
-          ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
-          GOOGLE_APPLICATION_CREDENTIALS=/app/config/firebase-credentials.json
-          EOF
+          # Create .env file with quoted values to prevent Docker Compose template parsing issues
+          cat > .env.production <<'ENVEOF'
+          MYSQL_ROOT_PASSWORD="__MYSQL_ROOT_PASSWORD__"
+          MYSQL_USER_PASSWORD="__MYSQL_USER_PASSWORD__"
+          DB_CONNECTION_STRING_USERS="__DB_CONNECTION_STRING_USERS__"
+          DB_CONNECTION_STRING_CONTRACTS="__DB_CONNECTION_STRING_CONTRACTS__"
+          DB_CONNECTION_STRING_SHIFTS="__DB_CONNECTION_STRING_SHIFTS__"
+          FIREBASE_API_KEY="__FIREBASE_API_KEY__"
+          FIREBASE_URL="__FIREBASE_URL__"
+          EMAIL_SENDER="__EMAIL_SENDER__"
+          EMAIL_PASSWORD="__EMAIL_PASSWORD__"
+          JWT_SECRET_KEY="__JWT_SECRET_KEY__"
+          JWT_ISSUER="__JWT_ISSUER__"
+          JWT_AUDIENCE="__JWT_AUDIENCE__"
+          RABBITMQ_HOST="rabbitmq"
+          RABBITMQ_USERNAME="__RABBITMQ_USERNAME__"
+          RABBITMQ_PASSWORD="__RABBITMQ_PASSWORD__"
+          AWS_BUCKET_NAME="__AWS_BUCKET_NAME__"
+          AWS_REGION="__AWS_REGION__"
+          AWS_ACCESS_KEY="__AWS_ACCESS_KEY__"
+          AWS_SECRET_KEY="__AWS_SECRET_KEY__"
+          SIGNATURE_CERT_PATH="__SIGNATURE_CERT_PATH__"
+          SIGNATURE_CERT_PASSWORD="__SIGNATURE_CERT_PASSWORD__"
+          HERE_API_KEY="__HERE_API_KEY__"
+          ALLOWED_ORIGINS="__ALLOWED_ORIGINS__"
+          GOOGLE_APPLICATION_CREDENTIALS="/app/config/firebase-credentials.json"
+          ENVEOF
 
+          # Strip leading whitespace
           sed -i 's/^[[:space:]]*//' .env.production
+
+          # Replace placeholders with actual values (escaped for sed)
+          sed -i "s|__MYSQL_ROOT_PASSWORD__|${MYSQL_ROOT_PASSWORD}|g" .env.production
+          sed -i "s|__MYSQL_USER_PASSWORD__|${MYSQL_USER_PASSWORD}|g" .env.production
+          sed -i "s|__DB_CONNECTION_STRING_USERS__|${DB_CONNECTION_STRING_USERS}|g" .env.production
+          sed -i "s|__DB_CONNECTION_STRING_CONTRACTS__|${DB_CONNECTION_STRING_CONTRACTS}|g" .env.production
+          sed -i "s|__DB_CONNECTION_STRING_SHIFTS__|${DB_CONNECTION_STRING_SHIFTS}|g" .env.production
+          sed -i "s|__FIREBASE_API_KEY__|${FIREBASE_API_KEY}|g" .env.production
+          sed -i "s|__FIREBASE_URL__|${FIREBASE_URL}|g" .env.production
+          sed -i "s|__EMAIL_SENDER__|${EMAIL_SENDER}|g" .env.production
+          sed -i "s|__EMAIL_PASSWORD__|${EMAIL_PASSWORD}|g" .env.production
+          sed -i "s|__JWT_SECRET_KEY__|${JWT_SECRET_KEY}|g" .env.production
+          sed -i "s|__JWT_ISSUER__|${JWT_ISSUER}|g" .env.production
+          sed -i "s|__JWT_AUDIENCE__|${JWT_AUDIENCE}|g" .env.production
+          sed -i "s|__RABBITMQ_USERNAME__|${RABBITMQ_USERNAME}|g" .env.production
+          sed -i "s|__RABBITMQ_PASSWORD__|${RABBITMQ_PASSWORD}|g" .env.production
+          sed -i "s|__AWS_BUCKET_NAME__|${AWS_BUCKET_NAME}|g" .env.production
+          sed -i "s|__AWS_REGION__|${AWS_REGION}|g" .env.production
+          sed -i "s|__AWS_ACCESS_KEY__|${AWS_ACCESS_KEY}|g" .env.production
+          sed -i "s|__AWS_SECRET_KEY__|${AWS_SECRET_KEY}|g" .env.production
+          sed -i "s|__SIGNATURE_CERT_PATH__|${SIGNATURE_CERT_PATH}|g" .env.production
+          sed -i "s|__SIGNATURE_CERT_PASSWORD__|${SIGNATURE_CERT_PASSWORD}|g" .env.production
+          sed -i "s|__HERE_API_KEY__|${HERE_API_KEY}|g" .env.production
+          sed -i "s|__ALLOWED_ORIGINS__|${ALLOWED_ORIGINS}|g" .env.production
 
           echo ".env.production file created"
           echo "Verifying .env.production file..."
