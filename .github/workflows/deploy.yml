@@ -124,11 +124,13 @@ jobs:
               'GOOGLE_APPLICATION_CREDENTIALS': '/app/config/firebase-credentials.json'
           }
 
-          # Write .env.production file with quoted values to handle special characters
+          # Write .env.production file WITHOUT quotes (Docker Compose handles this better)
           with open('.env.production', 'w') as f:
               for key, value in env_vars.items():
-                  # Quote the value to prevent Docker Compose from interpreting special chars
-                  f.write(f'{key}="{value}"\n')
+                  # Escape special characters for .env file
+                  # Replace $ with $$ to prevent Docker Compose variable expansion
+                  escaped_value = value.replace('$', '$$').replace('\\', '\\\\')
+                  f.write(f'{key}={escaped_value}\n')
 
           print("✅ .env.production file created successfully")
           PYTHON_SCRIPT
@@ -283,22 +285,55 @@ jobs:
             echo "Cleaning up old Docker images..."
             docker image prune -af --filter "until=24h" 2>/dev/null || true
 
+            # Verify docker-compose.yml exists
+            if [ ! -f docker-compose.yml ]; then
+              echo "❌ ERROR: docker-compose.yml not found!"
+              ls -la
+              exit 1
+            fi
+            echo "✅ docker-compose.yml found"
+
             # Debug: Show .env file content (masked)
-            echo "=== DEBUG: .env file content (first 5 lines, values masked) ==="
+            echo "=== DEBUG: .env file content (first 10 lines, values masked) ==="
             if [ -f .env ]; then
-              head -5 .env | sed 's/=.*/=***/'
+              head -10 .env | sed 's/=.*/=***/'
+              echo "Total lines in .env: $(wc -l < .env)"
+              echo "Total size: $(wc -c < .env) bytes"
             else
               echo "❌ ERROR: .env file not found!"
               exit 1
             fi
 
+            # Test docker compose config
+            echo "=== Testing Docker Compose configuration ==="
+            if docker compose config > /dev/null 2>&1; then
+              echo "✅ Docker Compose config is valid"
+            else
+              echo "❌ ERROR: Docker Compose config is invalid!"
+              docker compose config
+              exit 1
+            fi
+
             # Build Docker images
             echo "Building Docker images..."
-            docker compose build --no-cache
+            if ! docker compose build --no-cache; then
+              echo "❌ ERROR: Docker build failed!"
+              docker compose logs
+              exit 1
+            fi
+            echo "✅ Docker images built successfully"
 
             # Start services
             echo "Starting services with Docker Compose..."
-            docker compose up -d --remove-orphans
+            if ! docker compose up -d --remove-orphans; then
+              echo "❌ ERROR: Docker compose up failed!"
+              echo "=== Docker Compose Logs ==="
+              docker compose logs
+              echo "=== Docker Compose Config ==="
+              docker compose config
+              exit 1
+            fi
+            echo "✅ Services started"
 
             # Wait for services to start
             echo "Waiting for services to start..."
@@ -306,11 +341,15 @@ jobs:
 
             # Check service status
             echo "=== Service status ==="
-            docker compose ps
+            docker compose ps -a
 
-            # Show recent logs
+            # Show container status with more details
+            echo "=== All containers ==="
+            docker ps -a --filter "name=basms"
+
+            # Show recent logs for each service
             echo "=== Recent logs ==="
-            docker compose logs --tail=30
+            docker compose logs --tail=50 --timestamps
 
             # Cleanup
             rm -f /tmp/basms-backend.tar.gz
