@@ -93,33 +93,34 @@ jobs:
         run: |
           cd basms-be
 
-          cat > .env.production << 'EOF'
-          MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
-          MYSQL_USER_PASSWORD=${MYSQL_USER_PASSWORD}
-          DB_CONNECTION_STRING_USERS=${DB_CONNECTION_STRING_USERS}
-          DB_CONNECTION_STRING_CONTRACTS=${DB_CONNECTION_STRING_CONTRACTS}
-          DB_CONNECTION_STRING_SHIFTS=${DB_CONNECTION_STRING_SHIFTS}
-          FIREBASE_API_KEY=${FIREBASE_API_KEY}
-          FIREBASE_URL=${FIREBASE_URL}
-          EMAIL_SENDER=${EMAIL_SENDER}
-          EMAIL_PASSWORD=${EMAIL_PASSWORD}
-          JWT_SECRET_KEY=${JWT_SECRET_KEY}
-          JWT_ISSUER=${JWT_ISSUER}
-          JWT_AUDIENCE=${JWT_AUDIENCE}
+          cat > .env.production <<EOF
+          MYSQL_ROOT_PASSWORD=\${MYSQL_ROOT_PASSWORD}
+          MYSQL_USER_PASSWORD=\${MYSQL_USER_PASSWORD}
+          DB_CONNECTION_STRING_USERS=\${DB_CONNECTION_STRING_USERS}
+          DB_CONNECTION_STRING_CONTRACTS=\${DB_CONNECTION_STRING_CONTRACTS}
+          DB_CONNECTION_STRING_SHIFTS=\${DB_CONNECTION_STRING_SHIFTS}
+          FIREBASE_API_KEY=\${FIREBASE_API_KEY}
+          FIREBASE_URL=\${FIREBASE_URL}
+          EMAIL_SENDER=\${EMAIL_SENDER}
+          EMAIL_PASSWORD=\${EMAIL_PASSWORD}
+          JWT_SECRET_KEY=\${JWT_SECRET_KEY}
+          JWT_ISSUER=\${JWT_ISSUER}
+          JWT_AUDIENCE=\${JWT_AUDIENCE}
           RABBITMQ_HOST=rabbitmq
-          RABBITMQ_USERNAME=${RABBITMQ_USERNAME}
-          RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
-          AWS_BUCKET_NAME=${AWS_BUCKET_NAME}
-          AWS_REGION=${AWS_REGION}
-          AWS_ACCESS_KEY=${AWS_ACCESS_KEY}
-          AWS_SECRET_KEY=${AWS_SECRET_KEY}
-          SIGNATURE_CERT_PATH=${SIGNATURE_CERT_PATH}
-          SIGNATURE_CERT_PASSWORD=${SIGNATURE_CERT_PASSWORD}
-          HERE_API_KEY=${HERE_API_KEY}
-          ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+          RABBITMQ_USERNAME=\${RABBITMQ_USERNAME}
+          RABBITMQ_PASSWORD=\${RABBITMQ_PASSWORD}
+          AWS_BUCKET_NAME=\${AWS_BUCKET_NAME}
+          AWS_REGION=\${AWS_REGION}
+          AWS_ACCESS_KEY=\${AWS_ACCESS_KEY}
+          AWS_SECRET_KEY=\${AWS_SECRET_KEY}
+          SIGNATURE_CERT_PATH=\${SIGNATURE_CERT_PATH}
+          SIGNATURE_CERT_PASSWORD=\${SIGNATURE_CERT_PASSWORD}
+          HERE_API_KEY=\${HERE_API_KEY}
+          ALLOWED_ORIGINS=\${ALLOWED_ORIGINS}
           GOOGLE_APPLICATION_CREDENTIALS=/app/config/firebase-credentials.json
           EOF
 
+          sed -i 's/^[[:space:]]*//' .env.production
           envsubst < .env.production > .env.production.tmp
           mv .env.production.tmp .env.production
 
@@ -294,7 +295,7 @@ jobs:
       - name: Notify deployment status
         if: always()
         run: |
-          if [ ${{ job.status }} == 'success' ]; then
+          if [ "${{ job.status }}" == "success" ]; then
             echo "✅ Deployment to VPS completed successfully!"
           else
             echo "❌ Deployment failed! Please check the logs."
