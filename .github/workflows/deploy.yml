@@ -42,57 +42,35 @@ jobs:
       - name: Create Firebase credentials JSON file
         run: |
           cd basms-be
-          
-          # Create firebase-credentials.json from environment variables
-          # Fix the private key by replacing literal \n with actual newlines
-          FIXED_PRIVATE_KEY=$(echo "${{ secrets.FIREBASE_PRIVATE_KEY }}" | sed 's/\\n/\n/g')
-          
-          cat > firebase-credentials.json << 'EOF'
-          {
-            "type": "service_account",
-            "project_id": "${{ secrets.FIREBASE_PROJECT_ID }}",
-            "private_key_id": "${{ secrets.FIREBASE_PRIVATE_KEY_ID }}",
-            "private_key": "PRIVATE_KEY_PLACEHOLDER",
-            "client_email": "${{ secrets.FIREBASE_CLIENT_EMAIL }}",
-            "client_id": "${{ secrets.FIREBASE_CLIENT_ID }}",
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-            "client_x509_cert_url": "${{ secrets.FIREBASE_CLIENT_CERT_URL }}"
-          }
-          EOF
-          
-          # Replace the placeholder with the actual private key (preserving newlines)
+
           python3 << 'PYTHON_SCRIPT'
           import json
           import os
-          
-          # Read the template
-          with open('firebase-credentials.json', 'r') as f:
-              creds = json.load(f)
-          
-          # Get private key from environment and fix newlines
-          private_key = os.environ.get('FIREBASE_PRIVATE_KEY', '')
-          # Replace literal \n with actual newlines
-          private_key = private_key.replace('\\n', '\n')
-          
-          # Update the private key
-          creds['private_key'] = private_key
-          
-          # Write back with proper formatting
+
+          firebase_creds = {
+              "type": "service_account",
+              "project_id": os.environ.get('FIREBASE_PROJECT_ID', ''),
+              "private_key_id": os.environ.get('FIREBASE_PRIVATE_KEY_ID', ''),
+              "private_key": os.environ.get('FIREBASE_PRIVATE_KEY', '').replace('\\n', '\n'),
+              "client_email": os.environ.get('FIREBASE_CLIENT_EMAIL', ''),
+              "client_id": os.environ.get('FIREBASE_CLIENT_ID', ''),
+              "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+              "token_uri": "https://oauth2.googleapis.com/token",
+              "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+              "client_x509_cert_url": os.environ.get('FIREBASE_CLIENT_CERT_URL', '')
+          }
+
           with open('firebase-credentials.json', 'w') as f:
-              json.dump(creds, f, indent=2)
-          
+              json.dump(firebase_creds, f, indent=2)
+
           print("✅ Firebase credentials file created successfully")
           PYTHON_SCRIPT
-          
-          # Verify the file was created
+
           if [ -f firebase-credentials.json ]; then
             echo "✅ firebase-credentials.json created"
             FILE_SIZE=$(wc -c < firebase-credentials.json)
             echo "File size: $FILE_SIZE bytes"
-          
-            # Verify the private key format
+
             if grep -q "BEGIN PRIVATE KEY" firebase-credentials.json; then
               echo "✅ Private key format is correct"
             else
@@ -104,58 +82,89 @@ jobs:
             exit 1
           fi
         env:
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_PRIVATE_KEY_ID: ${{ secrets.FIREBASE_PRIVATE_KEY_ID }}
           FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          FIREBASE_CLIENT_ID: ${{ secrets.FIREBASE_CLIENT_ID }}
+          FIREBASE_CLIENT_CERT_URL: ${{ secrets.FIREBASE_CLIENT_CERT_URL }}
 
       - name: Create .env file for Docker Compose
         run: |
           cd basms-be
-          
-          cat > .env.production << EOF
-          MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD }}
-          MYSQL_USER_PASSWORD=${{ secrets.MYSQL_USER_PASSWORD }}
-          DB_CONNECTION_STRING_USERS=${{ secrets.DB_CONNECTION_STRING_USERS }}
-          DB_CONNECTION_STRING_CONTRACTS=${{ secrets.DB_CONNECTION_STRING_CONTRACTS }}
-          DB_CONNECTION_STRING_SHIFTS=${{ secrets.DB_CONNECTION_STRING_SHIFTS }}
-          FIREBASE_API_KEY=${{ secrets.FIREBASE_API_KEY }}
-          FIREBASE_URL=${{ secrets.FIREBASE_URL }}
-          EMAIL_SENDER=${{ secrets.EMAIL_SENDER }}
-          EMAIL_PASSWORD=${{ secrets.EMAIL_PASSWORD }}
-          JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}
-          JWT_ISSUER=${{ secrets.JWT_ISSUER }}
-          JWT_AUDIENCE=${{ secrets.JWT_AUDIENCE }}
+
+          cat > .env.production << 'EOF'
+          MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+          MYSQL_USER_PASSWORD=${MYSQL_USER_PASSWORD}
+          DB_CONNECTION_STRING_USERS=${DB_CONNECTION_STRING_USERS}
+          DB_CONNECTION_STRING_CONTRACTS=${DB_CONNECTION_STRING_CONTRACTS}
+          DB_CONNECTION_STRING_SHIFTS=${DB_CONNECTION_STRING_SHIFTS}
+          FIREBASE_API_KEY=${FIREBASE_API_KEY}
+          FIREBASE_URL=${FIREBASE_URL}
+          EMAIL_SENDER=${EMAIL_SENDER}
+          EMAIL_PASSWORD=${EMAIL_PASSWORD}
+          JWT_SECRET_KEY=${JWT_SECRET_KEY}
+          JWT_ISSUER=${JWT_ISSUER}
+          JWT_AUDIENCE=${JWT_AUDIENCE}
           RABBITMQ_HOST=rabbitmq
-          RABBITMQ_USERNAME=${{ secrets.RABBITMQ_USERNAME }}
-          RABBITMQ_PASSWORD=${{ secrets.RABBITMQ_PASSWORD }}
-          AWS_BUCKET_NAME=${{ secrets.AWS_BUCKET_NAME }}
-          AWS_REGION=${{ secrets.AWS_REGION }}
-          AWS_ACCESS_KEY=${{ secrets.AWS_ACCESS_KEY }}
-          AWS_SECRET_KEY=${{ secrets.AWS_SECRET_KEY }}
-          SIGNATURE_CERT_PATH=${{ secrets.SIGNATURE_CERT_PATH }}
-          SIGNATURE_CERT_PASSWORD=${{ secrets.SIGNATURE_CERT_PASSWORD }}
-          GOONG_API_KEY=${{ secrets.GOONG_API_KEY }}
-          ALLOWED_ORIGINS=${{ secrets.ALLOWED_ORIGINS }}
+          RABBITMQ_USERNAME=${RABBITMQ_USERNAME}
+          RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+          AWS_BUCKET_NAME=${AWS_BUCKET_NAME}
+          AWS_REGION=${AWS_REGION}
+          AWS_ACCESS_KEY=${AWS_ACCESS_KEY}
+          AWS_SECRET_KEY=${AWS_SECRET_KEY}
+          SIGNATURE_CERT_PATH=${SIGNATURE_CERT_PATH}
+          SIGNATURE_CERT_PASSWORD=${SIGNATURE_CERT_PASSWORD}
+          GOONG_API_KEY=${GOONG_API_KEY}
+          ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
           GOOGLE_APPLICATION_CREDENTIALS=/app/config/firebase-credentials.json
           EOF
-          
+
+          envsubst < .env.production > .env.production.tmp
+          mv .env.production.tmp .env.production
+
           echo ".env.production file created"
           echo "Verifying .env.production file..."
           if [ -f .env.production ]; then
             FILE_SIZE=$(wc -c < .env.production)
             echo "File exists, size: $FILE_SIZE bytes"
-          
+
             if [ "$FILE_SIZE" -lt 100 ]; then
               echo "WARNING: File size is too small! Secrets might be empty."
               echo "Content preview:"
               cat .env.production | sed 's/=.*/=***/'
               exit 1
             fi
-          
+
             echo "First few lines (masked):"
             head -5 .env.production | sed 's/=.*/=***/'
           else
             echo "ERROR: .env.production file not created!"
             exit 1
           fi
+        env:
+          MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
+          MYSQL_USER_PASSWORD: ${{ secrets.MYSQL_USER_PASSWORD }}
+          DB_CONNECTION_STRING_USERS: ${{ secrets.DB_CONNECTION_STRING_USERS }}
+          DB_CONNECTION_STRING_CONTRACTS: ${{ secrets.DB_CONNECTION_STRING_CONTRACTS }}
+          DB_CONNECTION_STRING_SHIFTS: ${{ secrets.DB_CONNECTION_STRING_SHIFTS }}
+          FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+          FIREBASE_URL: ${{ secrets.FIREBASE_URL }}
+          EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
+          JWT_ISSUER: ${{ secrets.JWT_ISSUER }}
+          JWT_AUDIENCE: ${{ secrets.JWT_AUDIENCE }}
+          RABBITMQ_USERNAME: ${{ secrets.RABBITMQ_USERNAME }}
+          RABBITMQ_PASSWORD: ${{ secrets.RABBITMQ_PASSWORD }}
+          AWS_BUCKET_NAME: ${{ secrets.AWS_BUCKET_NAME }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_ACCESS_KEY: ${{ secrets.AWS_ACCESS_KEY }}
+          AWS_SECRET_KEY: ${{ secrets.AWS_SECRET_KEY }}
+          SIGNATURE_CERT_PATH: ${{ secrets.SIGNATURE_CERT_PATH }}
+          SIGNATURE_CERT_PASSWORD: ${{ secrets.SIGNATURE_CERT_PASSWORD }}
+          GOONG_API_KEY: ${{ secrets.GOONG_API_KEY }}
+          ALLOWED_ORIGINS: ${{ secrets.ALLOWED_ORIGINS }}
 
       - name: Create deployment package
         run: |
@@ -191,39 +200,32 @@ jobs:
           port: ${{ secrets.VPS_SSH_PORT || 22 }}
           script: |
             echo "Starting deployment on VPS..."
-            
-            # Create deployment directory if not exists
+
             mkdir -p ~/basms
-            
-            # Backup old deployment
+
             if [ -d ~/basms/old ]; then
               rm -rf ~/basms/old
             fi
             if [ -d ~/basms/current ]; then
               mv ~/basms/current ~/basms/old
             fi
-            
-            # Create new deployment directory
+
             mkdir -p ~/basms/current
-            
-            # Extract the package
+
             cd ~/basms/current
             tar -xzf /tmp/basms-backend.tar.gz
-            
-            # Remove compose.yaml if exists (use docker-compose.yml instead)
+
             if [ -f compose.yaml ]; then
               echo "Removing compose.yaml to avoid conflict with docker-compose.yml"
               rm -f compose.yaml
             fi
-            
-            # Rename .env.production to .env for Docker Compose
+
             if [ -f .env.production ]; then
               mv .env.production .env
               echo ".env file created from .env.production"
               echo "File size: $(wc -c < .env) bytes"
               echo "Number of variables: $(grep -c '=' .env || echo 0)"
-            
-              # Verify critical variables exist
+
               echo "Verifying critical environment variables..."
               for var in ALLOWED_ORIGINS DB_CONNECTION_STRING_USERS JWT_SECRET_KEY RABBITMQ_HOST GOOGLE_APPLICATION_CREDENTIALS; do
                 if grep -q "^${var}=" .env; then
@@ -236,16 +238,13 @@ jobs:
               echo "ERROR: .env.production not found!"
               exit 1
             fi
-            
-            # Create config directory for Firebase credentials
+
             mkdir -p ~/basms/config
-            
-            # Move firebase credentials to config directory
+
             if [ -f firebase-credentials.json ]; then
               mv firebase-credentials.json ~/basms/config/
               echo "✅ Firebase credentials moved to ~/basms/config/"
-            
-              # Verify the file
+
               if grep -q "BEGIN PRIVATE KEY" ~/basms/config/firebase-credentials.json; then
                 echo "✅ Firebase credentials file format is correct"
               else
@@ -254,23 +253,18 @@ jobs:
             else
               echo "❌ WARNING: firebase-credentials.json not found!"
             fi
-            
-            # Stop and remove ALL existing containers (including orphans)
+
             echo "Stopping and removing existing containers..."
             cd ~/basms/current
-            
-            # Stop containers from docker-compose.yml
+
             docker compose down --remove-orphans || echo "No compose containers to stop"
-            
-            # Remove any orphan containers with basms prefix
+
             echo "Removing orphan containers..."
             docker ps -a --filter "name=basms-" --format "{{.Names}}" | xargs -r docker rm -f || echo "No orphan containers found"
-            
-            # Remove old images to free up space
+
             echo "Cleaning up old Docker images..."
             docker image prune -af --filter "until=24h" || true
-            
-            # Debug: Show .env file content (masked)
+
             echo "=== DEBUG: .env file content (first 5 lines, values masked) ==="
             if [ -f .env ]; then
               head -5 .env | sed 's/=.*/=***/'
@@ -278,28 +272,22 @@ jobs:
               echo "ERROR: .env file not found!"
               exit 1
             fi
-            
-            # Build Docker images
+
             echo "Building Docker images..."
             docker compose build --no-cache
-            
-            # Start services with Docker Compose
+
             echo "Starting services with Docker Compose..."
             docker compose --env-file .env up -d --remove-orphans
-            
-            # Wait for services to be healthy
+
             echo "Waiting for services to start..."
             sleep 10
-            
-            # Check service status
+
             echo "Service status:"
             docker compose ps
-            
-            # Show logs
+
             echo "Recent logs:"
             docker compose logs --tail=50
-            
-            # Cleanup
+
             rm -f /tmp/basms-backend.tar.gz
             echo "Deployment completed successfully!"
 
