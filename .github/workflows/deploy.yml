@@ -93,60 +93,45 @@ jobs:
         run: |
           cd basms-be
 
-          # Create .env file with quoted values to prevent Docker Compose template parsing issues
-          cat > .env.production <<'ENVEOF'
-          MYSQL_ROOT_PASSWORD="__MYSQL_ROOT_PASSWORD__"
-          MYSQL_USER_PASSWORD="__MYSQL_USER_PASSWORD__"
-          DB_CONNECTION_STRING_USERS="__DB_CONNECTION_STRING_USERS__"
-          DB_CONNECTION_STRING_CONTRACTS="__DB_CONNECTION_STRING_CONTRACTS__"
-          DB_CONNECTION_STRING_SHIFTS="__DB_CONNECTION_STRING_SHIFTS__"
-          FIREBASE_API_KEY="__FIREBASE_API_KEY__"
-          FIREBASE_URL="__FIREBASE_URL__"
-          EMAIL_SENDER="__EMAIL_SENDER__"
-          EMAIL_PASSWORD="__EMAIL_PASSWORD__"
-          JWT_SECRET_KEY="__JWT_SECRET_KEY__"
-          JWT_ISSUER="__JWT_ISSUER__"
-          JWT_AUDIENCE="__JWT_AUDIENCE__"
-          RABBITMQ_HOST="rabbitmq"
-          RABBITMQ_USERNAME="__RABBITMQ_USERNAME__"
-          RABBITMQ_PASSWORD="__RABBITMQ_PASSWORD__"
-          AWS_BUCKET_NAME="__AWS_BUCKET_NAME__"
-          AWS_REGION="__AWS_REGION__"
-          AWS_ACCESS_KEY="__AWS_ACCESS_KEY__"
-          AWS_SECRET_KEY="__AWS_SECRET_KEY__"
-          SIGNATURE_CERT_PATH="__SIGNATURE_CERT_PATH__"
-          SIGNATURE_CERT_PASSWORD="__SIGNATURE_CERT_PASSWORD__"
-          HERE_API_KEY="__HERE_API_KEY__"
-          ALLOWED_ORIGINS="__ALLOWED_ORIGINS__"
-          GOOGLE_APPLICATION_CREDENTIALS="/app/config/firebase-credentials.json"
-          ENVEOF
+          python3 << 'PYTHON_SCRIPT'
+          import os
 
-          # Strip leading whitespace
-          sed -i 's/^[[:space:]]*//' .env.production
+          # Get all environment variables
+          env_vars = {
+              'MYSQL_ROOT_PASSWORD': os.environ.get('MYSQL_ROOT_PASSWORD', ''),
+              'MYSQL_USER_PASSWORD': os.environ.get('MYSQL_USER_PASSWORD', ''),
+              'DB_CONNECTION_STRING_USERS': os.environ.get('DB_CONNECTION_STRING_USERS', ''),
+              'DB_CONNECTION_STRING_CONTRACTS': os.environ.get('DB_CONNECTION_STRING_CONTRACTS', ''),
+              'DB_CONNECTION_STRING_SHIFTS': os.environ.get('DB_CONNECTION_STRING_SHIFTS', ''),
+              'FIREBASE_API_KEY': os.environ.get('FIREBASE_API_KEY', ''),
+              'FIREBASE_URL': os.environ.get('FIREBASE_URL', ''),
+              'EMAIL_SENDER': os.environ.get('EMAIL_SENDER', ''),
+              'EMAIL_PASSWORD': os.environ.get('EMAIL_PASSWORD', ''),
+              'JWT_SECRET_KEY': os.environ.get('JWT_SECRET_KEY', ''),
+              'JWT_ISSUER': os.environ.get('JWT_ISSUER', ''),
+              'JWT_AUDIENCE': os.environ.get('JWT_AUDIENCE', ''),
+              'RABBITMQ_HOST': 'rabbitmq',
+              'RABBITMQ_USERNAME': os.environ.get('RABBITMQ_USERNAME', ''),
+              'RABBITMQ_PASSWORD': os.environ.get('RABBITMQ_PASSWORD', ''),
+              'AWS_BUCKET_NAME': os.environ.get('AWS_BUCKET_NAME', ''),
+              'AWS_REGION': os.environ.get('AWS_REGION', ''),
+              'AWS_ACCESS_KEY': os.environ.get('AWS_ACCESS_KEY', ''),
+              'AWS_SECRET_KEY': os.environ.get('AWS_SECRET_KEY', ''),
+              'SIGNATURE_CERT_PATH': os.environ.get('SIGNATURE_CERT_PATH', ''),
+              'SIGNATURE_CERT_PASSWORD': os.environ.get('SIGNATURE_CERT_PASSWORD', ''),
+              'HERE_API_KEY': os.environ.get('HERE_API_KEY', ''),
+              'ALLOWED_ORIGINS': os.environ.get('ALLOWED_ORIGINS', ''),
+              'GOOGLE_APPLICATION_CREDENTIALS': '/app/config/firebase-credentials.json'
+          }
 
-          # Replace placeholders with actual values (escaped for sed)
-          sed -i "s|__MYSQL_ROOT_PASSWORD__|${MYSQL_ROOT_PASSWORD}|g" .env.production
-          sed -i "s|__MYSQL_USER_PASSWORD__|${MYSQL_USER_PASSWORD}|g" .env.production
-          sed -i "s|__DB_CONNECTION_STRING_USERS__|${DB_CONNECTION_STRING_USERS}|g" .env.production
-          sed -i "s|__DB_CONNECTION_STRING_CONTRACTS__|${DB_CONNECTION_STRING_CONTRACTS}|g" .env.production
-          sed -i "s|__DB_CONNECTION_STRING_SHIFTS__|${DB_CONNECTION_STRING_SHIFTS}|g" .env.production
-          sed -i "s|__FIREBASE_API_KEY__|${FIREBASE_API_KEY}|g" .env.production
-          sed -i "s|__FIREBASE_URL__|${FIREBASE_URL}|g" .env.production
-          sed -i "s|__EMAIL_SENDER__|${EMAIL_SENDER}|g" .env.production
-          sed -i "s|__EMAIL_PASSWORD__|${EMAIL_PASSWORD}|g" .env.production
-          sed -i "s|__JWT_SECRET_KEY__|${JWT_SECRET_KEY}|g" .env.production
-          sed -i "s|__JWT_ISSUER__|${JWT_ISSUER}|g" .env.production
-          sed -i "s|__JWT_AUDIENCE__|${JWT_AUDIENCE}|g" .env.production
-          sed -i "s|__RABBITMQ_USERNAME__|${RABBITMQ_USERNAME}|g" .env.production
-          sed -i "s|__RABBITMQ_PASSWORD__|${RABBITMQ_PASSWORD}|g" .env.production
-          sed -i "s|__AWS_BUCKET_NAME__|${AWS_BUCKET_NAME}|g" .env.production
-          sed -i "s|__AWS_REGION__|${AWS_REGION}|g" .env.production
-          sed -i "s|__AWS_ACCESS_KEY__|${AWS_ACCESS_KEY}|g" .env.production
-          sed -i "s|__AWS_SECRET_KEY__|${AWS_SECRET_KEY}|g" .env.production
-          sed -i "s|__SIGNATURE_CERT_PATH__|${SIGNATURE_CERT_PATH}|g" .env.production
-          sed -i "s|__SIGNATURE_CERT_PASSWORD__|${SIGNATURE_CERT_PASSWORD}|g" .env.production
-          sed -i "s|__HERE_API_KEY__|${HERE_API_KEY}|g" .env.production
-          sed -i "s|__ALLOWED_ORIGINS__|${ALLOWED_ORIGINS}|g" .env.production
+          # Write .env.production file with quoted values to handle special characters
+          with open('.env.production', 'w') as f:
+              for key, value in env_vars.items():
+                  # Quote the value to prevent Docker Compose from interpreting special chars
+                  f.write(f'{key}="{value}"\n')
+
+          print("✅ .env.production file created successfully")
+          PYTHON_SCRIPT
 
           echo ".env.production file created"
           echo "Verifying .env.production file..."
@@ -226,8 +211,10 @@ jobs:
           script: |
             echo "Starting deployment on VPS..."
 
+            # Create deployment directory
             mkdir -p ~/basms
 
+            # Backup old deployment
             if [ -d ~/basms/old ]; then
               rm -rf ~/basms/old
             fi
@@ -235,19 +222,23 @@ jobs:
               mv ~/basms/current ~/basms/old
             fi
 
+            # Create new deployment directory
             mkdir -p ~/basms/current
 
+            # Extract the package
             cd ~/basms/current
-            tar -xzf /tmp/basms-backend.tar.gz
+            tar -xzf /tmp/basms-backend.tar.gz 2>/dev/null || true
 
+            # Remove compose.yaml if exists
             if [ -f compose.yaml ]; then
               echo "Removing compose.yaml to avoid conflict with docker-compose.yml"
               rm -f compose.yaml
             fi
 
+            # Setup .env file
             if [ -f .env.production ]; then
               mv .env.production .env
-              echo ".env file created from .env.production"
+              echo "✅ .env file created from .env.production"
               echo "File size: $(wc -c < .env) bytes"
               echo "Number of variables: $(grep -c '=' .env || echo 0)"
 
@@ -260,12 +251,12 @@ jobs:
                 fi
               done
             else
-              echo "ERROR: .env.production not found!"
+              echo "❌ ERROR: .env.production not found!"
               exit 1
             fi
 
+            # Setup Firebase credentials
             mkdir -p ~/basms/config
-
             if [ -f firebase-credentials.json ]; then
               mv firebase-credentials.json ~/basms/config/
               echo "✅ Firebase credentials moved to ~/basms/config/"
@@ -279,42 +270,51 @@ jobs:
               echo "❌ WARNING: firebase-credentials.json not found!"
             fi
 
+            # Stop existing containers
             echo "Stopping and removing existing containers..."
             cd ~/basms/current
+            docker compose down --remove-orphans 2>/dev/null || echo "No compose containers to stop"
 
-            docker compose down --remove-orphans || echo "No compose containers to stop"
-
+            # Remove orphan containers
             echo "Removing orphan containers..."
-            docker ps -a --filter "name=basms-" --format "{{.Names}}" | xargs -r docker rm -f || echo "No orphan containers found"
+            docker ps -a --filter "name=basms-" --format "{{.Names}}" | xargs -r docker rm -f 2>/dev/null || echo "No orphan containers found"
 
+            # Clean up old images
             echo "Cleaning up old Docker images..."
-            docker image prune -af --filter "until=24h" || true
+            docker image prune -af --filter "until=24h" 2>/dev/null || true
 
+            # Debug: Show .env file content (masked)
             echo "=== DEBUG: .env file content (first 5 lines, values masked) ==="
             if [ -f .env ]; then
               head -5 .env | sed 's/=.*/=***/'
             else
-              echo "ERROR: .env file not found!"
+              echo "❌ ERROR: .env file not found!"
               exit 1
             fi
 
+            # Build Docker images
             echo "Building Docker images..."
             docker compose build --no-cache
 
+            # Start services
             echo "Starting services with Docker Compose..."
-            docker compose --env-file .env up -d --remove-orphans
+            docker compose up -d --remove-orphans
 
+            # Wait for services to start
             echo "Waiting for services to start..."
-            sleep 10
+            sleep 15
 
-            echo "Service status:"
+            # Check service status
+            echo "=== Service status ==="
             docker compose ps
 
-            echo "Recent logs:"
-            docker compose logs --tail=50
+            # Show recent logs
+            echo "=== Recent logs ==="
+            docker compose logs --tail=30
 
+            # Cleanup
             rm -f /tmp/basms-backend.tar.gz
-            echo "Deployment completed successfully!"
+            echo "✅ Deployment completed successfully!"
 
       - name: Notify deployment status
         if: always()
