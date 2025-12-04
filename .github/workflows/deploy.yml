@@ -96,16 +96,13 @@ jobs:
           python3 << 'PYTHON_SCRIPT'
           import os
 
-          # Build connection strings dynamically using MYSQL_USER_PASSWORD
-          mysql_user_password = os.environ.get('MYSQL_USER_PASSWORD', '')
-
-          # Get all environment variables
+          # Get all environment variables directly from secrets
           env_vars = {
               'MYSQL_ROOT_PASSWORD': os.environ.get('MYSQL_ROOT_PASSWORD', ''),
-              'MYSQL_USER_PASSWORD': mysql_user_password,
-              'DB_CONNECTION_STRING_USERS': f'Server=mysql;Port=3306;Database=basms_users;User=basms_user;Password={mysql_user_password}',
-              'DB_CONNECTION_STRING_CONTRACTS': f'Server=mysql;Port=3306;Database=basms_contracts;User=basms_user;Password={mysql_user_password}',
-              'DB_CONNECTION_STRING_SHIFTS': f'Server=mysql;Port=3306;Database=basms_shifts;User=basms_user;Password={mysql_user_password}',
+              'MYSQL_USER_PASSWORD': os.environ.get('MYSQL_USER_PASSWORD', ''),
+              'DB_CONNECTION_STRING_USERS': os.environ.get('DB_CONNECTION_STRING_USERS', ''),
+              'DB_CONNECTION_STRING_CONTRACTS': os.environ.get('DB_CONNECTION_STRING_CONTRACTS', ''),
+              'DB_CONNECTION_STRING_SHIFTS': os.environ.get('DB_CONNECTION_STRING_SHIFTS', ''),
               'FIREBASE_API_KEY': os.environ.get('FIREBASE_API_KEY', ''),
               'FIREBASE_URL': os.environ.get('FIREBASE_URL', ''),
               'EMAIL_SENDER': os.environ.get('EMAIL_SENDER', ''),
@@ -160,6 +157,9 @@ jobs:
         env:
           MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
           MYSQL_USER_PASSWORD: ${{ secrets.MYSQL_USER_PASSWORD }}
+          DB_CONNECTION_STRING_USERS: ${{ secrets.DB_CONNECTION_STRING_USERS }}
+          DB_CONNECTION_STRING_CONTRACTS: ${{ secrets.DB_CONNECTION_STRING_CONTRACTS }}
+          DB_CONNECTION_STRING_SHIFTS: ${{ secrets.DB_CONNECTION_STRING_SHIFTS }}
           FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
           FIREBASE_URL: ${{ secrets.FIREBASE_URL }}
           EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
