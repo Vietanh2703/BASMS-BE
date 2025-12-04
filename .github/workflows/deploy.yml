@@ -20,19 +20,24 @@ jobs:
         run: |
           echo "Validating required secrets..."
           MISSING_SECRETS=""
-          
-          [ -z "${{ secrets.ALLOWED_ORIGINS }}" ] && MISSING_SECRETS="$MISSING_SECRETS ALLOWED_ORIGINS"
-          [ -z "${{ secrets.DB_CONNECTION_STRING_USERS }}" ] && MISSING_SECRETS="$MISSING_SECRETS DB_CONNECTION_STRING_USERS"
-          [ -z "${{ secrets.JWT_SECRET_KEY }}" ] && MISSING_SECRETS="$MISSING_SECRETS JWT_SECRET_KEY"
-          [ -z "${{ secrets.RABBITMQ_HOST }}" ] && MISSING_SECRETS="$MISSING_SECRETS RABBITMQ_HOST"
-          
+
+          [ -z "$ALLOWED_ORIGINS" ] && MISSING_SECRETS="$MISSING_SECRETS ALLOWED_ORIGINS"
+          [ -z "$DB_CONNECTION_STRING_USERS" ] && MISSING_SECRETS="$MISSING_SECRETS DB_CONNECTION_STRING_USERS"
+          [ -z "$JWT_SECRET_KEY" ] && MISSING_SECRETS="$MISSING_SECRETS JWT_SECRET_KEY"
+          [ -z "$RABBITMQ_HOST" ] && MISSING_SECRETS="$MISSING_SECRETS RABBITMQ_HOST"
+
           if [ -n "$MISSING_SECRETS" ]; then
             echo "ERROR: Missing required secrets:$MISSING_SECRETS"
             echo "Please set these secrets in GitHub repository settings"
             exit 1
           fi
-          
+
           echo "✅ All required secrets are set"
+        env:
+          ALLOWED_ORIGINS: ${{ secrets.ALLOWED_ORIGINS }}
+          DB_CONNECTION_STRING_USERS: ${{ secrets.DB_CONNECTION_STRING_USERS }}
+          JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
+          RABBITMQ_HOST: ${{ secrets.RABBITMQ_HOST }}
 
       - name: Create Firebase credentials JSON file
         run: |
