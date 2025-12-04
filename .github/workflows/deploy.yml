@@ -277,6 +277,10 @@ jobs:
             cd ~/basms/current
             docker compose down --remove-orphans 2>/dev/null || echo "No compose containers to stop"
 
+            # IMPORTANT: Remove MySQL volume to force re-initialization
+            echo "Removing MySQL volume to force user creation..."
+            docker volume rm basms_mysql_data 2>/dev/null || docker volume rm current_mysql_data 2>/dev/null || echo "No MySQL volume to remove"
+
             # Remove orphan containers
             echo "Removing orphan containers..."
             docker ps -a --filter "name=basms-" --format "{{.Names}}" | xargs -r docker rm -f 2>/dev/null || echo "No orphan containers found"
@@ -284,6 +288,10 @@ jobs:
             # Clean up old images
             echo "Cleaning up old Docker images..."
             docker image prune -af --filter "until=24h" 2>/dev/null || true
+
+            # Clean up unused volumes
+            echo "Cleaning up unused volumes..."
+            docker volume prune -f 2>/dev/null || true
 
             # Verify docker-compose.yml exists
             if [ ! -f docker-compose.yml ]; then
