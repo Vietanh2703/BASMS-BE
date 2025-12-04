@@ -107,6 +107,7 @@ jobs:
           
           cat > .env.production << EOF
           MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD }}
+          MYSQL_USER_PASSWORD=${{ secrets.MYSQL_USER_PASSWORD }}
           DB_CONNECTION_STRING_USERS=${{ secrets.DB_CONNECTION_STRING_USERS }}
           DB_CONNECTION_STRING_CONTRACTS=${{ secrets.DB_CONNECTION_STRING_CONTRACTS }}
           DB_CONNECTION_STRING_SHIFTS=${{ secrets.DB_CONNECTION_STRING_SHIFTS }}
