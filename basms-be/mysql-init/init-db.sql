@@ -5,7 +5,6 @@
 -- ============================================================================
 
 -- Create all databases (users_db is created automatically by MYSQL_DATABASE env var)
-CREATE DATABASE IF NOT EXISTS users_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE IF NOT EXISTS contracts_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE IF NOT EXISTS shifts_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
