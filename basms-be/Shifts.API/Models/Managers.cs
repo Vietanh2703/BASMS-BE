@@ -75,34 +75,54 @@ public class Managers
     // VAI TRÒ & CHỨC VỤ
     // ============================================================================
 
-    /// <summary>
-    /// MANAGER| DIRECTOR
-    /// </summary>
     public string Role { get; set; } = "MANAGER";
-
-    /// <summary>
-    /// Chức danh: "Trưởng phòng vận hành"
-    /// </summary>
-    public string? Position { get; set; }
-
-    /// <summary>
-    /// Phòng ban
-    /// </summary>
-    public string? Department { get; set; }
-
-    // ============================================================================
-    // CẤP BẬC QUẢN LÝ (hierarchical)
-    // ============================================================================
-
-    /// <summary>
-    /// 1=Line Manager (10-30 guards) | 2=Senior (3-5 managers) | 3=Director (C-level)
-    /// </summary>
-    public int ManagerLevel { get; set; } = 1;
 
     /// <summary>
     /// Manager cấp trên (NULL=Director)
     /// </summary>
     public Guid? ReportsToManagerId { get; set; }
+
+    // ============================================================================
+    // CẤP BẬC & CHỨNG CHỈ NGHIỆP VỤ
+    // ============================================================================
+
+    /// <summary>
+    /// Hạng chứng chỉ nghiệp vụ: I, II, III, IV, V, VI
+    /// Theo Nghị định 96/2016/NĐ-CP
+    /// </summary>
+    public string? CertificationLevel { get; set; }
+
+    /// <summary>
+    /// Mức lương cơ bản (VNĐ/tháng)
+    /// Import từ hợp đồng lao động
+    /// Ví dụ: 10000000.00 cho manager hạng III
+    /// </summary>
+    public decimal? StandardWage { get; set; }
+
+    // ============================================================================
+    // TÀI LIỆU & HÌNH ẢNH (Documents & Images)
+    // ============================================================================
+
+    /// <summary>
+    /// URL file chứng chỉ nghiệp vụ (S3)
+    /// Có thể là PDF hoặc ảnh scan
+    /// Ví dụ: "s3://basms/managers/certificates/manager-123-cert.pdf"
+    /// </summary>
+    public string? CertificationFileUrl { get; set; }
+
+    /// <summary>
+    /// URL ảnh CCCD mặt trước (S3)
+    /// Dùng cho xác minh danh tính
+    /// Ví dụ: "s3://basms/managers/identity/manager-123-front.jpg"
+    /// </summary>
+    public string? IdentityCardFrontUrl { get; set; }
+
+    /// <summary>
+    /// URL ảnh CCCD mặt sau (S3)
+    /// Dùng cho xác minh danh tính
+    /// Ví dụ: "s3://basms/managers/identity/manager-123-back.jpg"
+    /// </summary>
+    public string? IdentityCardBackUrl { get; set; }
 
     // ============================================================================
     // TÌNH TRẠNG LÀM VIỆC

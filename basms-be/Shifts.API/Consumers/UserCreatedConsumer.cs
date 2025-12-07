@@ -94,10 +94,8 @@ public class UserCreatedConsumer : IConsumer<UserCreatedEvent>
             PhoneNumber = @event.Phone,
 
             Role = @event.RoleName.ToUpper(),
-            Position = @event.Position,
-            Department = @event.Department,
-
-            ManagerLevel = 1, // Line Manager
+            CertificationLevel = @event.CertificationLevel,
+            StandardWage = @event.StandardWage,
 
             EmploymentStatus = "ACTIVE",
 

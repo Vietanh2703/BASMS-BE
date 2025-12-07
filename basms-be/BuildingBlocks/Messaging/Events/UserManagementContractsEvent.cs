@@ -76,3 +76,21 @@ public record GetUserByEmailResponse
     public string? Phone { get; init; }
     public bool UserExists { get; init; }
 }
+
+// ================================================================
+// UPDATE GUARD INFO EVENT
+// ================================================================
+
+/// <summary>
+/// Event để update thông tin Guard (CertificationLevel, StandardWage)
+/// Published by Contracts.API sau khi import working contract
+/// Consumed by Shifts.API để update Guard record
+/// </summary>
+public record UpdateGuardInfoEvent
+{
+    public Guid GuardId { get; init; }
+    public string? Email { get; init; }
+    public string? CertificationLevel { get; init; } // Hạng chứng chỉ: I, II, III, IV, V, VI
+    public decimal? StandardWage { get; init; } // Mức lương cơ bản (VNĐ/tháng)
+    public DateTime UpdatedAt { get; init; } = DateTime.UtcNow;
+}

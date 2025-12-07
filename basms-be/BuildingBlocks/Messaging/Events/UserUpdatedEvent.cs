@@ -7,9 +7,6 @@ namespace BuildingBlocks.Messaging.Events;
 public record UserUpdatedEvent
 {
     public Guid UserId { get; init; }
-    public string? IdentityNumber { get; init; }
-    public DateTime? IdentityIssueDate { get; init; }
-    public string? IdentityIssuePlace { get; init; }
     public string FullName { get; init; } = string.Empty;
     public string? Phone { get; init; }
     public string? AvatarUrl { get; init; }
@@ -19,9 +16,6 @@ public record UserUpdatedEvent
     public string RoleName { get; init; } = string.Empty;
 
     // Additional info
-    public string? EmployeeCode { get; init; }
-    public string? Position { get; init; }
-    public string? Department { get; init; }
     public string? Address { get; init; }
     public string Status { get; init; } = "active"; // active, inactive, suspended
 

@@ -115,10 +115,6 @@ public class UserEventPublisher
                 FullName = user.FullName,
                 Phone = user.Phone,
                 AvatarUrl = user.AvatarUrl,
-                
-                
-                Position = null,
-                Department = null,
                 Address = user.Address,
                 Status = user.Status,
 

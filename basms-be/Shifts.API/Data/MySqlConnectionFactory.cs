@@ -75,12 +75,16 @@ public class MySqlConnectionFactory : IDbConnectionFactory
 
                     -- Role & Position
                     `Role` VARCHAR(50) NOT NULL DEFAULT 'MANAGER',
-                    `Position` VARCHAR(100) NULL,
-                    `Department` VARCHAR(100) NULL,
-
-                    -- Management level
-                    `ManagerLevel` INT NOT NULL DEFAULT 1,
                     `ReportsToManagerId` CHAR(36) NULL,
+
+                    -- Certification Level & Wage
+                    `CertificationLevel` VARCHAR(10) NULL COMMENT 'Hạng chứng chỉ: I, II, III, IV, V, VI',
+                    `StandardWage` DECIMAL(15,2) NULL COMMENT 'Mức lương cơ bản (VNĐ/tháng) import từ hợp đồng',
+
+                    -- Documents & Images (S3 URLs)
+                    `CertificationFileUrl` TEXT NULL COMMENT 'URL file chứng chỉ (PDF/image)',
+                    `IdentityCardFrontUrl` TEXT NULL COMMENT 'URL ảnh CCCD mặt trước',
+                    `IdentityCardBackUrl` TEXT NULL COMMENT 'URL ảnh CCCD mặt sau',
 
                     -- Employment status
                     `EmploymentStatus` VARCHAR(50) NOT NULL DEFAULT 'ACTIVE',
@@ -152,11 +156,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
 
                     -- Certification & Professional Level
                     `CertificationLevel` VARCHAR(10) NULL COMMENT 'Hạng chứng chỉ: I, II, III, IV, V, VI',
-                    `CertificationNumber` VARCHAR(100) NULL COMMENT 'Số chứng chỉ nghiệp vụ',
-                    `CertificationIssuedDate` DATETIME NULL COMMENT 'Ngày cấp chứng chỉ',
-                    `CertificationExpiryDate` DATETIME NULL COMMENT 'Ngày hết hạn chứng chỉ (5 năm)',
-                    `CertificationIssuedBy` VARCHAR(255) NULL COMMENT 'Cơ quan cấp: Sở Công An...',
-                    `YearsOfExperience` INT NOT NULL DEFAULT 0 COMMENT 'Số năm kinh nghiệm',
+                    `StandardWage` DECIMAL(15,2) NULL COMMENT 'Mức lương cơ bản (VNĐ/tháng) import từ hợp đồng',
 
                     -- Documents & Images (S3 URLs)
                     `CertificationFileUrl` TEXT NULL COMMENT 'URL file chứng chỉ (PDF/image)',

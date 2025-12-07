@@ -88,8 +88,6 @@ public class UserUpdatedConsumer : IConsumer<UserUpdatedEvent>
         // Update fields
         manager.AvatarUrl = @event.AvatarUrl;
         manager.PhoneNumber = @event.Phone;
-        manager.Position = @event.Position;
-        manager.Department = @event.Department;
         manager.EmploymentStatus = MapStatus(@event.Status);
 
         // Update sync metadata

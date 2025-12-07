@@ -131,33 +131,11 @@ public class Guards
     public string? CertificationLevel { get; set; }
 
     /// <summary>
-    /// Số chứng chỉ nghiệp vụ bảo vệ
-    /// Ví dụ: "BV-123456-2024"
+    /// Mức lương cơ bản (VNĐ/tháng)
+    /// Import từ hợp đồng lao động
+    /// Ví dụ: 6000000.00 cho bảo vệ hạng I
     /// </summary>
-    public string? CertificationNumber { get; set; }
-
-    /// <summary>
-    /// Ngày cấp chứng chỉ
-    /// </summary>
-    public DateTime? CertificationIssuedDate { get; set; }
-
-    /// <summary>
-    /// Ngày hết hạn chứng chỉ (thường 5 năm)
-    /// Hệ thống cần cảnh báo trước 3 tháng khi sắp hết hạn
-    /// </summary>
-    public DateTime? CertificationExpiryDate { get; set; }
-
-    /// <summary>
-    /// Cơ quan cấp chứng chỉ
-    /// Ví dụ: "Sở Công An TP.HCM", "Sở Công An Hà Nội"
-    /// </summary>
-    public string? CertificationIssuedBy { get; set; }
-
-    /// <summary>
-    /// Số năm kinh nghiệm làm bảo vệ
-    /// Tính từ HireDate hoặc từ ngày có chứng chỉ hạng I
-    /// </summary>
-    public int YearsOfExperience { get; set; } = 0;
+    public decimal? StandardWage { get; set; }
 
     // ============================================================================
     // TÀI LIỆU & HÌNH ẢNH (Documents & Images)

@@ -1,6 +1,4 @@
-// Handler xử lý logic lấy danh sách tất cả wage rates
-// Query từ database để lấy mức tiền công chuẩn theo cấp bậc
-namespace Shifts.API.WageRatesHandler.GetAllWageRates;
+namespace Shifts.API.GuardsHandler.GetAllWageRates;
 
 public record GetAllWageRatesQuery() : IQuery<GetAllWageRatesResult>;
 public record GetAllWageRatesResult(IEnumerable<WageRateDto> WageRates);

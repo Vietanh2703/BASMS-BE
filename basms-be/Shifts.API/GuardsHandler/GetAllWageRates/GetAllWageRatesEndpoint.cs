@@ -1,6 +1,4 @@
-// Endpoint API để lấy danh sách tất cả wage rates
-// Trả về mức tiền công chuẩn theo cấp bậc từ database
-namespace Shifts.API.WageRatesHandler.GetAllWageRates;
+namespace Shifts.API.GuardsHandler.GetAllWageRates;
 
 public class GetAllWageRatesEndpoint : ICarterModule
 {

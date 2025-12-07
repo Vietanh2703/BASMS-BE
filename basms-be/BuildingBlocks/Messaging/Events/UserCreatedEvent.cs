@@ -31,6 +31,8 @@ public record UserCreatedEvent
     public string? Address { get; init; }
     public DateTime? HireDate { get; init; }
     public string? ContractType { get; init; }
+    public string? CertificationLevel { get; init; } // Hạng chứng chỉ: I, II, III, IV, V, VI
+    public decimal? StandardWage { get; init; } // Mức lương cơ bản (VNĐ/tháng)
 
     // Metadata
     public DateTime CreatedAt { get; init; }
