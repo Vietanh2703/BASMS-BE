@@ -28,6 +28,8 @@ internal class ImportManagerWorkingContractHandler(
     IS3Service s3Service,
     IWordContractService wordService,
     IRequestClient<CreateUserRequest> createUserClient,
+    IRequestClient<GetUserByEmailRequest> getUserByEmailClient,
+    IPublishEndpoint publishEndpoint,
     EmailHandler emailHandler,
     ILogger<ImportManagerWorkingContractHandler> logger)
     : ICommandHandler<ImportManagerWorkingContractCommand, ImportManagerWorkingContractResult>
@@ -120,7 +122,19 @@ internal class ImportManagerWorkingContractHandler(
                 employeeData.IdentityNumber);
 
             // ================================================================
-            // TẠO MANAGER MỚI
+            // PARSE CẤP BẬC VÀ LƯƠNG TỪ DOCUMENT
+            // ================================================================
+
+            var certificationLevel = ParseCertificationLevel(text);
+            var standardWage = ParseStandardWage(text);
+
+            logger.LogInformation(
+                "✓ Parsed certification & wage: Level={Level}, Wage={Wage}",
+                certificationLevel,
+                standardWage);
+
+            // ================================================================
+            // KIỂM TRA USER ĐÃ TỒN TẠI (email, phone, identityNumber)
             // ================================================================
 
             if (string.IsNullOrEmpty(employeeData.Email))
@@ -130,124 +144,283 @@ internal class ImportManagerWorkingContractHandler(
                     ErrorMessage = "Employee email is required but not found in document"
                 };
 
-            var randomPassword = GenerateRandomPassword();
-            logger.LogInformation("Generated random password for manager user (will be sent via email)");
-
-            var createUserRequest = new CreateUserRequest
-            {
-                FullName = employeeData.FullName ?? "Unknown",
-                Email = employeeData.Email,
-                Password = randomPassword,
-                IdentityNumber = employeeData.IdentityNumber,
-                IdentityIssueDate = employeeData.IdentityIssueDate,
-                IdentityIssuePlace = employeeData.IdentityIssuePlace,
-                Phone = ConvertPhoneToInternationalFormat(employeeData.Phone),
-                Address = employeeData.Address,
-                BirthDay = employeeData.BirthDay,
-                BirthMonth = employeeData.BirthMonth,
-                BirthYear = employeeData.BirthYear,
-                Gender = "male", // Default, có thể cải thiện sau
-                RoleName = "manager", 
-                AuthProvider = "email",
-                Status = "active",
-                EmailVerified = false,
-                PhoneVerified = false,
-                LoginCount = 0
-            };
-
-            var createUserResponse = await createUserClient.GetResponse<CreateUserResponse>(
-                createUserRequest,
+            // Check email đã tồn tại chưa
+            var getUserResponse = await getUserByEmailClient.GetResponse<GetUserByEmailResponse>(
+                new GetUserByEmailRequest { Email = employeeData.Email },
                 cancellationToken);
 
-            if (!createUserResponse.Message.Success)
-                return new ImportManagerWorkingContractResult
+            bool userExists = getUserResponse.Message.UserExists;
+            Guid? existingUserId = getUserResponse.Message.UserId;
+
+            Guid userId;
+            string? randomPassword = null;
+            string documentType;
+
+            // ================================================================
+            // TẠO USER MỚI hoặc SỬ DỤNG USER CŨ
+            // ================================================================
+
+            if (userExists && existingUserId.HasValue)
+            {
+                // User đã tồn tại - KHÔNG tạo user mới
+                userId = existingUserId.Value;
+                documentType = "extended_document"; // Document gia hạn/mở rộng
+
+                logger.LogInformation(
+                    "✓ User already exists: UserId={UserId}, Email={Email}. " +
+                    "Will create extended_document and update existing contract.",
+                    userId,
+                    employeeData.Email);
+
+                // ================================================================
+                // PUBLISH EVENT ĐỂ UPDATE MANAGER INFO
+                // ================================================================
+                await publishEndpoint.Publish(new UpdateManagerInfoEvent
                 {
-                    Success = false,
-                    ErrorMessage = $"Failed to create manager user: {createUserResponse.Message.ErrorMessage}"
+                    ManagerId = userId,
+                    Email = employeeData.Email,
+                    CertificationLevel = certificationLevel,
+                    StandardWage = standardWage,
+                    UpdatedAt = DateTime.UtcNow
+                }, cancellationToken);
+
+                logger.LogInformation(
+                    "✓ Published UpdateManagerInfoEvent for existing Manager {ManagerId}: Level={Level}, Wage={Wage}",
+                    userId,
+                    certificationLevel,
+                    standardWage);
+            }
+            else
+            {
+                // User chưa tồn tại - TẠO MỚI
+                randomPassword = GenerateRandomPassword();
+                documentType = "manager_working_contract"; // Document hợp đồng lao động ban đầu
+
+                logger.LogInformation("User does not exist. Creating new manager...");
+
+                var createUserRequest = new CreateUserRequest
+                {
+                    FullName = employeeData.FullName ?? "Unknown",
+                    Email = employeeData.Email,
+                    Password = randomPassword,
+                    IdentityNumber = employeeData.IdentityNumber,
+                    IdentityIssueDate = employeeData.IdentityIssueDate,
+                    IdentityIssuePlace = employeeData.IdentityIssuePlace,
+                    Phone = ConvertPhoneToInternationalFormat(employeeData.Phone),
+                    Address = employeeData.Address,
+                    BirthDay = employeeData.BirthDay,
+                    BirthMonth = employeeData.BirthMonth,
+                    BirthYear = employeeData.BirthYear,
+                    Gender = "male",
+                    RoleName = "manager",
+                    AuthProvider = "email",
+                    Status = "active",
+                    EmailVerified = false,
+                    PhoneVerified = false,
+                    LoginCount = 0
                 };
 
-            var userId = createUserResponse.Message.UserId;
-            logger.LogInformation(
-                "✓ Created user (Manager): UserId={UserId}, Email={Email}. " +
-                "UserCreatedConsumer in Shifts.API will automatically create Manager record.",
-                userId,
-                employeeData.Email);
-            
-            // ================================================================
-// GỬI EMAIL THÔNG TIN ĐĂNG NHẬP CHO MANAGER
-// ================================================================
-            if (!string.IsNullOrEmpty(employeeData.Email) && !string.IsNullOrEmpty(randomPassword))
-            {
-                try
-                {
-                    await emailHandler.SendManagerLoginInfoEmailAsync(
-                        employeeData.FullName ?? "Manager",
-                        employeeData.Email,
-                        randomPassword,
-                        contractData.ContractNumber);
+                var createUserResponse = await createUserClient.GetResponse<CreateUserResponse>(
+                    createUserRequest,
+                    cancellationToken);
 
-                    logger.LogInformation(
-                        "✅ Login info email sent successfully to manager: {Email}",
-                        employeeData.Email);
-                }
-                catch (Exception emailEx)
+                if (!createUserResponse.Message.Success)
+                    return new ImportManagerWorkingContractResult
+                    {
+                        Success = false,
+                        ErrorMessage = $"Failed to create manager user: {createUserResponse.Message.ErrorMessage}"
+                    };
+
+                userId = createUserResponse.Message.UserId;
+                logger.LogInformation(
+                    "✓ Created new user (Manager): UserId={UserId}, Email={Email}. " +
+                    "UserCreatedConsumer in Shifts.API will automatically create Manager record.",
+                    userId,
+                    employeeData.Email);
+
+                // ================================================================
+                // PUBLISH EVENT ĐỂ UPDATE MANAGER INFO
+                // ================================================================
+                // Wait a bit for UserCreatedConsumer to create Manager record
+                await Task.Delay(2000, cancellationToken);
+
+                await publishEndpoint.Publish(new UpdateManagerInfoEvent
                 {
-                    // Log warning nhưng không fail - email không critical
-                    logger.LogWarning(emailEx,
-                        "⚠️ Failed to send login info email to {Email}, but import was successful. " +
-                        "Manager can request password reset later.",
-                        employeeData.Email);
+                    ManagerId = userId,
+                    Email = employeeData.Email,
+                    CertificationLevel = certificationLevel,
+                    StandardWage = standardWage,
+                    UpdatedAt = DateTime.UtcNow
+                }, cancellationToken);
+
+                logger.LogInformation(
+                    "✓ Published UpdateManagerInfoEvent for Manager {ManagerId}: Level={Level}, Wage={Wage}",
+                    userId,
+                    certificationLevel,
+                    standardWage);
+
+                // ================================================================
+                // GỬI EMAIL THÔNG TIN ĐĂNG NHẬP CHO MANAGER MỚI
+                // ================================================================
+                if (!string.IsNullOrEmpty(employeeData.Email) && !string.IsNullOrEmpty(randomPassword))
+                {
+                    try
+                    {
+                        await emailHandler.SendManagerLoginInfoEmailAsync(
+                            employeeData.FullName ?? "Manager",
+                            employeeData.Email,
+                            randomPassword,
+                            contractData.ContractNumber);
+
+                        logger.LogInformation(
+                            "Login info email sent successfully to manager: {Email}",
+                            employeeData.Email);
+                    }
+                    catch (Exception emailEx)
+                    {
+                        logger.LogWarning(emailEx,
+                            "Failed to send login info email to {Email}, but import was successful. " +
+                            "Manager can request password reset later.",
+                            employeeData.Email);
+                    }
                 }
             }
 
             // ================================================================
-            // TẠO CONTRACT TRONG DATABASE (không cần CustomerId)
+            // TẠO hoặc CẬP NHẬT CONTRACT
             // ================================================================
-            // Manager working contract là hợp đồng lao động với Manager
-            // Không sử dụng CustomerId vì đây không phải hợp đồng dịch vụ với khách hàng
 
-            var contract = new Contract
+            Guid contractId;
+            string contractType;
+
+            if (userExists && existingUserId.HasValue)
             {
-                Id = Guid.NewGuid(),
-                CustomerId = null, // Manager working contract không có CustomerId
-                DocumentId = request.DocumentId, // Link đến document
-                ContractNumber = contractData.ContractNumber,
-                ContractTitle = contractData.ContractTitle,
-                ContractType = "manager_working_contract", // Loại hợp đồng lao động Manager
-                ServiceScope = "management",
-                CoverageModel = "fixed_schedule",
-                StartDate = contractData.StartDate,
-                EndDate = contractData.EndDate ?? contractData.StartDate.AddMonths(36), // Max 36 tháng
-                DurationMonths = contractData.DurationMonths,
-                Status = "signed", // Đã ký
-                SignedDate = DateTime.UtcNow,
-                ContractFileUrl = document.FileUrl,
-                AutoGenerateShifts = false, // Manager không cần auto-generate shifts
-                GenerateShiftsAdvanceDays = 0,
-                WorkOnPublicHolidays = true,
-                WorkOnCustomerClosedDays = true,
-                FollowsCustomerCalendar = false,
-                IsDeleted = false,
-                CreatedAt = DateTime.UtcNow
-            };
+                // User đã tồn tại - Tìm contract hiện tại và update DocumentId
+                // Lấy contract có cùng email (từ document_email matching)
+                var existingContract = await connection.QueryFirstOrDefaultAsync<Contract>(@"
+                    SELECT c.*
+                    FROM contracts c
+                    INNER JOIN contract_documents cd ON c.DocumentId = cd.Id
+                    WHERE cd.DocumentEmail = @Email
+                    AND c.ContractType IN ('manager_working_contract', 'extended_working_contract')
+                    AND c.IsDeleted = 0
+                    ORDER BY c.CreatedAt DESC
+                    LIMIT 1",
+                    new { Email = employeeData.Email });
 
-            await connection.InsertAsync(contract);
+                if (existingContract != null)
+                {
+                    // Update contract với DocumentId mới (document extended)
+                    contractId = existingContract.Id;
+                    contractType = "extended_working_contract"; // Contract type cho gia hạn
 
-            
-            
-            logger.LogInformation(
-                "✓ Created manager working contract: ContractId={ContractId}, Number={Number}, UserId={UserId}",
-                contract.Id,
-                contract.ContractNumber,
-                userId);
+                    await connection.ExecuteAsync(@"
+                        UPDATE contracts
+                        SET DocumentId = @NewDocumentId,
+                            ContractType = @ContractType,
+                            EndDate = @NewEndDate,
+                            DurationMonths = @DurationMonths,
+                            UpdatedAt = @UpdatedAt
+                        WHERE Id = @ContractId",
+                        new
+                        {
+                            NewDocumentId = request.DocumentId,
+                            ContractType = contractType,
+                            NewEndDate = contractData.EndDate ?? contractData.StartDate.AddMonths(36),
+                            DurationMonths = contractData.DurationMonths,
+                            UpdatedAt = DateTime.UtcNow,
+                            ContractId = contractId
+                        });
+
+                    logger.LogInformation(
+                        "✓ Updated existing contract with new document: ContractId={ContractId}, NewDocumentId={DocumentId}, ContractType={ContractType}",
+                        contractId,
+                        request.DocumentId,
+                        contractType);
+                }
+                else
+                {
+                    // Không tìm thấy contract cũ - tạo mới (trường hợp hiếm)
+                    var newContract = new Contract
+                    {
+                        Id = Guid.NewGuid(),
+                        CustomerId = null,
+                        DocumentId = request.DocumentId,
+                        ContractNumber = contractData.ContractNumber,
+                        ContractTitle = contractData.ContractTitle,
+                        ContractType = "manager_working_contract",
+                        ServiceScope = "management",
+                        CoverageModel = "fixed_schedule",
+                        StartDate = contractData.StartDate,
+                        EndDate = contractData.EndDate ?? contractData.StartDate.AddMonths(36),
+                        DurationMonths = contractData.DurationMonths,
+                        Status = "signed",
+                        SignedDate = DateTime.UtcNow,
+                        ContractFileUrl = document.FileUrl,
+                        AutoGenerateShifts = false,
+                        GenerateShiftsAdvanceDays = 0,
+                        WorkOnPublicHolidays = true,
+                        WorkOnCustomerClosedDays = true,
+                        FollowsCustomerCalendar = false,
+                        IsDeleted = false,
+                        CreatedAt = DateTime.UtcNow
+                    };
+
+                    await connection.InsertAsync(newContract);
+                    contractId = newContract.Id;
+                    contractType = newContract.ContractType;
+
+                    logger.LogInformation(
+                        "✓ Created new contract for existing manager: ContractId={ContractId}",
+                        contractId);
+                }
+            }
+            else
+            {
+                // User mới - Tạo contract mới
+                var contract = new Contract
+                {
+                    Id = Guid.NewGuid(),
+                    CustomerId = null,
+                    DocumentId = request.DocumentId,
+                    ContractNumber = contractData.ContractNumber,
+                    ContractTitle = contractData.ContractTitle,
+                    ContractType = "manager_working_contract",
+                    ServiceScope = "management",
+                    CoverageModel = "fixed_schedule",
+                    StartDate = contractData.StartDate,
+                    EndDate = contractData.EndDate ?? contractData.StartDate.AddMonths(36),
+                    DurationMonths = contractData.DurationMonths,
+                    Status = "signed",
+                    SignedDate = DateTime.UtcNow,
+                    ContractFileUrl = document.FileUrl,
+                    AutoGenerateShifts = false,
+                    GenerateShiftsAdvanceDays = 0,
+                    WorkOnPublicHolidays = true,
+                    WorkOnCustomerClosedDays = true,
+                    FollowsCustomerCalendar = false,
+                    IsDeleted = false,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                await connection.InsertAsync(contract);
+                contractId = contract.Id;
+                contractType = contract.ContractType;
+
+                logger.LogInformation(
+                    "✓ Created manager working contract: ContractId={ContractId}, Number={Number}, UserId={UserId}",
+                    contractId,
+                    contract.ContractNumber,
+                    userId);
+            }
 
             return new ImportManagerWorkingContractResult
             {
                 Success = true,
-                ContractId = contract.Id,
+                ContractId = contractId,
                 UserId = userId,
-                ContractNumber = contract.ContractNumber,
-                ContractTitle = contract.ContractTitle,
+                ContractNumber = contractData.ContractNumber,
+                ContractTitle = contractData.ContractTitle,
                 EmployeeName = employeeData.FullName,
                 EmployeeEmail = employeeData.Email
             };
@@ -599,6 +772,69 @@ internal class ImportManagerWorkingContractHandler(
         catch
         {
             return false;
+        }
+    }
+
+    /// <summary>
+    ///     Parse Cấp bậc từ document text
+    ///     Pattern: "Cấp bậc: {{{{CertificationLevel}}}}"
+    /// </summary>
+    private string? ParseCertificationLevel(string text)
+    {
+        try
+        {
+            // Pattern 1: "Cấp bậc: {{{{CertificationLevel}}}}"
+            var match = Regex.Match(text, @"Cấp bậc:\s*([IVX]+)", RegexOptions.IgnoreCase);
+            if (match.Success)
+            {
+                var level = match.Groups[1].Value.Trim().ToUpper();
+                logger.LogInformation("✓ Extracted CertificationLevel: {Level}", level);
+                return level;
+            }
+
+            logger.LogWarning("⚠ Failed to extract CertificationLevel from document");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error parsing CertificationLevel");
+            return null;
+        }
+    }
+
+    /// <summary>
+    ///     Parse Mức lương cơ bản từ document text
+    ///     Pattern: "Mức lương cơ bản: {{StandardWage}}VNĐ/tháng"
+    /// </summary>
+    private decimal? ParseStandardWage(string text)
+    {
+        try
+        {
+            // Pattern 1: "Mức lương cơ bản: 6000000VNĐ/tháng"
+            // Pattern 2: "Mức lương cơ bản: 6.000.000VNĐ/tháng"
+            // Pattern 3: "Mức lương cơ bản: 6,000,000VNĐ/tháng"
+            var match = Regex.Match(text, @"Mức lương cơ bản:\s*([\d.,]+)\s*VNĐ", RegexOptions.IgnoreCase);
+            if (match.Success)
+            {
+                var wageString = match.Groups[1].Value
+                    .Replace(".", "")
+                    .Replace(",", "")
+                    .Trim();
+
+                if (decimal.TryParse(wageString, out var wage))
+                {
+                    logger.LogInformation("✓ Extracted StandardWage: {Wage} VNĐ", wage);
+                    return wage;
+                }
+            }
+
+            logger.LogWarning("⚠ Failed to extract StandardWage from document");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error parsing StandardWage");
+            return null;
         }
     }
 

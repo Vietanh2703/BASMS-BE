@@ -25,7 +25,6 @@ public record CreateUserRequest
     public int? BirthMonth { get; init; }
     public int? BirthYear { get; init; }
     public string RoleName { get; init; } = "customer";  // Default role: customer, guard, manager, admin
-    public Guid? RoleId { get; init; }  // Có thể dùng RoleId thay cho RoleName
     public string? AvatarUrl { get; init; }
     public string AuthProvider { get; init; } = "email";  // email, google, facebook
     public string Status { get; init; } = "active";
@@ -93,4 +92,69 @@ public record UpdateGuardInfoEvent
     public string? CertificationLevel { get; init; } // Hạng chứng chỉ: I, II, III, IV, V, VI
     public decimal? StandardWage { get; init; } // Mức lương cơ bản (VNĐ/tháng)
     public DateTime UpdatedAt { get; init; } = DateTime.UtcNow;
+}
+
+// ================================================================
+// UPDATE MANAGER INFO EVENT
+// ================================================================
+
+/// <summary>
+/// Event để update thông tin Manager (CertificationLevel, StandardWage)
+/// Published by Contracts.API sau khi import manager working contract
+/// Consumed by Shifts.API để update Manager record
+/// </summary>
+public record UpdateManagerInfoEvent
+{
+    public Guid ManagerId { get; init; }
+    public string? Email { get; init; }
+    public string? CertificationLevel { get; init; } // Hạng chứng chỉ: I, II, III, IV, V, VI
+    public decimal? StandardWage { get; init; } // Mức lương cơ bản (VNĐ/tháng)
+    public DateTime UpdatedAt { get; init; } = DateTime.UtcNow;
+}
+
+// ================================================================
+// DEACTIVATE USER EVENT
+// ================================================================
+
+/// <summary>
+/// Event để deactivate user khi contract hết hạn
+/// Published by Contracts.API
+/// Consumed by Users.API
+/// </summary>
+public record DeactivateUserEvent
+{
+    public string Email { get; init; } = string.Empty;
+    public string UserType { get; init; } = string.Empty; // "manager", "guard", "customer"
+    public string Reason { get; init; } = string.Empty; // "Contract expired"
+    public DateTime DeactivatedAt { get; init; } = DateTime.UtcNow;
+}
+
+// ================================================================
+// DEACTIVATE MANAGER/GUARD EVENTS
+// ================================================================
+
+/// <summary>
+/// Event để deactivate Manager khi contract hết hạn
+/// Published by Contracts.API
+/// Consumed by Shifts.API
+/// </summary>
+public record DeactivateManagerEvent
+{
+    public Guid ManagerId { get; init; }
+    public string? Email { get; init; }
+    public string Reason { get; init; } = string.Empty;
+    public DateTime DeactivatedAt { get; init; } = DateTime.UtcNow;
+}
+
+/// <summary>
+/// Event để deactivate Guard khi contract hết hạn
+/// Published by Contracts.API
+/// Consumed by Shifts.API
+/// </summary>
+public record DeactivateGuardEvent
+{
+    public Guid GuardId { get; init; }
+    public string? Email { get; init; }
+    public string Reason { get; init; } = string.Empty;
+    public DateTime DeactivatedAt { get; init; } = DateTime.UtcNow;
 }
