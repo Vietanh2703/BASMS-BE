@@ -121,6 +121,70 @@ public class Guards
     public Guid? DirectManagerId { get; set; }
 
     // ============================================================================
+    // CẤP BẬC NGHIỆP VỤ (Security Certification)
+    // ============================================================================
+
+    /// <summary>
+    /// Hạng chứng chỉ nghiệp vụ: I, II, III, IV, V, VI
+    /// Theo Nghị định 96/2016/NĐ-CP
+    /// </summary>
+    public string? CertificationLevel { get; set; }
+
+    /// <summary>
+    /// Số chứng chỉ nghiệp vụ bảo vệ
+    /// Ví dụ: "BV-123456-2024"
+    /// </summary>
+    public string? CertificationNumber { get; set; }
+
+    /// <summary>
+    /// Ngày cấp chứng chỉ
+    /// </summary>
+    public DateTime? CertificationIssuedDate { get; set; }
+
+    /// <summary>
+    /// Ngày hết hạn chứng chỉ (thường 5 năm)
+    /// Hệ thống cần cảnh báo trước 3 tháng khi sắp hết hạn
+    /// </summary>
+    public DateTime? CertificationExpiryDate { get; set; }
+
+    /// <summary>
+    /// Cơ quan cấp chứng chỉ
+    /// Ví dụ: "Sở Công An TP.HCM", "Sở Công An Hà Nội"
+    /// </summary>
+    public string? CertificationIssuedBy { get; set; }
+
+    /// <summary>
+    /// Số năm kinh nghiệm làm bảo vệ
+    /// Tính từ HireDate hoặc từ ngày có chứng chỉ hạng I
+    /// </summary>
+    public int YearsOfExperience { get; set; } = 0;
+
+    // ============================================================================
+    // TÀI LIỆU & HÌNH ẢNH (Documents & Images)
+    // ============================================================================
+
+    /// <summary>
+    /// URL file chứng chỉ nghiệp vụ (S3)
+    /// Có thể là PDF hoặc ảnh scan
+    /// Ví dụ: "s3://basms/guards/certificates/guard-123-cert.pdf"
+    /// </summary>
+    public string? CertificationFileUrl { get; set; }
+
+    /// <summary>
+    /// URL ảnh CCCD mặt trước (S3)
+    /// Dùng cho xác minh danh tính
+    /// Ví dụ: "s3://basms/guards/identity/guard-123-front.jpg"
+    /// </summary>
+    public string? IdentityCardFrontUrl { get; set; }
+
+    /// <summary>
+    /// URL ảnh CCCD mặt sau (S3)
+    /// Dùng cho xác minh danh tính
+    /// Ví dụ: "s3://basms/guards/identity/guard-123-back.jpg"
+    /// </summary>
+    public string? IdentityCardBackUrl { get; set; }
+
+    // ============================================================================
     // SỞ THÍCH LÀM VIỆC (để gợi ý shifts phù hợp)
     // ============================================================================
 

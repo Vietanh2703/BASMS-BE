@@ -202,6 +202,41 @@ public class Contract
     public string? Notes { get; set; }
 
     // ============================================================================
+    // THÔNG TIN TIỀN CÔNG (CHỈ DÙNG CHO WORKING_CONTRACT)
+    // ============================================================================
+
+    /// <summary>
+    /// Tiền công cơ bản ghi trong hợp đồng lao động (VNĐ/tháng)
+    /// CHỈ DÙNG cho working_contract và manager_working_contract
+    /// NULL cho service contracts
+    /// Ví dụ: 7.500.000
+    /// Pattern extract: "Tiền lương: 7.000.000 đồng/tháng"
+    /// </summary>
+    public decimal? MonthlyWage { get; set; }
+
+    /// <summary>
+    /// Số tiền ghi bằng chữ (kèm từ "chẵn")
+    /// Ví dụ: "Bảy triệu năm trăm nghìn đồng chẵn"
+    /// Dùng để in vào hợp đồng chính thức
+    /// </summary>
+    public string? MonthlyWageInWords { get; set; }
+
+    /// <summary>
+    /// Hạng chứng chỉ nghiệp vụ ghi trong hợp đồng
+    /// CHỈ DÙNG cho working_contract (Guards)
+    /// Ví dụ: "II", "III"
+    /// Pattern extract: "Hạng chứng chỉ: II" hoặc "Bảo vệ hạng II"
+    /// </summary>
+    public string? CertificationLevel { get; set; }
+
+    /// <summary>
+    /// Chức danh công việc ghi trong hợp đồng
+    /// Ví dụ: "Bảo vệ thường", "Trưởng ca", "Trưởng phòng vận hành"
+    /// Pattern extract: "Chức danh: Bảo vệ thường" hoặc "Vị trí: Trưởng ca"
+    /// </summary>
+    public string? JobTitle { get; set; }
+
+    // ============================================================================
     // METADATA
     // ============================================================================
 

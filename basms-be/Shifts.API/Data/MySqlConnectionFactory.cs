@@ -150,6 +150,19 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     -- Management
                     `DirectManagerId` CHAR(36) NULL,
 
+                    -- Certification & Professional Level
+                    `CertificationLevel` VARCHAR(10) NULL COMMENT 'Hạng chứng chỉ: I, II, III, IV, V, VI',
+                    `CertificationNumber` VARCHAR(100) NULL COMMENT 'Số chứng chỉ nghiệp vụ',
+                    `CertificationIssuedDate` DATETIME NULL COMMENT 'Ngày cấp chứng chỉ',
+                    `CertificationExpiryDate` DATETIME NULL COMMENT 'Ngày hết hạn chứng chỉ (5 năm)',
+                    `CertificationIssuedBy` VARCHAR(255) NULL COMMENT 'Cơ quan cấp: Sở Công An...',
+                    `YearsOfExperience` INT NOT NULL DEFAULT 0 COMMENT 'Số năm kinh nghiệm',
+
+                    -- Documents & Images (S3 URLs)
+                    `CertificationFileUrl` TEXT NULL COMMENT 'URL file chứng chỉ (PDF/image)',
+                    `IdentityCardFrontUrl` TEXT NULL COMMENT 'URL ảnh CCCD mặt trước',
+                    `IdentityCardBackUrl` TEXT NULL COMMENT 'URL ảnh CCCD mặt sau',
+
                     -- Preferences
                     `PreferredShiftType` VARCHAR(50) NULL,
                     `PreferredLocations` TEXT NULL,
@@ -547,6 +560,93 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     INDEX `idx_conflicts_severity` (`Severity`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
             ");
+
+            // ============================================================================
+            // 10. WAGE_RATES TABLE (Mức tiền công chuẩn theo cấp bậc)
+            // ============================================================================
+            await connection.ExecuteAsync(@"
+                CREATE TABLE IF NOT EXISTS `wage_rates` (
+                    `Id` CHAR(36) PRIMARY KEY,
+
+                    -- Cấp bậc
+                    `CertificationLevel` VARCHAR(10) NOT NULL COMMENT 'Hạng chứng chỉ: I, II, III, IV, V, VI',
+
+                    -- Tiền công cơ bản (VNĐ/tháng - làm 192 giờ/tháng chuẩn)
+                    `MinWage` DECIMAL(15,2) NOT NULL COMMENT 'Mức tối thiểu',
+                    `MaxWage` DECIMAL(15,2) NOT NULL COMMENT 'Mức tối đa',
+                    `StandardWage` DECIMAL(15,2) NOT NULL COMMENT 'Mức chuẩn (gợi ý khi tạo HĐ)',
+                    `StandardWageInWords` TEXT NULL COMMENT 'Số tiền chuẩn bằng chữ: Sáu triệu đồng chẵn',
+                    `Currency` VARCHAR(10) NOT NULL DEFAULT 'VNĐ' COMMENT 'Đơn vị tính: VNĐ, USD...',
+
+                    -- Mô tả
+                    `Description` TEXT NULL COMMENT 'Mô tả chi tiết về cấp bậc và nhiệm vụ',
+
+                    -- Thời gian hiệu lực (để theo dõi lịch sử tăng lương)
+                    `EffectiveFrom` DATE NOT NULL COMMENT 'Ngày bắt đầu áp dụng',
+                    `EffectiveTo` DATE NULL COMMENT 'Ngày kết thúc áp dụng (NULL = đang áp dụng)',
+
+                    -- Ghi chú
+                    `Notes` TEXT NULL COMMENT 'Ghi chú về mức lương',
+
+                    -- Metadata
+                    `IsActive` BOOLEAN NOT NULL DEFAULT TRUE,
+                    `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    `UpdatedAt` DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
+                    `CreatedBy` CHAR(36) NULL,
+                    `UpdatedBy` CHAR(36) NULL,
+
+                    UNIQUE KEY `unique_level_date` (`CertificationLevel`, `EffectiveFrom`),
+                    INDEX `idx_wage_rates_level_active` (`CertificationLevel`, `IsActive`, `EffectiveFrom`),
+                    INDEX `idx_wage_rates_effective` (`EffectiveFrom`, `EffectiveTo`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                COMMENT='Bảng mức tiền công chuẩn theo cấp bậc bảo vệ';
+            ");
+
+            // ============================================================================
+            // 11. INSERT DỮ LIỆU MẪU CHO WAGE_RATES (Mức lương thị trường 2025)
+            // ============================================================================
+            await connection.ExecuteAsync(@"
+                INSERT IGNORE INTO `wage_rates`
+                (`Id`, `CertificationLevel`, `MinWage`, `MaxWage`, `StandardWage`, `StandardWageInWords`, `Currency`, `Description`, `EffectiveFrom`, `Notes`, `IsActive`, `CreatedAt`)
+                VALUES
+                ('010507b3-5eba-4c03-8269-f915f87e0651', 'I', 5500000.00, 6500000.00, 6000000.00,
+                 'Sáu triệu đồng chẵn', 'VNĐ',
+                 'Bảo vệ hạng I - Bảo vệ thường, canh gác đơn giản, không yêu cầu kinh nghiệm',
+                 '2025-01-01', 'Mức cơ bản cho bảo vệ mới vào nghề', TRUE,
+                 CONVERT_TZ('2025-01-01 00:00:00', '+00:00', '+07:00')),
+
+                ('4c3bee0d-84a3-4125-ad11-0e8abc4f4ada', 'II', 7000000.00, 8500000.00, 7500000.00,
+                 'Bảy triệu năm trăm nghìn đồng chẵn', 'VNĐ',
+                 'Bảo vệ hạng II - Bảo vệ trọng điểm, trưởng ca, có ít nhất 1 năm kinh nghiệm',
+                 '2025-01-01', 'Phù hợp cho trưởng ca, bảo vệ địa điểm quan trọng', TRUE,
+                 CONVERT_TZ('2025-01-01 00:00:00', '+00:00', '+07:00')),
+
+                ('3642fc11-968b-4004-8bfe-dd14a1f3429e', 'III', 9000000.00, 11000000.00, 10000000.00,
+                 'Mười triệu đồng chẵn', 'VNĐ',
+                 'Bảo vệ hạng III - Trưởng đội, giám sát địa điểm, có ít nhất 2 năm kinh nghiệm',
+                 '2025-01-01', 'Quản lý team 5-10 người, giám sát 1 địa điểm', TRUE,
+                 CONVERT_TZ('2025-01-01 00:00:00', '+00:00', '+07:00')),
+
+                ('52195235-dae4-4e5a-8cfc-900e1eb099b9', 'IV', 12000000.00, 14000000.00, 13000000.00,
+                 'Mười ba triệu đồng chẵn', 'VNĐ',
+                 'Bảo vệ hạng IV - Quản lý nhiều địa điểm, đào tạo nâng cao',
+                 '2025-01-01', 'Quản lý 2-3 địa điểm, có thể đào tạo bảo vệ mới', TRUE,
+                 CONVERT_TZ('2025-01-01 00:00:00', '+00:00', '+07:00')),
+
+                ('0ac4b24d-6c98-4e72-929d-da2180541e91', 'V', 15000000.00, 18000000.00, 16500000.00,
+                 'Mười sáu triệu năm trăm nghìn đồng chẵn', 'VNĐ',
+                 'Bảo vệ hạng V - Quản lý vùng, điều phối, có bằng cao đẳng an ninh + 5 năm',
+                 '2025-01-01', 'Quản lý khu vực, điều phối nhiều team', TRUE,
+                 CONVERT_TZ('2025-01-01 00:00:00', '+00:00', '+07:00')),
+
+                ('1c778afc-a39b-4d9e-8d55-acd5dcf5cb08', 'VI', 20000000.00, 30000000.00, 25000000.00,
+                 'Hai mươi lăm triệu đồng chẵn', 'VNĐ',
+                 'Bảo vệ hạng VI - Giám đốc vận hành, có bằng đại học an ninh + 7 năm',
+                 '2025-01-01', 'C-level, chiến lược, quản lý toàn bộ hoạt động', TRUE,
+                 CONVERT_TZ('2025-01-01 00:00:00', '+00:00', '+07:00'));
+            ");
+
+            Console.WriteLine("✓ Wage rates table created with sample data (6 levels)");
 
             _tablesCreated = true;
             Console.WriteLine("✓ All tables created successfully");
