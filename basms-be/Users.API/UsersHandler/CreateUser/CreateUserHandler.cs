@@ -1,9 +1,5 @@
-﻿// Handler xử lý logic tạo user mới
-// Thực hiện: Validate -> Tạo Firebase account -> Lưu database -> Gửi email -> Log audit
+﻿namespace Users.API.UsersHandler.CreateUser;
 
-namespace Users.API.UsersHandler.CreateUser;
-
-// Command chứa dữ liệu để tạo user - được gửi từ Endpoint đến Handler
 public record CreateUserCommand(
     string IdentityNumber,
     DateTime IdentityIssueDate,
@@ -23,31 +19,25 @@ public record CreateUserCommand(
     string AuthProvider = "email"
 ) : ICommand<CreateUserResult>;
 
-// Result trả về từ Handler cho Endpoint
 public record CreateUserResult(Guid Id, string FirebaseUid, string Email);
 
 public class CreateUserHandler(
-    IDbConnectionFactory connectionFactory,  // Factory để tạo kết nối database
-    ILogger<CreateUserHandler> logger,       // Logger để ghi log
-    CreateUserValidator validator,          // Validator để kiểm tra dữ liệu đầu vào
-    EmailHandler emailHandler,              // Handler để gửi email
-    Users.API.Messaging.UserEventPublisher eventPublisher)  // Publisher để gửi events đến RabbitMQ
+    IDbConnectionFactory connectionFactory,  
+    ILogger<CreateUserHandler> logger,       
+    CreateUserValidator validator,          
+    EmailHandler emailHandler,             
+    Messaging.UserEventPublisher eventPublisher) 
     : ICommandHandler<CreateUserCommand, CreateUserResult>
 {
     public async Task<CreateUserResult> Handle(CreateUserCommand command, CancellationToken cancellationToken)
 {
-    // Bước 1: Validate dữ liệu đầu vào bằng FluentValidation
     var validationResult = await validator.ValidateAsync(command, cancellationToken);
     if (!validationResult.IsValid)
     {
         var errors = string.Join(", ", validationResult.Errors.Select(e => e.ErrorMessage));
         throw new InvalidOperationException($"Validation failed: {errors}");
     }
-
-    // Bước 2: Đảm bảo tất cả bảng database đã được tạo
     await connectionFactory.EnsureTablesCreatedAsync();
-
-    // Bước 3: TẠO FIREBASE USER TRƯỚC
     UserRecord firebaseUser = null;
     try
     {
@@ -62,13 +52,11 @@ public class CreateUserHandler(
 
     try
     {
-        // Bước 4: Tạo kết nối database và bắt đầu transaction
         using var connection = await connectionFactory.CreateConnectionAsync();
         using var transaction = connection.BeginTransaction();
 
         try
         {
-            // Bước 5: Kiểm tra email đã tồn tại chưa
             var existingUsers = await connection.GetAllAsync<Models.Users>(transaction);
             var existingUser = existingUsers.FirstOrDefault(u =>
                 u.Email == command.Email && !u.IsDeleted);
@@ -77,11 +65,7 @@ public class CreateUserHandler(
             {
                 throw new InvalidOperationException($"Email {command.Email} already exists");
             }
-
-            // Bước 6: Lấy hoặc tạo role mặc định
             Guid roleId = command.RoleId ?? await GetDefaultRoleIdAsync(connection, transaction);
-
-            // Bước 7: Tự động tính toán các trường ngày sinh
             int? birthDay = command.BirthDay;
             int? birthMonth = command.BirthMonth;
             int? birthYear = command.BirthYear;
@@ -92,17 +76,12 @@ public class CreateUserHandler(
                 birthMonth = command.DateOfBirth.Value.Month;
                 birthYear = command.DateOfBirth.Value.Year;
             }
-
-            // Bước 8: Xác định IsActive dựa trên RoleId
-            // RoleId ddbd630a-ba6e-11f0-bcac-00155dca8f48 (customer role) cần admin activate
             var customerRoleId = Guid.Parse("ddbd630a-ba6e-11f0-bcac-00155dca8f48");
-            var isActive = roleId != customerRoleId; // Customer = false, các role khác = true
+            var isActive = roleId != customerRoleId;
 
             logger.LogInformation(
                 "Creating user with RoleId: {RoleId}, IsActive: {IsActive}",
                 roleId, isActive);
-
-            // Bước 9: Tạo entity User với FirebaseUid đã có
             var user = new Models.Users
             {
                 Id = Guid.NewGuid(),
@@ -129,27 +108,22 @@ public class CreateUserHandler(
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
-
-            // Bước 9: INSERT user vào database
+            
             await connection.InsertAsync(user, transaction);
             logger.LogDebug("User inserted into database: {UserId}", user.Id);
-
-            // Bước 10: Ghi log audit trail
+            
             await LogAuditAsync(connection, transaction, user);
             logger.LogDebug("Audit log created for user: {UserId}", user.Id);
-
-            // Bước 11: Commit transaction
+            
             transaction.Commit();
             logger.LogDebug("Transaction committed successfully for user: {UserId}", user.Id);
 
-            // Bước 12: Lấy thông tin role để publish event
             var role = await connection.GetAsync<Roles>(roleId);
             if (role == null)
             {
                 logger.LogWarning("Role not found with ID {RoleId} for user {UserId}", roleId, user.Id);
             }
 
-            // Bước 13: Publish UserCreatedEvent to RabbitMQ
             if (role != null)
             {
                 try
@@ -163,7 +137,6 @@ public class CreateUserHandler(
                 }
             }
 
-            // Bước 14: Gửi email chào mừng
             try
             {
                 await emailHandler.SendWelcomeEmailAsync(user.FullName, user.Email, command.Password);
@@ -188,7 +161,6 @@ public class CreateUserHandler(
     }
     catch (Exception ex)
     {
-        // NẾU DATABASE LỖI, XÓA FIREBASE USER ĐÃ TẠO
         if (firebaseUser != null)
         {
             try
@@ -206,40 +178,30 @@ public class CreateUserHandler(
         throw;
     }
 }
-
-
-
-    // Hàm tạo user trên Firebase Authentication
+    
     private async Task<UserRecord> CreateFirebaseUserAsync(CreateUserCommand command)
     {
         try
         {
-            // Kiểm tra FirebaseAuth đã được khởi tạo chưa
             var firebaseAuth = FirebaseAuth.DefaultInstance;
             if (firebaseAuth == null)
             {
                 logger.LogError("FirebaseAuth.DefaultInstance is null. Firebase may not be initialized properly.");
                 throw new InvalidOperationException("Firebase Authentication is not initialized. Please check Firebase configuration.");
             }
-
-            // Chuẩn bị dữ liệu để tạo user trên Firebase
             var userRecordArgs = new UserRecordArgs
             {
                 Email = command.Email,
                 Password = command.Password,
                 DisplayName = command.FullName,
                 PhotoUrl = command.AvatarUrl,
-                EmailVerified = false,  // Email chưa được xác thực
-                Disabled = false        // Tài khoản không bị vô hiệu hóa
+                EmailVerified = false, 
+                Disabled = false        
             };
-
-            // Thêm số điện thoại nếu có
             if (!string.IsNullOrEmpty(command.Phone))
             {
                 userRecordArgs.PhoneNumber = command.Phone;
             }
-
-            // Gọi Firebase API để tạo user
             return await firebaseAuth.CreateUserAsync(userRecordArgs);
         }
         catch (ArgumentNullException ex)
@@ -253,8 +215,6 @@ public class CreateUserHandler(
             throw;
         }
     }
-
-    // Hàm lấy role mặc định "guard" từ database
     private async Task<Guid> GetDefaultRoleIdAsync(IDbConnection connection, IDbTransaction transaction)
     {
         var roles = await connection.GetAllAsync<Roles>(transaction);
@@ -267,19 +227,16 @@ public class CreateUserHandler(
 
         return defaultRole.Id;
     }
-
-    // Hàm ghi log audit trail vào database
-    // Lưu lại hành động CREATE_USER để theo dõi và audit
     private async Task LogAuditAsync(IDbConnection connection, IDbTransaction transaction, Models.Users user)
     {
         var auditLog = new AuditLogs
         {
             Id = Guid.NewGuid(),
             UserId = user.Id,
-            Action = "CREATE_USER",          // Loại hành động
-            EntityType = "User",             // Loại entity
-            EntityId = user.Id,              // ID của entity
-            NewValues = System.Text.Json.JsonSerializer.Serialize(new  // Giá trị mới (JSON)
+            Action = "CREATE_USER",          
+            EntityType = "User",             
+            EntityId = user.Id,              
+            NewValues = JsonSerializer.Serialize(new 
             {
                 user.IdentityNumber,
                 user.Email,
@@ -288,13 +245,11 @@ public class CreateUserHandler(
                 user.Status,
                 user.FirebaseUid
             }),
-            IpAddress = null,                // IP address (có thể thêm sau)
-            Status = "success",              // Trạng thái thành công
+            IpAddress = null,               
+            Status = "success",              
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
-
-        // INSERT audit log vào database
         await connection.InsertAsync(auditLog, transaction);
     }
 }

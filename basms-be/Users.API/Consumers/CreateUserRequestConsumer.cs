@@ -10,8 +10,7 @@ namespace Users.API.Consumers;
 public class CreateUserRequestConsumer(
     IDbConnectionFactory connectionFactory,
     ILogger<CreateUserRequestConsumer> logger,
-    Users.API.Extensions.EmailHandler emailHandler,
-    Users.API.Messaging.UserEventPublisher eventPublisher)
+    Messaging.UserEventPublisher eventPublisher)
     : IConsumer<CreateUserRequest>
 {
     public async Task Consume(ConsumeContext<CreateUserRequest> context)
@@ -161,7 +160,7 @@ public class CreateUserRequestConsumer(
                     Action = "CREATE_USER_VIA_REQUEST",
                     EntityType = "User",
                     EntityId = user.Id,
-                    NewValues = System.Text.Json.JsonSerializer.Serialize(new
+                    NewValues = JsonSerializer.Serialize(new
                     {
                         user.Email,
                         user.FullName,

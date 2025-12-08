@@ -53,7 +53,7 @@ public class CreateUserEndpoint : ICarterModule
             // Location header chứa URL để lấy thông tin user vừa tạo
             return Results.Created($"/users/{response.Id}", response);
         })
-        .AllowAnonymous()  // Explicitly allow anonymous access for user registration
+        .RequireAuthorization()
         .WithTags("Users")  
         .WithName("CreateUser")  
         .Produces<CreateUserResponse>(StatusCodes.Status201Created)  // Thành công
