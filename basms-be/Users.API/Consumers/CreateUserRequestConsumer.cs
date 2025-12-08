@@ -114,26 +114,35 @@ public class CreateUserRequestConsumer(
 
             try
             {
+                // Xác định IsActive dựa trên RoleId
+                // RoleId ddbd630a-ba6e-11f0-bcac-00155dca8f48 (customer role) cần admin activate
+                var customerRoleId = Guid.Parse("ddbd630a-ba6e-11f0-bcac-00155dca8f48");
+                var isActive = role.Id != customerRoleId; // Customer = false, các role khác = true
+
+                logger.LogInformation(
+                    "Creating user via request with RoleId: {RoleId} ({RoleName}), IsActive: {IsActive}",
+                    role.Id, role.Name, isActive);
+
                 var user = new Models.Users
                 {
                     Id = Guid.NewGuid(),
                     IdentityNumber = request.IdentityNumber,
                     IdentityIssueDate = request.IdentityIssueDate ?? DateTime.UtcNow,
-                    IdentityIssuePlace = request.IdentityIssuePlace ?? string.Empty, 
+                    IdentityIssuePlace = request.IdentityIssuePlace ?? string.Empty,
                     FirebaseUid = firebaseUser.Uid,
                     Email = request.Email,
                     FullName = request.FullName,
                     Phone = request.Phone,
                     Gender = request.Gender,
                     Address = request.Address,
-                    BirthDay = request.BirthDay, 
-                    BirthMonth = request.BirthMonth, 
+                    BirthDay = request.BirthDay,
+                    BirthMonth = request.BirthMonth,
                     BirthYear = request.BirthYear,
                     RoleId = role.Id,
                     AvatarUrl = request.AvatarUrl,
                     AuthProvider = request.AuthProvider,
                     Status = "active",
-                    IsActive = false,
+                    IsActive = isActive,
                     IsDeleted = false,
                     LoginCount = 0,
                     Password = BCrypt.Net.BCrypt.HashPassword(request.Password),

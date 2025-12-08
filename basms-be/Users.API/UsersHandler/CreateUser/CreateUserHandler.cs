@@ -93,7 +93,16 @@ public class CreateUserHandler(
                 birthYear = command.DateOfBirth.Value.Year;
             }
 
-            // Bước 8: Tạo entity User với FirebaseUid đã có
+            // Bước 8: Xác định IsActive dựa trên RoleId
+            // RoleId ddbd630a-ba6e-11f0-bcac-00155dca8f48 (customer role) cần admin activate
+            var customerRoleId = Guid.Parse("ddbd630a-ba6e-11f0-bcac-00155dca8f48");
+            var isActive = roleId != customerRoleId; // Customer = false, các role khác = true
+
+            logger.LogInformation(
+                "Creating user with RoleId: {RoleId}, IsActive: {IsActive}",
+                roleId, isActive);
+
+            // Bước 9: Tạo entity User với FirebaseUid đã có
             var user = new Models.Users
             {
                 Id = Guid.NewGuid(),
@@ -113,7 +122,7 @@ public class CreateUserHandler(
                 AvatarUrl = command.AvatarUrl,
                 AuthProvider = command.AuthProvider,
                 Status = "active",
-                IsActive = false,
+                IsActive = isActive,
                 IsDeleted = false,
                 LoginCount = 0,
                 Password = BCrypt.Net.BCrypt.HashPassword(command.Password),
