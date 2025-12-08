@@ -141,7 +141,7 @@ public class UserCreatedConsumer : IConsumer<UserCreatedEvent>
                 CompanySize = null,
 
                 CustomerSince = DateTime.UtcNow,
-                Status = "active",
+                Status = "in-active",
                 FollowsNationalHolidays = true,
                 Notes = "Auto-created from Users Service",
 
@@ -227,7 +227,7 @@ public class UserCreatedConsumer : IConsumer<UserCreatedEvent>
         string? fieldsChangedJson = null;
         if (!customerAlreadyExists)
         {
-            fieldsChangedJson = System.Text.Json.JsonSerializer.Serialize(new[] { "CompanyName", "Email", "Phone", "Address", "ContactPersonName" });
+            fieldsChangedJson = JsonSerializer.Serialize(new[] { "CompanyName", "Email", "Phone", "Address", "ContactPersonName" });
         }
 
         var log = new CustomerSyncLog
@@ -237,7 +237,7 @@ public class UserCreatedConsumer : IConsumer<UserCreatedEvent>
             SyncType = "CREATE",
             SyncStatus = status,
             FieldsChanged = fieldsChangedJson,
-            NewValues = status == "SUCCESS" && !customerAlreadyExists ? System.Text.Json.JsonSerializer.Serialize(new
+            NewValues = status == "SUCCESS" && !customerAlreadyExists ? JsonSerializer.Serialize(new
             {
                 CompanyName = @event.FullName,
                 Email = @event.Email,

@@ -140,15 +140,22 @@ public class CreateUserHandler(
             {
                 logger.LogError(eventEx, "Failed to publish UserCreatedEvent for user {UserId}, but user was created successfully", user.Id);
             }
-
-            try
+            var customerRoleIdForEmail = Guid.Parse("ddbd630a-ba6e-11f0-bcac-00155dca8f48");
+            if (roleId != customerRoleIdForEmail)
             {
-                await emailHandler.SendWelcomeEmailAsync(user.FullName, user.Email, command.Password);
-                logger.LogInformation("Welcome email sent successfully to {Email}", user.Email);
+                try
+                {
+                    await emailHandler.SendWelcomeEmailAsync(user.FullName, user.Email, command.Password);
+                    logger.LogInformation("Welcome email sent successfully to {RoleName}: {Email}", role.Name, user.Email);
+                }
+                catch (Exception emailEx)
+                {
+                    logger.LogError(emailEx, "Failed to send welcome email to {Email}, but user was created successfully", user.Email);
+                }
             }
-            catch (Exception emailEx)
+            else
             {
-                logger.LogError(emailEx, "Failed to send welcome email to {Email}, but user was created successfully", user.Email);
+                logger.LogInformation("Skipping welcome email for customer: {Email} (customer needs admin activation)", user.Email);
             }
 
             logger.LogInformation("User created successfully: {Email}, FirebaseUid: {FirebaseUid}",
