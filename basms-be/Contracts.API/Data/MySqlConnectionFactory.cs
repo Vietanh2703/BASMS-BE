@@ -91,7 +91,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     `Id` CHAR(36) PRIMARY KEY,
                     `UserId` CHAR(36) UNIQUE NOT NULL COMMENT 'Link to Users Service',
                     `CustomerCode` VARCHAR(50) UNIQUE NOT NULL COMMENT 'CUST-001',
-                    `CompanyName` VARCHAR(255) NOT NULL,
+                    `CompanyName` VARCHAR(255) NULL,
                     `ContactPersonName` VARCHAR(255) NOT NULL,
                     `ContactPersonTitle` VARCHAR(100) NULL,
                     `IdentityNumber` VARCHAR(12) NOT NULL UNIQUE,
