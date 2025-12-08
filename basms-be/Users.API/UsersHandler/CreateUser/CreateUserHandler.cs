@@ -113,7 +113,7 @@ public class CreateUserHandler(
                 AvatarUrl = command.AvatarUrl,
                 AuthProvider = command.AuthProvider,
                 Status = "active",
-                IsActive = true,
+                IsActive = false,
                 IsDeleted = false,
                 LoginCount = 0,
                 Password = BCrypt.Net.BCrypt.HashPassword(command.Password),

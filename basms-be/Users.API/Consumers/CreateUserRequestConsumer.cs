@@ -133,7 +133,7 @@ public class CreateUserRequestConsumer(
                     AvatarUrl = request.AvatarUrl,
                     AuthProvider = request.AuthProvider,
                     Status = "active",
-                    IsActive = true,
+                    IsActive = false,
                     IsDeleted = false,
                     LoginCount = 0,
                     Password = BCrypt.Net.BCrypt.HashPassword(request.Password),
