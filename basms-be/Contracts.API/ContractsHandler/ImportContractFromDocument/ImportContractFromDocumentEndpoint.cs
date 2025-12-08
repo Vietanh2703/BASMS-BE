@@ -4,13 +4,11 @@ namespace Contracts.API.ContractsHandler.ImportContractFromDocument;
 
 /// <summary>
 /// Request để import contract từ document đã upload
+/// Email, IdentityNumber, PhoneNumber sẽ được extract từ document
 /// </summary>
 public record ImportContractFromDocumentRequest
 {
     public Guid DocumentId { get; init; }
-    public string Email { get; init; } = string.Empty;
-    public string? IdentityNumber { get; init; }
-    public string? PhoneNumber { get; init; }
 }
 
 /// <summary>
@@ -39,27 +37,13 @@ public class ImportContractFromDocumentEndpoint : ICarterModule
                         });
                     }
 
-                    // Validate Email (required)
-                    if (string.IsNullOrWhiteSpace(request.Email))
-                    {
-                        return Results.BadRequest(new
-                        {
-                            success = false,
-                            message = "Email is required to identify customer"
-                        });
-                    }
-
                     logger.LogInformation(
-                        "Importing contract from DocumentId: {DocumentId} for customer Email: {Email}",
-                        request.DocumentId,
-                        request.Email);
+                        "Importing contract from DocumentId: {DocumentId} (will extract customer info from document)",
+                        request.DocumentId);
 
-                    // Tạo command và gửi
+                    // Tạo command và gửi (chỉ cần DocumentId, các thông tin khác sẽ extract từ document)
                     var command = new ImportContractFromDocumentCommand(
-                        DocumentId: request.DocumentId,
-                        Email: request.Email,
-                        IdentityNumber: request.IdentityNumber,
-                        PhoneNumber: request.PhoneNumber
+                        DocumentId: request.DocumentId
                     );
 
                     var result = await sender.Send(command);

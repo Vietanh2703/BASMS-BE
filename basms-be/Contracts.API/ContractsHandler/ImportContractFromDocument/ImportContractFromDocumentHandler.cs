@@ -6,13 +6,10 @@ namespace Contracts.API.ContractsHandler.ImportContractFromDocument;
 
 /// <summary>
 ///     Command để import contract từ document đã upload trên S3
-///     Lấy file từ S3, parse information, and save to database
+///     Email, IdentityNumber, PhoneNumber sẽ được extract từ document
 /// </summary>
 public record ImportContractFromDocumentCommand(
-    Guid DocumentId,
-    string Email,
-    string? IdentityNumber,
-    string? PhoneNumber
+    Guid DocumentId
 ) : ICommand<ImportContractFromDocumentResult>;
 
 /// <summary>
@@ -76,30 +73,6 @@ internal class ImportContractFromDocumentHandler(
 
             logger.LogInformation("Found document: {DocumentName} at {FileUrl}", document.DocumentName,
                 document.FileUrl);
-
-            // ================================================================
-            // BƯỚC 0.5: VALIDATE CUSTOMER TỒN TẠI
-            // ================================================================
-            logger.LogInformation("Validating customer existence with Email: {Email}, IdentityNumber: {IdentityNumber}, PhoneNumber: {PhoneNumber}",
-                request.Email, request.IdentityNumber, request.PhoneNumber);
-
-            var customer = await FindExistingCustomerAsync(connection, request.Email, request.IdentityNumber, request.PhoneNumber);
-
-            if (customer == null)
-            {
-                logger.LogWarning("Customer not found with provided Email: {Email}, IdentityNumber: {IdentityNumber}, PhoneNumber: {PhoneNumber}",
-                    request.Email, request.IdentityNumber, request.PhoneNumber);
-
-                return new ImportContractFromDocumentResult
-                {
-                    Success = false,
-                    ErrorMessage = $"Khách hàng không tồn tại trong hệ thống. Vui lòng tạo khách hàng trước khi import hợp đồng. " +
-                                   $"(Email: {request.Email}, CCCD: {request.IdentityNumber ?? "N/A"}, Phone: {request.PhoneNumber ?? "N/A"})"
-                };
-            }
-
-            logger.LogInformation("Found existing customer: {CustomerId} - {CompanyName}", customer.Id, customer.CompanyName);
-            var customerId = customer.Id;
 
             // ================================================================
             // BƯỚC 1: DOWNLOAD FILE TỪ S3 VÀ EXTRACT TEXT
@@ -179,6 +152,36 @@ internal class ImportContractFromDocumentHandler(
                 contractNumber, customerName, customerEmail, customerPhone, contactPersonName, contactPersonTitle,
                 identityNumber, contractTypeInfo.ContractType, contractTypeInfo.DurationMonths);
 
+            // ================================================================
+            // BƯỚC 2.5: TÌM CUSTOMER DỰA TRÊN THÔNG TIN ĐÃ EXTRACT
+            // ================================================================
+            logger.LogInformation(
+                "Searching for customer with extracted info - Email: {Email}, IdentityNumber: {IdentityNumber}, Phone: {Phone}",
+                customerEmail, identityNumber, customerPhone);
+
+            var customer = await FindCustomerAsync(connection, customerEmail, identityNumber, customerPhone);
+
+            if (customer == null)
+            {
+                logger.LogError(
+                    "❌ CUSTOMER NOT FOUND! Cannot import contract. Extracted info - Email: {Email}, CCCD: {CCCD}, Phone: {Phone}",
+                    customerEmail ?? "N/A", identityNumber ?? "N/A", customerPhone ?? "N/A");
+
+                return new ImportContractFromDocumentResult
+                {
+                    Success = false,
+                    ErrorMessage = $"Không tìm thấy khách hàng trong hệ thống với thông tin được trích xuất từ hợp đồng:\n" +
+                                   $"- Email: {customerEmail ?? "Không tìm thấy"}\n" +
+                                   $"- CCCD: {identityNumber ?? "Không tìm thấy"}\n" +
+                                   $"- Số điện thoại: {customerPhone ?? "Không tìm thấy"}\n\n" +
+                                   $"Vui lòng tạo khách hàng trước hoặc kiểm tra lại thông tin trong hợp đồng.",
+                    RawText = rawText,
+                    Warnings = warnings
+                };
+            }
+
+            logger.LogInformation("✓ Found existing customer: {CustomerId} - {CompanyName}", customer.Id, customer.CompanyName ?? customer.ContactPersonName);
+            var customerId = customer.Id;
 
             // Validation
             if (string.IsNullOrEmpty(contractNumber))
@@ -543,6 +546,8 @@ internal class ImportContractFromDocumentHandler(
                 // BƯỚC 4: COMMIT TRANSACTION
                 // ================================================================
                 transaction.Commit();
+
+                logger.LogInformation("✓ Transaction committed successfully");
 
                 // Calculate confidence score
                 var score = CalculateConfidenceScore(
@@ -2213,15 +2218,19 @@ internal class ImportContractFromDocumentHandler(
     /// Tìm customer tồn tại trong hệ thống theo Email, IdentityNumber hoặc PhoneNumber
     /// Không tạo customer mới, chỉ tìm kiếm
     /// </summary>
-    private async Task<Customer?> FindExistingCustomerAsync(
+    /// <summary>
+    /// Tìm customer trong database một cách tối ưu cho 1M+ records
+    /// Sử dụng indexed queries với LIMIT 1 để tăng tốc độ tìm kiếm
+    /// </summary>
+    private async Task<Customer?> FindCustomerAsync(
         IDbConnection connection,
-        string email,
+        string? email,
         string? identityNumber,
         string? phoneNumber)
     {
         Customer? existing = null;
 
-        // 1. Tìm theo Email (ưu tiên cao nhất)
+        // 1. Tìm theo Email (ưu tiên cao nhất - unique constraint)
         if (!string.IsNullOrWhiteSpace(email))
         {
             existing = await connection.QueryFirstOrDefaultAsync<Customer>(
@@ -2230,12 +2239,11 @@ internal class ImportContractFromDocumentHandler(
 
             if (existing != null)
             {
-                logger.LogInformation("Found customer by Email: {CustomerId} - {CompanyName}", existing.Id, existing.CompanyName);
+                logger.LogInformation("✓ Found customer by Email: {CustomerId} - {CompanyName}", existing.Id, existing.CompanyName ?? existing.ContactPersonName);
                 return existing;
             }
         }
-
-        // 2. Tìm theo IdentityNumber nếu có
+        
         if (!string.IsNullOrWhiteSpace(identityNumber))
         {
             existing = await connection.QueryFirstOrDefaultAsync<Customer>(
@@ -2244,12 +2252,11 @@ internal class ImportContractFromDocumentHandler(
 
             if (existing != null)
             {
-                logger.LogInformation("Found customer by IdentityNumber: {CustomerId} - {CompanyName}", existing.Id, existing.CompanyName);
+                logger.LogInformation("✓ Found customer by IdentityNumber (CCCD): {CustomerId} - {CompanyName}", existing.Id, existing.CompanyName ?? existing.ContactPersonName);
                 return existing;
             }
         }
-
-        // 3. Tìm theo PhoneNumber nếu có
+        
         if (!string.IsNullOrWhiteSpace(phoneNumber))
         {
             existing = await connection.QueryFirstOrDefaultAsync<Customer>(
@@ -2258,13 +2265,13 @@ internal class ImportContractFromDocumentHandler(
 
             if (existing != null)
             {
-                logger.LogInformation("Found customer by PhoneNumber: {CustomerId} - {CompanyName}", existing.Id, existing.CompanyName);
+                logger.LogInformation("✓ Found customer by PhoneNumber: {CustomerId} - {CompanyName}", existing.Id, existing.CompanyName ?? existing.ContactPersonName);
                 return existing;
             }
         }
 
-        logger.LogWarning("Customer not found with Email: {Email}, IdentityNumber: {IdentityNumber}, PhoneNumber: {PhoneNumber}",
-            email, identityNumber, phoneNumber);
+        logger.LogWarning("❌ Customer not found with Email: {Email}, IdentityNumber: {IdentityNumber}, PhoneNumber: {PhoneNumber}",
+            email ?? "N/A", identityNumber ?? "N/A", phoneNumber ?? "N/A");
 
         return null;
     }
