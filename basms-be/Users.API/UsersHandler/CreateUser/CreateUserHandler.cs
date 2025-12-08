@@ -66,6 +66,14 @@ public class CreateUserHandler(
                 throw new InvalidOperationException($"Email {command.Email} already exists");
             }
             Guid roleId = command.RoleId ?? await GetDefaultRoleIdAsync(connection, transaction);
+
+            // ✅ FIX: Lấy role object NGAY sau khi có roleId, trước khi commit transaction
+            var role = await connection.GetAsync<Roles>(roleId, transaction);
+            if (role == null)
+            {
+                throw new InvalidOperationException($"Role with ID {roleId} not found");
+            }
+
             int? birthDay = command.BirthDay;
             int? birthMonth = command.BirthMonth;
             int? birthYear = command.BirthYear;
@@ -80,8 +88,8 @@ public class CreateUserHandler(
             var isActive = roleId != customerRoleId;
 
             logger.LogInformation(
-                "Creating user with RoleId: {RoleId}, IsActive: {IsActive}",
-                roleId, isActive);
+                "Creating user with RoleId: {RoleId} ({RoleName}), IsActive: {IsActive}",
+                roleId, role.Name, isActive);
             var user = new Models.Users
             {
                 Id = Guid.NewGuid(),
@@ -118,23 +126,19 @@ public class CreateUserHandler(
             transaction.Commit();
             logger.LogDebug("Transaction committed successfully for user: {UserId}", user.Id);
 
-            var role = await connection.GetAsync<Roles>(roleId);
-            if (role == null)
+            // ✅ FIX: Sử dụng role object đã lấy từ trước (line 71), không cần fetch lại
+            // Publish UserCreatedEvent để các service khác (Contracts.API, Shifts.API) nhận được
+            try
             {
-                logger.LogWarning("Role not found with ID {RoleId} for user {UserId}", roleId, user.Id);
+                await eventPublisher.PublishUserCreatedAsync(user, role, cancellationToken);
+                logger.LogInformation(
+                    "UserCreatedEvent published successfully for user: {UserId} with role: {RoleName}",
+                    user.Id,
+                    role.Name);
             }
-
-            if (role != null)
+            catch (Exception eventEx)
             {
-                try
-                {
-                    await eventPublisher.PublishUserCreatedAsync(user, role, cancellationToken);
-                    logger.LogInformation("UserCreatedEvent published successfully for user: {UserId}", user.Id);
-                }
-                catch (Exception eventEx)
-                {
-                    logger.LogError(eventEx, "Failed to publish UserCreatedEvent for user {UserId}, but user was created successfully", user.Id);
-                }
+                logger.LogError(eventEx, "Failed to publish UserCreatedEvent for user {UserId}, but user was created successfully", user.Id);
             }
 
             try
