@@ -122,7 +122,7 @@ public class UserCreatedConsumer : IConsumer<UserCreatedEvent>
                 UserId = @event.UserId,
                 CustomerCode = customerCode,
 
-                CompanyName = @event.FullName,
+                CompanyName = null,
                 ContactPersonName = @event.FullName,
                 ContactPersonTitle = null,
 

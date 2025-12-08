@@ -9,7 +9,10 @@ namespace Contracts.API.ContractsHandler.ImportContractFromDocument;
 ///     Lấy file từ S3, parse information, and save to database
 /// </summary>
 public record ImportContractFromDocumentCommand(
-    Guid DocumentId
+    Guid DocumentId,
+    string Email,
+    string? IdentityNumber,
+    string? PhoneNumber
 ) : ICommand<ImportContractFromDocumentResult>;
 
 /// <summary>
@@ -42,8 +45,6 @@ internal class ImportContractFromDocumentHandler(
     IDbConnectionFactory connectionFactory,
     IS3Service s3Service,
     ILogger<ImportContractFromDocumentHandler> logger,
-    IRequestClient<CreateUserRequest> createUserClient,
-    EmailHandler emailHandler,
     IConfiguration configuration)
     : ICommandHandler<ImportContractFromDocumentCommand, ImportContractFromDocumentResult>
 {
@@ -75,6 +76,30 @@ internal class ImportContractFromDocumentHandler(
 
             logger.LogInformation("Found document: {DocumentName} at {FileUrl}", document.DocumentName,
                 document.FileUrl);
+
+            // ================================================================
+            // BƯỚC 0.5: VALIDATE CUSTOMER TỒN TẠI
+            // ================================================================
+            logger.LogInformation("Validating customer existence with Email: {Email}, IdentityNumber: {IdentityNumber}, PhoneNumber: {PhoneNumber}",
+                request.Email, request.IdentityNumber, request.PhoneNumber);
+
+            var customer = await FindExistingCustomerAsync(connection, request.Email, request.IdentityNumber, request.PhoneNumber);
+
+            if (customer == null)
+            {
+                logger.LogWarning("Customer not found with provided Email: {Email}, IdentityNumber: {IdentityNumber}, PhoneNumber: {PhoneNumber}",
+                    request.Email, request.IdentityNumber, request.PhoneNumber);
+
+                return new ImportContractFromDocumentResult
+                {
+                    Success = false,
+                    ErrorMessage = $"Khách hàng không tồn tại trong hệ thống. Vui lòng tạo khách hàng trước khi import hợp đồng. " +
+                                   $"(Email: {request.Email}, CCCD: {request.IdentityNumber ?? "N/A"}, Phone: {request.PhoneNumber ?? "N/A"})"
+                };
+            }
+
+            logger.LogInformation("Found existing customer: {CustomerId} - {CompanyName}", customer.Id, customer.CompanyName);
+            var customerId = customer.Id;
 
             // ================================================================
             // BƯỚC 1: DOWNLOAD FILE TỪ S3 VÀ EXTRACT TEXT
@@ -131,13 +156,11 @@ internal class ImportContractFromDocumentHandler(
             var customerAddress = ExtractAddress(rawText);
             var customerPhone = ExtractPhoneNumber(rawText);
             var customerEmail = ExtractEmail(rawText);
-            var taxCode = ExtractTaxCode(rawText);
 
             // Extract contact person info (name + title) cùng lúc
             var (contactPersonName, contactPersonTitle) = ExtractContactPersonInfo(rawText);
 
             var identityNumber = ExtractIdentityNumber(rawText);
-            var gender = ExtractGender(rawText);
             var guardsRequired = ExtractGuardsRequired(rawText);
             var coverageType = ExtractCoverageType(rawText);
 
@@ -152,9 +175,9 @@ internal class ImportContractFromDocumentHandler(
 
             // Log extracted info for debugging
             logger.LogInformation(
-                "Parsed: Contract={Contract}, Customer={Customer}, Email={Email}, Phone={Phone}, Contact={Contact}, Title={Title}, CCCD={CCCD}, Gender={Gender}, Type={Type}, Duration={Duration}",
+                "Parsed: Contract={Contract}, Customer={Customer}, Email={Email}, Phone={Phone}, Contact={Contact}, Title={Title}, CCCD={CCCD}, Type={Type}, Duration={Duration}",
                 contractNumber, customerName, customerEmail, customerPhone, contactPersonName, contactPersonTitle,
-                identityNumber, gender, contractTypeInfo.ContractType, contractTypeInfo.DurationMonths);
+                identityNumber, contractTypeInfo.ContractType, contractTypeInfo.DurationMonths);
 
 
             // Validation
@@ -187,112 +210,59 @@ internal class ImportContractFromDocumentHandler(
                 warnings.Add("Không tìm thấy chức vụ người đại diện - sẽ sử dụng giá trị mặc định");
 
             // ================================================================
-            // BƯỚC 3: TẠO USER ACCOUNT CHO CUSTOMER (VIA USERS.API)
-            // ================================================================
-            Guid? userId = null;
-            string? generatedPassword = null;
-
-            if (!string.IsNullOrEmpty(customerEmail))
-                try
-                {
-                    // Generate password mạnh
-                    generatedPassword = GenerateStrongPassword();
-
-                    // Gửi request tới Users.API để tạo user với role "customer"
-                    var createUserRequest = new CreateUserRequest
-                    {
-                        IdentityNumber = identityNumber,
-                        Email = customerEmail,
-                        Password = generatedPassword,
-                        FullName = customerName,
-                        Phone = customerPhone,
-                        Address = customerAddress,
-                        RoleName = "customer",
-                        AuthProvider = "email"
-                    };
-
-                    logger.LogInformation("Sending CreateUserRequest to Users.API for email: {Email}", customerEmail);
-
-                    var response = await createUserClient.GetResponse<CreateUserResponse>(
-                        createUserRequest,
-                        cancellationToken,
-                        RequestTimeout.After(s: 30));
-
-                    var createUserResponse = response.Message;
-
-                    if (createUserResponse.Success)
-                    {
-                        userId = createUserResponse.UserId;
-                        logger.LogInformation(
-                            "User account created successfully for customer: {Email}, UserId: {UserId}",
-                            customerEmail, userId);
-                    }
-                    else
-                    {
-                        logger.LogWarning(
-                            "Failed to create user account for customer: {Email}. Error: {Error}. Will continue without user account.",
-                            customerEmail, createUserResponse.ErrorMessage);
-                        warnings.Add($"Không thể tạo tài khoản đăng nhập: {createUserResponse.ErrorMessage}");
-                    }
-                }
-                catch (Exception userEx)
-                {
-                    logger.LogError(userEx, "Error creating user account for customer: {Email}", customerEmail);
-                    warnings.Add($"Lỗi khi tạo tài khoản đăng nhập: {userEx.Message}");
-                    // Continue without user account - không fail toàn bộ import
-                }
-            else
-                warnings.Add("Không có email - không thể tạo tài khoản đăng nhập cho khách hàng");
-
-            // ================================================================
-            // BƯỚC 4: LƯU VÀO DATABASE
+            // BƯỚC 3: CẬP NHẬT THÔNG TIN CUSTOMER VÀ LƯU HỢP ĐỒNG VÀO DATABASE
             // ================================================================
             using var transaction = connection.BeginTransaction();
 
             try
             {
-                // 4.1: Tạo hoặc tìm Customer
-                var customerId = await CreateOrFindCustomerAsync(
-                    connection, transaction,
-                    customerName, customerAddress, customerPhone, customerEmail, taxCode,
-                    contactPersonName, contactPersonTitle, userId, identityNumber, gender);
+                // 3.1: Cập nhật thông tin Customer từ document (nếu có thông tin mới)
+                var updated = false;
 
+                // Cập nhật CompanyName từ document nếu khác với tên hiện tại
+                if (!string.IsNullOrEmpty(customerName) && customer.CompanyName != customerName)
+                {
+                    customer.CompanyName = customerName;
+                    updated = true;
+                    logger.LogInformation("Updated customer CompanyName from '{OldName}' to '{NewName}'",
+                        customer.CompanyName, customerName);
+                }
+
+                // Cập nhật các thông tin khác nếu chưa có
+                if (string.IsNullOrEmpty(customer.Address) && !string.IsNullOrEmpty(customerAddress))
+                {
+                    customer.Address = customerAddress;
+                    updated = true;
+                }
+
+                if (string.IsNullOrEmpty(customer.Phone) && !string.IsNullOrEmpty(customerPhone))
+                {
+                    customer.Phone = customerPhone;
+                    updated = true;
+                }
+
+                if (string.IsNullOrEmpty(customer.ContactPersonName) && !string.IsNullOrEmpty(contactPersonName))
+                {
+                    customer.ContactPersonName = contactPersonName;
+                    updated = true;
+                }
+
+                if (string.IsNullOrEmpty(customer.ContactPersonTitle) && !string.IsNullOrEmpty(contactPersonTitle))
+                {
+                    customer.ContactPersonTitle = contactPersonTitle;
+                    updated = true;
+                }
+
+                if (updated)
+                {
+                    customer.UpdatedAt = DateTime.UtcNow;
+                    await connection.UpdateAsync(customer, transaction);
+                    logger.LogInformation("Updated customer information for CustomerId: {CustomerId}", customerId);
+                }
 
                 logger.LogInformation(
-                    "Customer created/found: {CustomerId} with contact: {ContactName} - {ContactTitle}",
-                    customerId, contactPersonName, contactPersonTitle);
-
-                // 4.2: Log customer sync to customer_sync_log
-                if (userId.HasValue)
-                {
-                    var syncLog = new CustomerSyncLog
-                    {
-                        Id = Guid.NewGuid(),
-                        UserId = userId.Value,
-                        SyncType = "CREATE",
-                        SyncStatus = "SUCCESS",
-                        FieldsChanged = JsonSerializer.Serialize(new[]
-                            { "CompanyName", "Address", "Phone", "Email", "ContactPersonName", "ContactPersonTitle" }),
-                        NewValues = JsonSerializer.Serialize(new
-                        {
-                            CompanyName = customerName,
-                            Address = customerAddress,
-                            Phone = customerPhone,
-                            Email = customerEmail,
-                            ContactPersonName = contactPersonName,
-                            ContactPersonTitle = contactPersonTitle
-                        }),
-                        SyncInitiatedBy = "CONTRACT_IMPORT",
-                        RetryCount = 0,
-                        SyncStartedAt = DateTime.UtcNow,
-                        SyncCompletedAt = DateTime.UtcNow,
-                        SyncDurationMs = 0,
-                        CreatedAt = DateTime.UtcNow
-                    };
-
-                    await connection.InsertAsync(syncLog, transaction);
-                    logger.LogInformation("Customer sync logged for UserId: {UserId}", userId.Value);
-                }
+                    "Using existing customer: {CustomerId} - {CompanyName} with contact: {ContactName} - {ContactTitle}",
+                    customerId, customer.CompanyName, customer.ContactPersonName, customer.ContactPersonTitle);
 
                 // 3.2: Tạo Contract
                 var durationMonths = (endDate.Value.Year - startDate.Value.Year) * 12 +
@@ -570,34 +540,9 @@ internal class ImportContractFromDocumentHandler(
                 }
 
                 // ================================================================
-                // BƯỚC 5: COMMIT TRANSACTION
+                // BƯỚC 4: COMMIT TRANSACTION
                 // ================================================================
                 transaction.Commit();
-
-                // ================================================================
-                // BƯỚC 6: GỬI EMAIL THÔNG TIN ĐĂNG NHẬP CHO CUSTOMER
-                // ================================================================
-                if (userId.HasValue && !string.IsNullOrEmpty(customerEmail) && !string.IsNullOrEmpty(generatedPassword))
-                    try
-                    {
-                        await emailHandler.SendCustomerLoginInfoEmailAsync(
-                            customerName,
-                            customerEmail,
-                            generatedPassword,
-                            contractNumber);
-
-                        logger.LogInformation(
-                            "Login info email sent successfully to customer: {Email}",
-                            customerEmail);
-                    }
-                    catch (Exception emailEx)
-                    {
-                        // Log warning nhưng không fail - email không critical
-                        logger.LogWarning(emailEx,
-                            "Failed to send login info email to {Email}, but import was successful",
-                            customerEmail);
-                        warnings.Add($"Không thể gửi email thông tin đăng nhập: {emailEx.Message}");
-                    }
 
                 // Calculate confidence score
                 var score = CalculateConfidenceScore(
@@ -621,8 +566,8 @@ internal class ImportContractFromDocumentHandler(
                 };
 
                 logger.LogInformation(
-                    "Contract import completed: {ContractNumber} - {Locations} locations, {Schedules} schedules, User created: {UserCreated}",
-                    contractNumber, locationIds.Count, scheduleIds.Count, userId.HasValue);
+                    "Contract import completed: {ContractNumber} - {Locations} locations, {Schedules} schedules for Customer: {CustomerId}",
+                    contractNumber, locationIds.Count, scheduleIds.Count, customerId);
 
                 // ================================================================
                 // CLEANUP: Xóa file FILLED và SIGNED tạm thời sau khi import thành công
@@ -1165,13 +1110,6 @@ internal class ImportContractFromDocumentHandler(
         return null;
     }
 
-    private string? ExtractTaxCode(string text)
-    {
-        var pattern = @"(?:Mã\s*số\s*thuế|MST).*?[:：]\s*([+\d]{10,15})";
-        var match = Regex.Match(text, pattern, RegexOptions.IgnoreCase);
-        return match.Success ? match.Groups[1].Value.Trim() : null;
-    }
-
     /// <summary>
     ///     Extract contact person name từ Bên B - Thông minh hơn với named groups
     ///     Hỗ trợ parse cả Name và Title cùng lúc
@@ -1266,53 +1204,6 @@ internal class ImportContractFromDocumentHandler(
     {
         var (name, _) = ExtractContactPersonInfo(text);
         return name;
-    }
-
-    /// <summary>
-    ///     Extract Gender từ Bên B dựa trên "Ông" hoặc "Bà"
-    /// </summary>
-    private string? ExtractGender(string text)
-    {
-        var benBIndex = text.IndexOf("BÊN B", StringComparison.OrdinalIgnoreCase);
-        if (benBIndex == -1)
-            benBIndex = text.IndexOf("Bên B", StringComparison.OrdinalIgnoreCase);
-
-        if (benBIndex >= 0)
-        {
-            var textAfterBenB = text.Substring(benBIndex, Math.Min(600, text.Length - benBIndex));
-
-            // Pattern: "Đại diện: Ông/Bà TÊN"
-            var patterns = new[]
-            {
-                @"Đại\s*diện\s*[:：]\s*(Ông|Bà)\s+[^\r\n–\-]+",
-                @"(?:Đại\s*diện|Người\s*đại\s*diện)\s*[:：]?\s*(Ông|Bà)",
-                @"(Ông|Bà)\s+[A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ][a-zàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]+(?:\s+[A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ][a-zàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]+)+"
-            };
-
-            foreach (var pattern in patterns)
-            {
-                var match = Regex.Match(textAfterBenB, pattern, RegexOptions.IgnoreCase);
-                if (match.Success)
-                {
-                    var prefix = match.Groups[1].Value.Trim();
-
-                    if (prefix.Equals("Ông", StringComparison.OrdinalIgnoreCase))
-                    {
-                        logger.LogInformation("✓ Extracted Gender: male (from 'Ông')");
-                        return "male";
-                    }
-
-                    if (prefix.Equals("Bà", StringComparison.OrdinalIgnoreCase))
-                    {
-                        logger.LogInformation("✓ Extracted Gender: female (from 'Bà')");
-                        return "female";
-                    }
-                }
-            }
-        }
-
-        logger.LogWarning("Gender not found in Bên B");
-        return null;
     }
 
 
@@ -2318,261 +2209,64 @@ internal class ImportContractFromDocumentHandler(
         return (decimal)duration.TotalHours;
     }
 
-    private async Task<Guid> CreateOrFindCustomerAsync(
-        IDbConnection connection, IDbTransaction transaction,
-        string name, string? address, string? phone, string? email, string? taxCode,
-        string? contactPersonName = null, string? contactPersonTitle = null,
-        Guid? userId = null, string? identityNumber = null, string? gender = null)
+    /// <summary>
+    /// Tìm customer tồn tại trong hệ thống theo Email, IdentityNumber hoặc PhoneNumber
+    /// Không tạo customer mới, chỉ tìm kiếm
+    /// </summary>
+    private async Task<Customer?> FindExistingCustomerAsync(
+        IDbConnection connection,
+        string email,
+        string? identityNumber,
+        string? phoneNumber)
     {
-        // Tìm customer theo UserId, Email, hoặc Tên
         Customer? existing = null;
 
-        // 1. Ưu tiên tìm theo UserId nếu có
-        if (userId.HasValue && userId.Value != Guid.Empty)
-        {
-            existing = await connection.QueryFirstOrDefaultAsync<Customer>(
-                "SELECT * FROM customers WHERE UserId = @UserId AND IsDeleted = 0 LIMIT 1",
-                new { UserId = userId.Value }, transaction);
-
-            if (existing != null)
-            {
-                logger.LogInformation(
-                    "Found existing customer by UserId: {CustomerId} - {CompanyName}",
-                    existing.Id, existing.CompanyName);
-
-                // Update thông tin nếu cần (merge data từ contract document)
-                var updated = false;
-                if (string.IsNullOrEmpty(existing.ContactPersonName) && !string.IsNullOrEmpty(contactPersonName))
-                {
-                    existing.ContactPersonName = contactPersonName;
-                    updated = true;
-                }
-
-                if (string.IsNullOrEmpty(existing.ContactPersonTitle) && !string.IsNullOrEmpty(contactPersonTitle))
-                {
-                    existing.ContactPersonTitle = contactPersonTitle;
-                    updated = true;
-                }
-
-                if (string.IsNullOrEmpty(existing.IdentityNumber) && !string.IsNullOrEmpty(identityNumber))
-                {
-                    existing.IdentityNumber = identityNumber;
-                    updated = true;
-                }
-
-                if (string.IsNullOrEmpty(existing.Gender) && !string.IsNullOrEmpty(gender))
-                {
-                    existing.Gender = gender;
-                    updated = true;
-                }
-
-                if (string.IsNullOrEmpty(existing.Address) && !string.IsNullOrEmpty(address))
-                {
-                    existing.Address = address;
-                    updated = true;
-                }
-
-                if (updated)
-                {
-                    existing.UpdatedAt = DateTime.UtcNow;
-                    await connection.UpdateAsync(existing, transaction);
-                    logger.LogInformation(
-                        "Updated customer {CustomerId} with additional info from contract document",
-                        existing.Id);
-                }
-
-                return existing.Id;
-            }
-        }
-
-        // 2. Tìm theo Email nếu không tìm thấy theo UserId
-        if (!string.IsNullOrEmpty(email))
+        // 1. Tìm theo Email (ưu tiên cao nhất)
+        if (!string.IsNullOrWhiteSpace(email))
         {
             existing = await connection.QueryFirstOrDefaultAsync<Customer>(
                 "SELECT * FROM customers WHERE Email = @Email AND IsDeleted = 0 LIMIT 1",
-                new { Email = email }, transaction);
+                new { Email = email });
 
             if (existing != null)
             {
-                logger.LogInformation(
-                    "Found existing customer by Email: {CustomerId} - {Email}",
-                    existing.Id, existing.Email);
-
-                // Update UserId nếu chưa có VÀ UserId chưa được dùng bởi customer khác
-                if (!existing.UserId.HasValue && userId.HasValue && userId.Value != Guid.Empty)
-                {
-                    // Kiểm tra UserId đã được dùng chưa
-                    var userIdTaken = await connection.QueryFirstOrDefaultAsync<Customer>(
-                        "SELECT * FROM customers WHERE UserId = @UserId AND IsDeleted = 0 LIMIT 1",
-                        new { UserId = userId.Value }, transaction);
-
-                    if (userIdTaken != null)
-                    {
-                        logger.LogWarning(
-                            "UserId {UserId} already used by another customer {CustomerId}. Cannot link.",
-                            userId, userIdTaken.Id);
-                    }
-                    else
-                    {
-                        existing.UserId = userId;
-                        existing.UpdatedAt = DateTime.UtcNow;
-                        await connection.UpdateAsync(existing, transaction);
-                        logger.LogInformation(
-                            "Linked customer {CustomerId} with UserId: {UserId}",
-                            existing.Id, userId);
-                    }
-                }
-
-                return existing.Id;
+                logger.LogInformation("Found customer by Email: {CustomerId} - {CompanyName}", existing.Id, existing.CompanyName);
+                return existing;
             }
         }
 
-        // 3. Tìm theo CompanyName nếu không tìm thấy theo UserId và Email
-        existing = await connection.QueryFirstOrDefaultAsync<Customer>(
-            "SELECT * FROM customers WHERE CompanyName = @Name AND IsDeleted = 0 LIMIT 1",
-            new { Name = name }, transaction);
-
-        if (existing != null)
+        // 2. Tìm theo IdentityNumber nếu có
+        if (!string.IsNullOrWhiteSpace(identityNumber))
         {
-            logger.LogInformation(
-                "Found existing customer by CompanyName: {CustomerId} - {CompanyName}",
-                existing.Id, existing.CompanyName);
+            existing = await connection.QueryFirstOrDefaultAsync<Customer>(
+                "SELECT * FROM customers WHERE IdentityNumber = @IdentityNumber AND IsDeleted = 0 LIMIT 1",
+                new { IdentityNumber = identityNumber });
 
-            // Update UserId nếu chưa có VÀ UserId chưa được dùng bởi customer khác
-            if (!existing.UserId.HasValue && userId.HasValue && userId.Value != Guid.Empty)
+            if (existing != null)
             {
-                // Kiểm tra UserId đã được dùng chưa
-                var userIdTaken = await connection.QueryFirstOrDefaultAsync<Customer>(
-                    "SELECT * FROM customers WHERE UserId = @UserId AND IsDeleted = 0 LIMIT 1",
-                    new { UserId = userId.Value }, transaction);
-
-                if (userIdTaken != null)
-                {
-                    logger.LogWarning(
-                        "UserId {UserId} already used by another customer {CustomerId}. Cannot link.",
-                        userId, userIdTaken.Id);
-                }
-                else
-                {
-                    existing.UserId = userId;
-                    existing.UpdatedAt = DateTime.UtcNow;
-                    await connection.UpdateAsync(existing, transaction);
-                    logger.LogInformation(
-                        "Linked customer {CustomerId} with UserId: {UserId}",
-                        existing.Id, userId);
-                }
+                logger.LogInformation("Found customer by IdentityNumber: {CustomerId} - {CompanyName}", existing.Id, existing.CompanyName);
+                return existing;
             }
-
-            return existing.Id;
         }
 
-        // 4. Tạo mới customer - wrap trong try-catch để handle duplicate key
-        try
+        // 3. Tìm theo PhoneNumber nếu có
+        if (!string.IsNullOrWhiteSpace(phoneNumber))
         {
-            // CRITICAL: Double-check UserId right before INSERT to prevent race condition
-            if (userId.HasValue && userId.Value != Guid.Empty)
-            {
-                var lastMinuteCheck = await connection.QueryFirstOrDefaultAsync<Customer>(
-                    "SELECT * FROM customers WHERE UserId = @UserId AND IsDeleted = 0 LIMIT 1",
-                    new { UserId = userId.Value }, transaction);
+            existing = await connection.QueryFirstOrDefaultAsync<Customer>(
+                "SELECT * FROM customers WHERE Phone = @Phone AND IsDeleted = 0 LIMIT 1",
+                new { Phone = phoneNumber });
 
-                if (lastMinuteCheck != null)
-                {
-                    logger.LogWarning(
-                        "Race condition detected: Customer with UserId {UserId} was just created. Using existing customer {CustomerId}",
-                        userId, lastMinuteCheck.Id);
-                    return lastMinuteCheck.Id;
-                }
+            if (existing != null)
+            {
+                logger.LogInformation("Found customer by PhoneNumber: {CustomerId} - {CompanyName}", existing.Id, existing.CompanyName);
+                return existing;
             }
-
-            var customer = new Customer
-            {
-                Id = Guid.NewGuid(),
-                UserId = userId.HasValue && userId.Value != Guid.Empty ? userId : null,
-                CustomerCode = $"CUST-{DateTime.Now:yyyyMMdd}-{Guid.NewGuid().ToString().Substring(0, 4).ToUpper()}",
-                CompanyName = name,
-                Address = address,
-                Phone = phone,
-                Email = email,
-                ContactPersonName = contactPersonName ?? "Chưa cập nhật",
-                ContactPersonTitle = contactPersonTitle ?? "Chưa cập nhật",
-                IdentityNumber = identityNumber,
-                Gender = gender,
-                Status = "assigning_manager",
-                IsDeleted = false,
-                CreatedAt = DateTime.UtcNow
-            };
-
-            await connection.InsertAsync(customer, transaction);
-            logger.LogInformation(
-                "✓ Created new customer {CustomerCode} with UserId: {UserId}",
-                customer.CustomerCode, userId);
-            return customer.Id;
         }
-        catch (MySqlException ex) when (ex.Number == 1062) // Duplicate entry error
-        {
-            logger.LogWarning(
-                "Duplicate key detected when creating customer. Re-querying to find existing customer. Error: {Error}",
-                ex.Message);
 
-            // Race condition: Customer được tạo bởi thread khác (UserCreatedConsumer)
-            // CRITICAL FIX: Query OUTSIDE transaction để thấy committed data từ UserCreatedConsumer
-            // Retry với exponential backoff để đợi UserCreatedConsumer commit
+        logger.LogWarning("Customer not found with Email: {Email}, IdentityNumber: {IdentityNumber}, PhoneNumber: {PhoneNumber}",
+            email, identityNumber, phoneNumber);
 
-            for (var retry = 0; retry < 5; retry++)
-            {
-                // Wait với exponential backoff: 100ms, 200ms, 400ms, 800ms, 1600ms
-                if (retry > 0)
-                {
-                    var delayMs = 100 * (int)Math.Pow(2, retry - 1);
-                    logger.LogInformation(
-                        "Retry {Retry}/5: Waiting {DelayMs}ms for UserCreatedConsumer to commit...",
-                        retry, delayMs);
-                    await Task.Delay(delayMs);
-                }
-
-                // Query OUTSIDE transaction bằng cách tạo connection mới
-                using var freshConnection = await connectionFactory.CreateConnectionAsync();
-
-                // Thử tìm theo UserId
-                if (userId.HasValue && userId.Value != Guid.Empty)
-                {
-                    existing = await freshConnection.QueryFirstOrDefaultAsync<Customer>(
-                        "SELECT * FROM customers WHERE UserId = @UserId AND IsDeleted = 0 LIMIT 1",
-                        new { UserId = userId.Value });
-
-                    if (existing != null)
-                    {
-                        logger.LogInformation(
-                            "✓ Found customer after duplicate error (retry {Retry}): {CustomerId} - {CompanyName}",
-                            retry, existing.Id, existing.CompanyName);
-                        return existing.Id;
-                    }
-                }
-
-                // Thử tìm theo Email
-                if (!string.IsNullOrEmpty(email))
-                {
-                    existing = await freshConnection.QueryFirstOrDefaultAsync<Customer>(
-                        "SELECT * FROM customers WHERE Email = @Email AND IsDeleted = 0 LIMIT 1",
-                        new { Email = email });
-
-                    if (existing != null)
-                    {
-                        logger.LogInformation(
-                            "✓ Found customer by Email after duplicate error (retry {Retry}): {CustomerId}",
-                            retry, existing.Id);
-                        return existing.Id;
-                    }
-                }
-            }
-
-            // Nếu sau 5 retries vẫn không tìm thấy, throw lại exception
-            logger.LogError(
-                "Could not find customer even after 5 retries and duplicate key error. " +
-                "This indicates a serious race condition or data inconsistency. Re-throwing exception.");
-            throw;
-        }
+        return null;
     }
 
     private int CalculateConfidenceScore(
@@ -2588,38 +2282,6 @@ internal class ImportContractFromDocumentHandler(
         if (guardsRequired > 0) score += 20;
         if (schedulesCount > 0) score += 15;
         return Math.Min(score, 100);
-    }
-
-    /// <summary>
-    ///     Generate password mạnh, dễ đọc cho customer
-    ///     Format: Abc12345@ (chữ hoa + chữ thường + số + ký tự đặc biệt)
-    /// </summary>
-    private string GenerateStrongPassword()
-    {
-        const string upperChars = "ABCDEFGHJKLMNPQRSTUVWXYZ"; // Bỏ I, O dễ nhầm
-        const string lowerChars = "abcdefghijkmnopqrstuvwxyz"; // Bỏ l dễ nhầm
-        const string digits = "23456789"; // Bỏ 0, 1 dễ nhầm
-        const string special = "@#$%";
-
-        var random = new Random();
-        var password = new char[10];
-
-        // Đảm bảo có ít nhất 1 ký tự mỗi loại
-        password[0] = upperChars[random.Next(upperChars.Length)];
-        password[1] = lowerChars[random.Next(lowerChars.Length)];
-        password[2] = lowerChars[random.Next(lowerChars.Length)];
-        password[3] = digits[random.Next(digits.Length)];
-        password[4] = digits[random.Next(digits.Length)];
-        password[5] = digits[random.Next(digits.Length)];
-        password[6] = digits[random.Next(digits.Length)];
-        password[7] = digits[random.Next(digits.Length)];
-        password[8] = special[random.Next(special.Length)];
-
-        // Ký tự cuối random
-        var allChars = upperChars + lowerChars + digits;
-        password[9] = allChars[random.Next(allChars.Length)];
-
-        return new string(password);
     }
 
     /// <summary>

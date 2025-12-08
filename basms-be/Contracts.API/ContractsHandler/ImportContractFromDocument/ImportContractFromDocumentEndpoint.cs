@@ -8,6 +8,9 @@ namespace Contracts.API.ContractsHandler.ImportContractFromDocument;
 public record ImportContractFromDocumentRequest
 {
     public Guid DocumentId { get; init; }
+    public string Email { get; init; } = string.Empty;
+    public string? IdentityNumber { get; init; }
+    public string? PhoneNumber { get; init; }
 }
 
 /// <summary>
@@ -36,13 +39,27 @@ public class ImportContractFromDocumentEndpoint : ICarterModule
                         });
                     }
 
+                    // Validate Email (required)
+                    if (string.IsNullOrWhiteSpace(request.Email))
+                    {
+                        return Results.BadRequest(new
+                        {
+                            success = false,
+                            message = "Email is required to identify customer"
+                        });
+                    }
+
                     logger.LogInformation(
-                        "Importing contract from DocumentId: {DocumentId}",
-                        request.DocumentId);
+                        "Importing contract from DocumentId: {DocumentId} for customer Email: {Email}",
+                        request.DocumentId,
+                        request.Email);
 
                     // Tạo command và gửi
                     var command = new ImportContractFromDocumentCommand(
-                        DocumentId: request.DocumentId
+                        DocumentId: request.DocumentId,
+                        Email: request.Email,
+                        IdentityNumber: request.IdentityNumber,
+                        PhoneNumber: request.PhoneNumber
                     );
 
                     var result = await sender.Send(command);
