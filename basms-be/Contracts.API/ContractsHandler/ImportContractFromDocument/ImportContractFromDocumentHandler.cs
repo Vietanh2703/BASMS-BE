@@ -222,15 +222,6 @@ internal class ImportContractFromDocumentHandler(
                 // 3.1: Cập nhật thông tin Customer từ document (nếu có thông tin mới)
                 var updated = false;
 
-                // Cập nhật CompanyName từ document nếu khác với tên hiện tại
-                if (!string.IsNullOrEmpty(customerName) && customer.CompanyName != customerName)
-                {
-                    customer.CompanyName = customerName;
-                    updated = true;
-                    logger.LogInformation("Updated customer CompanyName from '{OldName}' to '{NewName}'",
-                        customer.CompanyName, customerName);
-                }
-
                 // Cập nhật các thông tin khác nếu chưa có
                 if (string.IsNullOrEmpty(customer.Address) && !string.IsNullOrEmpty(customerAddress))
                 {
