@@ -24,6 +24,7 @@
       <Folder Include="ContractsHandler\GetCustomerByContractId\" />
       <Folder Include="ContractsHandler\GetCustomerById\" />
       <Folder Include="ContractsHandler\GetCustomerFromEmail\" />
+      <Folder Include="ContractsHandler\GetDocumentById\" />
       <Folder Include="ContractsHandler\GetPublicHolidayByContractId\" />
       <Folder Include="ContractsHandler\GetShiftScheduleByContractId\" />
       <Folder Include="ContractsHandler\UpdateShiftSchedules\" />
