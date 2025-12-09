@@ -74,8 +74,12 @@ public record CustomerDto
     public string CompanyName { get; init; } = string.Empty;
     public string ContactPersonName { get; init; } = string.Empty;
     public string? ContactPersonTitle { get; init; }
+    public string IdentityNumber { get; init; } = string.Empty;
+    public DateTime? IdentityIssueDate { get; init; }
+    public string? IdentityIssuePlace { get; init; }
     public string Email { get; init; } = string.Empty;
     public string Phone { get; init; } = string.Empty;
+    public DateTime DateOfBirth { get; init; }
     public string Address { get; init; } = string.Empty;
     public string? City { get; init; }
     public string? District { get; init; }
@@ -395,8 +399,12 @@ internal class GetContractByIdHandler(
                         CompanyName = customer.CompanyName,
                         ContactPersonName = customer.ContactPersonName,
                         ContactPersonTitle = customer.ContactPersonTitle,
+                        IdentityNumber = customer.IdentityNumber,
+                        IdentityIssueDate = customer.IdentityIssueDate,
+                        IdentityIssuePlace = customer.IdentityIssuePlace,
                         Email = customer.Email,
                         Phone = customer.Phone,
+                        DateOfBirth = customer.DateOfBirth,
                         Address = customer.Address,
                         City = customer.City,
                         District = customer.District,
