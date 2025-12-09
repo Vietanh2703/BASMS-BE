@@ -38,6 +38,7 @@ Lấy thông tin đầy đủ của contract bao gồm:
 - Contract locations (địa điểm trong hợp đồng + chi tiết customer location)
 - Shift schedules (lịch ca trực)
 - Contract periods (các kỳ hợp đồng - ban đầu và gia hạn)
+- Public holidays (ngày lễ quốc gia: Tết, 30/4, 1/5, 2/9...)
 - Working conditions (điều kiện làm việc: tăng ca, ca đêm, Tết, phụ cấp...)
 
 ## Response Structure:
@@ -69,6 +70,26 @@ Lấy thông tin đầy đủ của contract bao gồm:
     ],
     ""shiftSchedules"": [...],
     ""periods"": [...],
+    ""publicHolidays"": [
+      {
+        ""id"": ""guid"",
+        ""holidayDate"": ""2025-01-01"",
+        ""holidayName"": ""Tết Dương lịch"",
+        ""holidayNameEn"": ""New Year's Day"",
+        ""holidayCategory"": ""national"",
+        ""isTetPeriod"": false,
+        ""isTetHoliday"": false,
+        ""isOfficialHoliday"": true,
+        ""year"": 2025
+      },
+      {
+        ""holidayDate"": ""2025-01-28"",
+        ""holidayName"": ""Tết Nguyên Đán - Mùng 1"",
+        ""isTetHoliday"": true,
+        ""tetDayNumber"": 1,
+        ...
+      }
+    ],
     ""workingConditions"": {
       ""overtimeRateWeekday"": 1.5,
       ""nightShiftRate"": 1.3,

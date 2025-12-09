@@ -55,7 +55,7 @@ public record ContractDetailDto
     public List<ContractLocationDto> Locations { get; init; } = new();
     public List<ContractShiftScheduleDto> ShiftSchedules { get; init; } = new();
     public List<ContractPeriodDto> Periods { get; init; } = new();
-    public ContractWorkingConditionsDto? WorkingConditions { get; init; }
+    public List<PublicHolidayDto> PublicHolidays { get; init; } = new();
 
     // Metadata
     public Guid? CreatedBy { get; init; }
@@ -203,62 +203,33 @@ public record ContractPeriodDto
 }
 
 /// <summary>
-/// DTO Contract Working Conditions
+/// DTO Public Holiday
 /// </summary>
-public record ContractWorkingConditionsDto
+public record PublicHolidayDto
 {
-    // Giờ làm việc chuẩn
-    public decimal? StandardHoursPerDay { get; init; }
-    public decimal? StandardHoursPerWeek { get; init; }
-    public decimal? StandardHoursPerMonth { get; init; }
-
-    // Giới hạn tăng ca
-    public decimal? MaxOvertimeHoursPerDay { get; init; }
-    public decimal? MaxOvertimeHoursPerMonth { get; init; }
-    public decimal? MaxOvertimeHoursPerYear { get; init; }
-    public bool AllowOvertimeOnWeekends { get; init; }
-    public bool AllowOvertimeOnHolidays { get; init; }
-    public bool RequireOvertimeApproval { get; init; }
-
-    // Ca đêm
-    public TimeSpan? NightShiftStartTime { get; init; }
-    public TimeSpan? NightShiftEndTime { get; init; }
-    public decimal? MinimumNightShiftHours { get; init; }
-
-    // Ca trực liên tục
-    public bool AllowContinuous24hShift { get; init; }
-    public bool AllowContinuous48hShift { get; init; }
-    public bool CountSleepTimeInContinuousShift { get; init; }
-    public decimal? SleepTimeCalculationRatio { get; init; }
-    public decimal? MinimumRestHoursBetweenShifts { get; init; }
-
-    // Ngày nghỉ & ngày lễ
-    public int? AnnualLeaveDays { get; init; }
-    public string? TetHolidayDates { get; init; }
-    public string? LocalHolidaysList { get; init; }
-    public string? HolidayWeekendCalculationMethod { get; init; }
-    public bool SaturdayAsRegularWorkday { get; init; }
-
-    // Chính sách vi phạm
-    public string? OvertimeLimitViolationPolicy { get; init; }
-    public string? UnapprovedOvertimePolicy { get; init; }
-    public string? InsufficientRestPolicy { get; init; }
-
-    // Ca đặc biệt
-    public bool AllowEventShift { get; init; }
-    public bool AllowEmergencyCall { get; init; }
-    public bool AllowReplacementShift { get; init; }
-    public int? MinimumEmergencyNoticeMinutes { get; init; }
-
-    // Ghi chú
-    public string? GeneralNotes { get; init; }
-    public string? SpecialTerms { get; init; }
-
-    // Thời gian
-    public bool IsActive { get; init; }
-    public DateTime EffectiveFrom { get; init; }
-    public DateTime? EffectiveTo { get; init; }
+    public Guid Id { get; init; }
+    public DateTime HolidayDate { get; init; }
+    public string HolidayName { get; init; } = string.Empty;
+    public string? HolidayNameEn { get; init; }
+    public string HolidayCategory { get; init; } = string.Empty;
+    public bool IsTetPeriod { get; init; }
+    public bool IsTetHoliday { get; init; }
+    public int? TetDayNumber { get; init; }
+    public DateTime? HolidayStartDate { get; init; }
+    public DateTime? HolidayEndDate { get; init; }
+    public int? TotalHolidayDays { get; init; }
+    public bool IsOfficialHoliday { get; init; }
+    public bool IsObserved { get; init; }
+    public DateTime? OriginalDate { get; init; }
+    public DateTime? ObservedDate { get; init; }
+    public bool AppliesNationwide { get; init; }
+    public string? AppliesToRegions { get; init; }
+    public bool StandardWorkplacesClosed { get; init; }
+    public bool EssentialServicesOperating { get; init; }
+    public string? Description { get; init; }
+    public int Year { get; init; }
 }
+
 
 // ================================================================
 // HANDLER
@@ -378,6 +349,12 @@ internal class GetContractByIdHandler(
                 "SELECT * FROM contract_periods WHERE ContractId = @ContractId ORDER BY PeriodNumber DESC",
                 new { ContractId = contract.Id });
 
+            // ================================================================
+            // 7. LẤY PUBLIC HOLIDAYS
+            // ================================================================
+            var publicHolidays = await connection.QueryAsync<Models.PublicHoliday>(
+                "SELECT * FROM public_holidays WHERE ContractId = @ContractId ORDER BY HolidayDate ASC",
+                new { ContractId = contract.Id });
 
             // ================================================================
             // 8. MAP TO DTOS
@@ -486,12 +463,37 @@ internal class GetContractByIdHandler(
                         Notes = p.Notes,
                         CreatedAt = p.CreatedAt
                     }).ToList(),
+
+                    PublicHolidays = publicHolidays.Select(h => new PublicHolidayDto
+                    {
+                        Id = h.Id,
+                        HolidayDate = h.HolidayDate,
+                        HolidayName = h.HolidayName,
+                        HolidayNameEn = h.HolidayNameEn,
+                        HolidayCategory = h.HolidayCategory,
+                        IsTetPeriod = h.IsTetPeriod,
+                        IsTetHoliday = h.IsTetHoliday,
+                        TetDayNumber = h.TetDayNumber,
+                        HolidayStartDate = h.HolidayStartDate,
+                        HolidayEndDate = h.HolidayEndDate,
+                        TotalHolidayDays = h.TotalHolidayDays,
+                        IsOfficialHoliday = h.IsOfficialHoliday,
+                        IsObserved = h.IsObserved,
+                        OriginalDate = h.OriginalDate,
+                        ObservedDate = h.ObservedDate,
+                        AppliesNationwide = h.AppliesNationwide,
+                        AppliesToRegions = h.AppliesToRegions,
+                        StandardWorkplacesClosed = h.StandardWorkplacesClosed,
+                        EssentialServicesOperating = h.EssentialServicesOperating,
+                        Description = h.Description,
+                        Year = h.Year
+                    }).ToList(),
                 }
             };
 
             logger.LogInformation(
-                "Contract details retrieved: {ContractNumber} - {Locations} locations, {Schedules} schedules, {Documents} documents",
-                contract.ContractNumber, locationDtos.Count, shiftSchedules.Count(), documents.Count());
+                "Contract details retrieved: {ContractNumber} - {Locations} locations, {Schedules} schedules, {Documents} documents, {Holidays} public holidays",
+                contract.ContractNumber, locationDtos.Count, shiftSchedules.Count(), documents.Count(), publicHolidays.Count());
 
             return result;
         }
