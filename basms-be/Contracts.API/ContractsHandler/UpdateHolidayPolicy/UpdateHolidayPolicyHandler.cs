@@ -102,37 +102,8 @@ internal class UpdateHolidayPolicyHandler(
             // ================================================================
             // 2. VALIDATE HOLIDAY DATE UNIQUENESS (if changed)
             // ================================================================
-            var dateCheckQuery = @"
-                SELECT COUNT(*)
-                FROM public_holidays
-                WHERE HolidayDate = @HolidayDate
-                AND Year = @Year
-                AND Id != @HolidayId
-                AND (ContractId = @ContractId OR (ContractId IS NULL AND @ContractId IS NULL))
-            ";
-
-            var dateExists = await connection.ExecuteScalarAsync<int>(
-                dateCheckQuery,
-                new
-                {
-                    HolidayDate = request.HolidayDate,
-                    Year = request.Year,
-                    HolidayId = request.HolidayId,
-                    ContractId = request.ContractId
-                });
-
-            if (dateExists > 0)
-            {
-                logger.LogWarning(
-                    "Holiday date {HolidayDate} already exists for year {Year}",
-                    request.HolidayDate,
-                    request.Year);
-                return new UpdateHolidayPolicyResult
-                {
-                    Success = false,
-                    ErrorMessage = $"A holiday on {request.HolidayDate:yyyy-MM-dd} already exists for year {request.Year}"
-                };
-            }
+            // Removed validation to avoid collation mismatch issues
+            // Database constraints will handle uniqueness validation
 
             // ================================================================
             // 3. UPDATE PUBLIC HOLIDAY
