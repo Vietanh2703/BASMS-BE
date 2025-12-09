@@ -205,9 +205,9 @@ public class ActivateContractHandler(
             }
 
             // ================================================================
-            // BƯỚC 4: UPDATE CONTRACT STATUS → ACTIVE
+            // BƯỚC 4: UPDATE CONTRACT STATUS → SCHEDULE_SHIFTS
             // ================================================================
-            contract.Status = "active";
+            contract.Status = "schedule_shifts";
             contract.ActivatedAt = DateTime.UtcNow;
             contract.UpdatedAt = DateTime.UtcNow;
             contract.UpdatedBy = request.ActivatedBy;
@@ -222,7 +222,7 @@ public class ActivateContractHandler(
             await connection.UpdateAsync(contract, transaction);
 
             logger.LogInformation(
-                "✓ Contract {ContractNumber} status updated to ACTIVE",
+                "✓ Contract {ContractNumber} status updated to SCHEDULE_SHIFTS",
                 contract.ContractNumber);
 
             // ================================================================
@@ -262,23 +262,7 @@ public class ActivateContractHandler(
                 contract.AutoGenerateShifts);
 
             // ================================================================
-            // BƯỚC 6: CẬP NHẬT CUSTOMER STATUS → SCHEDULE_SHIFTS
-            // ================================================================
-            if (customer != null)
-            {
-                customer.Status = "schedule_shifts";
-                customer.UpdatedAt = DateTime.UtcNow;
-                customer.UpdatedBy = request.ActivatedBy;
-
-                await connection.UpdateAsync(customer, transaction);
-
-                logger.LogInformation(
-                    "✓ Customer {CustomerName} status updated to SCHEDULE_SHIFTS",
-                    customer.CompanyName);
-            }
-
-            // ================================================================
-            // BƯỚC 7: COMMIT TRANSACTION
+            // BƯỚC 6: COMMIT TRANSACTION
             // ================================================================
             transaction.Commit();
 
