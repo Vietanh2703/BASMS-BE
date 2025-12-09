@@ -30,7 +30,7 @@ public class RefreshAccessTokenEndpoint : ICarterModule
 
                 return Results.Ok(response);
             })
-            .RequireAuthorization()
+            .AllowAnonymous()
             .WithTags("Authentication")
             .WithName("RefreshAccessToken")
             .Produces<RefreshAccessTokenResponse>(StatusCodes.Status200OK)

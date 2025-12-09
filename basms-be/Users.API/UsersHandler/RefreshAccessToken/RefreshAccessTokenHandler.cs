@@ -11,7 +11,7 @@ public record RefreshAccessTokenCommand(
 public record RefreshAccessTokenResult(
     Guid UserId,
     string Email,
-    string AccessToken,             // JWT access token mới
+    string AccessToken,            
     string RefreshToken,            // Refresh token mới
     DateTime AccessTokenExpiry,     // Thời điểm access token mới hết hạn
     DateTime RefreshTokenExpiry     // Thời điểm refresh token mới hết hạn
