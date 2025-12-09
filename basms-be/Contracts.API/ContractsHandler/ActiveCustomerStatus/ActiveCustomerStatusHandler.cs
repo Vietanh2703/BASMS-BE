@@ -5,7 +5,7 @@ namespace Contracts.API.ContractsHandler.ActiveCustomerStatus;
 // ================================================================
 
 /// <summary>
-/// Command để update customer status từ "schedule_shifts" sang "active"
+/// Command để update customer status từ "in_active" sang "active"
 /// </summary>
 public record ActiveCustomerStatusCommand(Guid CustomerId) : ICommand<ActiveCustomerStatusResult>;
 
@@ -27,7 +27,7 @@ public record ActiveCustomerStatusResult
 // ================================================================
 
 /// <summary>
-/// Handler để update customer status từ "schedule_shifts" sang "active"
+/// Handler để update customer status từ "in_active" sang "active"
 /// </summary>
 internal class ActiveCustomerStatusHandler(
     IDbConnectionFactory connectionFactory,
@@ -74,31 +74,31 @@ internal class ActiveCustomerStatusHandler(
 
             string oldStatus = customer.Status;
 
-            // Bước 2: Kiểm tra nếu status không phải "schedule_shifts"
-            if (oldStatus != "schedule_shifts")
+            // Bước 2: Kiểm tra nếu status không phải "in_active"
+            if (oldStatus != "in_active")
             {
                 logger.LogWarning(
-                    "Customer {CustomerCode} status is '{OldStatus}', not 'schedule_shifts'. Skipping update.",
+                    "Customer {CustomerCode} status is '{OldStatus}', not 'in_active'. Skipping update.",
                     customer.CustomerCode,
                     oldStatus);
 
                 return new ActiveCustomerStatusResult
                 {
                     Success = false,
-                    ErrorMessage = $"Customer status is '{oldStatus}', expected 'schedule_shifts'",
+                    ErrorMessage = $"Customer status is '{oldStatus}', expected 'in_active'",
                     CustomerId = request.CustomerId,
                     OldStatus = oldStatus,
                     NewStatus = oldStatus
                 };
             }
 
-            // Bước 3: Update status từ "schedule_shifts" sang "active"
+            // Bước 3: Update status từ "in_active" sang "active"
             var updateQuery = @"
                 UPDATE customers
                 SET Status = 'active',
                     UpdatedAt = @UpdatedAt
                 WHERE Id = @CustomerId
-                  AND Status = 'schedule_shifts'
+                  AND Status = 'in_active'
                   AND IsDeleted = 0
             ";
 
@@ -125,7 +125,7 @@ internal class ActiveCustomerStatusHandler(
             }
 
             logger.LogInformation(
-                "Successfully activated customer {CustomerCode} (ID: {CustomerId}) from 'schedule_shifts' to 'active'",
+                "Successfully activated customer {CustomerCode} (ID: {CustomerId}) from 'in_active' to 'active'",
                 customer.CustomerCode,
                 request.CustomerId);
 
