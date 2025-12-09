@@ -84,7 +84,7 @@ public class ActivateContractEndpoint : ICarterModule
                          $"Shift templates will be imported and shifts will be auto-generated in Shifts.API."
             });
         })
-        // .RequireAuthorization()
+        .RequireAuthorization()
         .WithName("ActivateContract")
         .WithTags("Contracts")
         .Produces(200)

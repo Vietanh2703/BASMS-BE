@@ -70,6 +70,7 @@ public class ImportWorkingContractEndpoint : ICarterModule
                         );
                     }
                 })
+            .RequireAuthorization()
             .WithTags("Contracts")
             .WithName("ImportWorkingContract")
             .Produces(StatusCodes.Status200OK)

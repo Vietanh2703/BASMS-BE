@@ -27,6 +27,7 @@ public class GetContractByIdEndpoint : ICarterModule
                 data = result.Contract
             });
         })
+        .RequireAuthorization()
         .WithName("GetContractById")
         .WithTags("Contracts")
         .WithSummary("Lấy thông tin chi tiết contract theo ID")

@@ -7,7 +7,6 @@ public class UpdateShiftSchedulesEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        // Route: PUT /api/contracts/shift-schedules/{shiftScheduleId}
         app.MapPut("/api/contracts/shift-schedules/{shiftScheduleId}", async (
             Guid shiftScheduleId,
             UpdateShiftSchedulesRequest request,
@@ -81,6 +80,7 @@ public class UpdateShiftSchedulesEndpoint : ICarterModule
                 );
             }
         })
+        .RequireAuthorization()
         .WithTags("Contracts - Shift Schedules")
         .WithName("UpdateShiftSchedules")
         .Produces<UpdateShiftSchedulesResult>(StatusCodes.Status200OK)

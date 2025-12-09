@@ -27,6 +27,7 @@ public class GetDocumentByIdEndpoint : ICarterModule
                 data = result.Document
             });
         })
+        .RequireAuthorization()
         .WithName("GetDocumentById")
         .WithTags("Contracts - Documents")
         .WithSummary("Lấy thông tin chi tiết document theo ID")

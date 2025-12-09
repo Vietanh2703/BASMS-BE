@@ -10,7 +10,6 @@ public class UploadBaseContractEndpoint : ICarterModule
             {
                 try
                 {
-                    // Kiểm tra request có file không
                     if (!request.HasFormContentType || request.Form.Files.Count == 0)
                     {
                         return Results.BadRequest(new

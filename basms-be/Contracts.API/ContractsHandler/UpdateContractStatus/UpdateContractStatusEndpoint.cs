@@ -62,7 +62,7 @@ public class UpdateContractStatusEndpoint : ICarterModule
                 message = $"Contract {result.ContractNumber} status updated from {result.OldStatus} to {result.NewStatus}"
             });
         })
-        // .RequireAuthorization()
+            .RequireAuthorization()
         .WithName("UpdateContractStatus")
         .WithTags("Contracts")
         .WithSummary("Update contract status")

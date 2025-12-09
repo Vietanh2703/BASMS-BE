@@ -38,6 +38,7 @@ public class UpdateCustomerLocationGpsEndpoint : ICarterModule
                     }
                 });
             })
+        .RequireAuthorization()
         .WithTags("Locations")
         .WithName("UpdateLocationGps")
         .Produces(StatusCodes.Status200OK)

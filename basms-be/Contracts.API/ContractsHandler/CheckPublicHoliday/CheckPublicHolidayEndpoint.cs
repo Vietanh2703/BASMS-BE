@@ -11,6 +11,7 @@ public class CheckPublicHolidayEndpoint : ICarterModule
             var result = await sender.Send(query);
             return Results.Ok(result);
         })
+        .RequireAuthorization()
         .WithTags("Holidays")
         .WithName("CheckPublicHoliday")
         .Produces<CheckPublicHolidayResult>(StatusCodes.Status200OK)

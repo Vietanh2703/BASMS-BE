@@ -81,6 +81,7 @@ public class CreateShiftSchedulesEndpoint : ICarterModule
                 );
             }
         })
+        .RequireAuthorization()
         .WithTags("Contracts - Shift Schedules")
         .WithName("CreateShiftSchedules")
         .Produces<CreateShiftSchedulesResult>(StatusCodes.Status200OK)

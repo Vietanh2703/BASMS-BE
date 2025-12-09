@@ -46,6 +46,7 @@ public class GetShiftScheduleByContractIdEndpoint : ICarterModule
                 );
             }
         })
+        .RequireAuthorization()
         .WithTags("Contracts - Shift Schedules")
         .WithName("GetShiftScheduleByContractId")
         .Produces<GetShiftScheduleByContractIdResult>(StatusCodes.Status200OK)

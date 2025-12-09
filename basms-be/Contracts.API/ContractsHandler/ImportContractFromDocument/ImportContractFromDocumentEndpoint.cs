@@ -77,6 +77,7 @@ public class ImportContractFromDocumentEndpoint : ICarterModule
                     );
                 }
             })
+            .RequireAuthorization()
             .WithTags("Contracts")
             .WithName("ImportContractFromDocument")
             .Accepts<ImportContractFromDocumentRequest>("application/json")

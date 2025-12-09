@@ -131,6 +131,7 @@ public class FillContractTemplateEndpoint : ICarterModule
                         );
                     }
                 })
+            .RequireAuthorization()
             .WithTags("Contracts")
             .WithName("FillContractTemplateFromS3")
             .Produces(StatusCodes.Status200OK)

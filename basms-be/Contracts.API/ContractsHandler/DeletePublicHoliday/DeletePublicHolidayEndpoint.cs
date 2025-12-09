@@ -46,6 +46,7 @@ public class DeletePublicHolidayEndpoint : ICarterModule
                 );
             }
         })
+        .RequireAuthorization()
         .WithTags("Contracts - Holidays")
         .WithName("DeletePublicHoliday")
         .Produces<DeletePublicHolidayResult>(StatusCodes.Status200OK)

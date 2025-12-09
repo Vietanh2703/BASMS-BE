@@ -45,6 +45,7 @@ public class GetAllCustomersEndpoint : ICarterModule
                 );
             }
         })
+        .RequireAuthorization()
         .WithTags("Contracts - Customers")
         .WithName("GetAllCustomers")
         .Produces<GetAllCustomersResult>(StatusCodes.Status200OK)

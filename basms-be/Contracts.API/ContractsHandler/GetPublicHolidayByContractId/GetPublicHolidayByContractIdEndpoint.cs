@@ -46,6 +46,7 @@ public class GetPublicHolidayByContractIdEndpoint : ICarterModule
                 );
             }
         })
+        .RequireAuthorization()
         .WithTags("Contracts - Public Holidays")
         .WithName("GetPublicHolidayByContractId")
         .Produces<GetPublicHolidayByContractIdResult>(StatusCodes.Status200OK)

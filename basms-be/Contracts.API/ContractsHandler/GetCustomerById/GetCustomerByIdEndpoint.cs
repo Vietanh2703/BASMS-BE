@@ -46,6 +46,7 @@ public class GetCustomerByIdEndpoint : ICarterModule
                 );
             }
         })
+        .RequireAuthorization()
         .WithTags("Contracts - Customers")
         .WithName("GetCustomerById")
         .Produces<GetCustomerByIdResult>(StatusCodes.Status200OK)

@@ -73,6 +73,7 @@ public class CreatePublicHolidayEndpoint : ICarterModule
                 );
             }
         })
+        .RequireAuthorization()
         .WithTags("Contracts - Holidays")
         .WithName("CreatePublicHoliday")
         .Produces<CreatePublicHolidayResult>(StatusCodes.Status201Created)

@@ -45,6 +45,7 @@ public class GetAllContractDocumentsEndpoint : ICarterModule
                 );
             }
         })
+        .RequireAuthorization()
         .WithTags("Contracts - Documents")
         .WithName("GetAllContractDocuments")
         .Produces<GetAllContractDocumentsResult>(StatusCodes.Status200OK)
