@@ -45,8 +45,6 @@ internal class ActiveCustomerStatusHandler(
                 request.CustomerId);
 
             using var connection = await connectionFactory.CreateConnectionAsync();
-
-            // Bước 1: Lấy customer hiện tại để kiểm tra status
             var getCustomerQuery = @"
                 SELECT
                     Id,
@@ -73,32 +71,30 @@ internal class ActiveCustomerStatusHandler(
             }
 
             string oldStatus = customer.Status;
-
-            // Bước 2: Kiểm tra nếu status không phải "in_active"
-            if (oldStatus != "in_active")
+            
+            if (oldStatus != "in-active")
             {
                 logger.LogWarning(
-                    "Customer {CustomerCode} status is '{OldStatus}', not 'in_active'. Skipping update.",
+                    "Customer {CustomerCode} status is '{OldStatus}', not 'in-active'. Skipping update.",
                     customer.CustomerCode,
                     oldStatus);
 
                 return new ActiveCustomerStatusResult
                 {
                     Success = false,
-                    ErrorMessage = $"Customer status is '{oldStatus}', expected 'in_active'",
+                    ErrorMessage = $"Customer status is '{oldStatus}', expected 'in-active'",
                     CustomerId = request.CustomerId,
                     OldStatus = oldStatus,
                     NewStatus = oldStatus
                 };
             }
-
-            // Bước 3: Update status từ "in_active" sang "active"
+            
             var updateQuery = @"
                 UPDATE customers
                 SET Status = 'active',
                     UpdatedAt = @UpdatedAt
                 WHERE Id = @CustomerId
-                  AND Status = 'in_active'
+                  AND Status = 'in-active'
                   AND IsDeleted = 0
             ";
 
@@ -125,7 +121,7 @@ internal class ActiveCustomerStatusHandler(
             }
 
             logger.LogInformation(
-                "Successfully activated customer {CustomerCode} (ID: {CustomerId}) from 'in_active' to 'active'",
+                "Successfully activated customer {CustomerCode} (ID: {CustomerId}) from 'in-active' to 'active'",
                 customer.CustomerCode,
                 request.CustomerId);
 
