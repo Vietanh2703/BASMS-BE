@@ -34,4 +34,8 @@
       <ProjectReference Include="..\BuildingBlocks\BuildingBlocks.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <Folder Include="UsersHandler\SendLoginEmail\" />
+    </ItemGroup>
+
 </Project>

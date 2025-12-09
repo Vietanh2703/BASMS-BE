@@ -666,6 +666,117 @@ public class EmailHandler
         return body;
     }
 
+    public async Task SendLoginCredentialsEmailAsync(string fullName, string email, string password)
+    {
+        var emailBody = GenerateLoginCredentialsEmailBody(fullName, email, password);
+        var emailRequest = new EmailRequests
+        {
+            Email = email,
+            Subject = "Your Login Credentials - Safeguard System",
+            EmailBody = emailBody
+        };
+
+        await SendEmailAsync(emailRequest);
+    }
+
+    public string GenerateLoginCredentialsEmailBody(string fullName, string email, string password)
+    {
+        var body = @"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+</head>
+<body style='margin: 0; padding: 0; background-color: #f4f4f4; font-family: Arial, sans-serif;'>
+    <table width='100%' cellpadding='0' cellspacing='0' style='background-color: #f4f4f4; padding: 20px;'>
+        <tr>
+            <td align='center'>
+                <table width='600' cellpadding='0' cellspacing='0' style='background-color: #ffffff; border: 1px solid #dddddd;'>
+                    <!-- Header -->
+                    <tr>
+                        <td style='background-color: #333333; padding: 20px; text-align: center;'>
+                            <h1 style='color: #ffffff; margin: 0; font-size: 24px;'>Hệ Thống An Ninh Sinh Trắc</h1>
+                        </td>
+                    </tr>
+
+                    <!-- Content -->
+                    <tr>
+                        <td style='padding: 30px;'>
+                            <h2 style='color: #333333; margin: 0 0 20px 0; font-size: 20px;'>Thông Tin Đăng Nhập</h2>
+
+                            <p style='color: #555555; font-size: 14px; line-height: 1.6; margin: 0 0 20px 0;'>
+                                Xin chào <strong>" + fullName + @"</strong>,
+                            </p>
+
+                            <p style='color: #555555; font-size: 14px; line-height: 1.6; margin: 0 0 20px 0;'>
+                                Dưới đây là thông tin đăng nhập của bạn cho Hệ Thống Quản Lý An Ninh Sinh Trắc:
+                            </p>
+
+                            <!-- Credentials Box -->
+                            <table width='100%' cellpadding='15' cellspacing='0' style='background-color: #f9f9f9; border: 1px solid #dddddd; margin-bottom: 20px;'>
+                                <tr>
+                                    <td>
+                                        <table width='100%' cellpadding='5' cellspacing='0'>
+                                            <tr>
+                                                <td style='color: #333333; font-size: 14px; font-weight: bold; width: 120px;'>
+                                                    Email:
+                                                </td>
+                                                <td style='color: #555555; font-size: 14px;'>
+                                                    " + email + @"
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td style='color: #333333; font-size: 14px; font-weight: bold; padding-top: 10px;'>
+                                                    Mật khẩu:
+                                                </td>
+                                                <td style='color: #555555; font-size: 14px; font-family: monospace; padding-top: 10px;'>
+                                                    " + password + @"
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <!-- Security Notice -->
+                            <table width='100%' cellpadding='15' cellspacing='0' style='background-color: #fff3cd; border: 1px solid #ffc107; margin-bottom: 20px;'>
+                                <tr>
+                                    <td>
+                                        <p style='color: #856404; font-size: 13px; margin: 0; line-height: 1.5;'>
+                                            <strong>Lưu ý bảo mật:</strong> Vui lòng đăng nhập trên ứng dụng di động và đổi mật khẩu ngay lập tức để đảm bảo an toàn tài khoản.
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <p style='color: #555555; font-size: 14px; line-height: 1.6; margin: 0 0 20px 0;'>
+                                Vui lòng sử dụng thông tin trên để đăng nhập vào ứng dụng di động trên điện thoại của bạn.
+                            </p>
+
+                            <p style='color: #777777; font-size: 13px; line-height: 1.6; margin: 20px 0 0 0;'>
+                                Nếu bạn có bất kỳ câu hỏi nào, vui lòng liên hệ đội ngũ hỗ trợ của chúng tôi tại vietanhcodega123@gmail.com
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style='background-color: #f4f4f4; padding: 20px; text-align: center; border-top: 1px solid #dddddd;'>
+                            <p style='color: #999999; font-size: 12px; margin: 0;'>
+                                &copy; 2025 Hệ Thống Quản Lý An Ninh Sinh Trắc. Bảo lưu mọi quyền.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>";
+        return body;
+    }
+
     public string GeneratePasswordChangeOtpEmailBody(string fullName, string otpCode, int expiryMinutes)
     {
         var body = @"
