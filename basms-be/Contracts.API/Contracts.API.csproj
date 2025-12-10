@@ -19,6 +19,7 @@
       <Folder Include="ContractsHandler\CreatePublicHoliday\" />
       <Folder Include="ContractsHandler\CreateShiftSchedules\" />
       <Folder Include="ContractsHandler\DeleteShiftSchedules\" />
+      <Folder Include="ContractsHandler\GetAllContracts\" />
       <Folder Include="ContractsHandler\GetAllCustomers\" />
       <Folder Include="ContractsHandler\GetContractById\" />
       <Folder Include="ContractsHandler\GetContractIdByCustomer\" />
