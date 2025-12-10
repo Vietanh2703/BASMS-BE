@@ -4,7 +4,7 @@ public class GetAllContractsEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/contracts", async (
+        app.MapGet("/api/contracts/get-all", async (
             ISender sender,
             [AsParameters] GetAllContractsQueryParams queryParams) =>
         {
