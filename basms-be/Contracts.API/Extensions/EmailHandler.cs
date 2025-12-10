@@ -751,6 +751,212 @@ public class EmailHandler
     }
 
     /// <summary>
+    /// Gửi email cảnh báo hợp đồng sắp hết hạn (tiếng Việt)
+    /// </summary>
+    public async Task SendContractNearExpiryNotificationAsync(
+        string recipientName,
+        string recipientEmail,
+        string contractNumber,
+        string contractType,
+        DateTime endDate,
+        int daysRemaining)
+    {
+        var emailBody = GenerateContractNearExpiryEmailBody(
+            recipientName,
+            contractNumber,
+            contractType,
+            endDate,
+            daysRemaining);
+
+        var emailRequest = new EmailRequests
+        {
+            Email = recipientEmail,
+            Subject = $"⚠️ Thông báo: Hợp đồng {contractNumber} sắp hết hạn trong {daysRemaining} ngày",
+            EmailBody = emailBody
+        };
+
+        await SendEmailAsync(emailRequest);
+    }
+
+    private string GenerateContractNearExpiryEmailBody(
+        string recipientName,
+        string contractNumber,
+        string contractType,
+        DateTime endDate,
+        int daysRemaining)
+    {
+        var endDateStr = endDate.ToString("dd/MM/yyyy");
+
+        // Xác định loại hợp đồng bằng tiếng Việt
+        var contractTypeVi = contractType switch
+        {
+            "working_contract" => "Hợp đồng lao động nhân viên bảo vệ",
+            "manager_working_contract" => "Hợp đồng lao động quản lý",
+            "extended_working_contract" => "Hợp đồng gia hạn",
+            _ when contractType.Contains("service") => "Hợp đồng dịch vụ bảo vệ",
+            _ => "Hợp đồng"
+        };
+
+        var urgencyColor = daysRemaining <= 3 ? "#f44336" : "#ff9800";
+        var urgencyText = daysRemaining <= 3 ? "Khẩn cấp" : "Quan trọng";
+
+        var template = @"
+<!DOCTYPE html>
+<html lang=""vi"">
+<head>
+    <meta charset=""UTF-8"">
+    <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
+    <title>Thông báo hợp đồng sắp hết hạn</title>
+</head>
+<body style=""margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f4f4f4;"">
+    <table width=""100%"" cellpadding=""0"" cellspacing=""0"" style=""background-color: #f4f4f4; padding: 20px;"">
+        <tr>
+            <td align=""center"">
+                <table width=""600"" cellpadding=""0"" cellspacing=""0"" style=""background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"">
+
+                    <!-- Header với cảnh báo -->
+                    <tr>
+                        <td style=""background: linear-gradient(135deg, {urgencyColor} 0%, #d32f2f 100%); padding: 30px; text-align: center; border-radius: 8px 8px 0 0;"">
+                            <div style=""font-size: 48px; margin-bottom: 10px;"">⚠️</div>
+                            <h1 style=""color: #ffffff; margin: 0; font-size: 24px; font-weight: bold;"">
+                                Thông báo {urgencyText}
+                            </h1>
+                            <p style=""color: #ffffff; margin: 10px 0 0 0; font-size: 16px;"">
+                                Hợp đồng của bạn sắp hết hạn
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Content -->
+                    <tr>
+                        <td style=""padding: 40px 30px;"">
+                            <p style=""color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;"">
+                                Kính gửi <strong>{recipientName}</strong>,
+                            </p>
+
+                            <p style=""color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;"">
+                                Chúng tôi xin thông báo rằng hợp đồng của bạn trong hệ thống BASMS sắp hết hạn.
+                            </p>
+
+                            <!-- Thông tin hợp đồng -->
+                            <div style=""background-color: #fff3cd; border-left: 4px solid {urgencyColor}; padding: 20px; margin: 20px 0; border-radius: 4px;"">
+                                <h2 style=""color: {urgencyColor}; margin: 0 0 15px 0; font-size: 18px;"">
+                                    📋 Thông tin hợp đồng
+                                </h2>
+
+                                <table style=""width: 100%; border-collapse: collapse;"">
+                                    <tr>
+                                        <td style=""padding: 8px 0; color: #666666; font-size: 14px; width: 40%;"">
+                                            <strong>Mã hợp đồng:</strong>
+                                        </td>
+                                        <td style=""padding: 8px 0; color: #333333; font-size: 14px;"">
+                                            <strong>{contractNumber}</strong>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style=""padding: 8px 0; color: #666666; font-size: 14px;"">
+                                            <strong>Loại hợp đồng:</strong>
+                                        </td>
+                                        <td style=""padding: 8px 0; color: #333333; font-size: 14px;"">
+                                            {contractTypeVi}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td style=""padding: 8px 0; color: #666666; font-size: 14px;"">
+                                            <strong>Ngày hết hạn:</strong>
+                                        </td>
+                                        <td style=""padding: 8px 0; color: #333333; font-size: 14px;"">
+                                            <strong style=""color: {urgencyColor};"">{endDateStr}</strong>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </div>
+
+                            <!-- Cảnh báo thời gian còn lại -->
+                            <div style=""background-color: #ffebee; border: 2px solid {urgencyColor}; padding: 20px; margin: 20px 0; border-radius: 8px; text-align: center;"">
+                                <div style=""font-size: 48px; font-weight: bold; color: {urgencyColor}; margin-bottom: 10px;"">
+                                    {daysRemaining}
+                                </div>
+                                <div style=""font-size: 18px; color: #333333; font-weight: bold;"">
+                                    Ngày còn lại đến khi hợp đồng hết hạn
+                                </div>
+                            </div>
+
+                            <!-- Hành động cần thực hiện -->
+                            <div style=""background-color: #e3f2fd; border-left: 4px solid #2196F3; padding: 20px; margin: 20px 0; border-radius: 4px;"">
+                                <h3 style=""color: #2196F3; margin: 0 0 15px 0; font-size: 16px;"">
+                                    📌 Hành động cần thực hiện
+                                </h3>
+                                <ul style=""color: #333333; font-size: 14px; line-height: 1.8; margin: 0; padding-left: 20px;"">
+                                    <li><strong>Liên hệ ngay:</strong> Vui lòng liên hệ với bộ phận nhân sự hoặc quản lý để thảo luận về việc gia hạn hợp đồng</li>
+                                    <li><strong>Chuẩn bị hồ sơ:</strong> Nếu có nhu cầu gia hạn, hãy chuẩn bị các giấy tờ cần thiết</li>
+                                    <li><strong>Xác nhận quyết định:</strong> Thông báo quyết định của bạn về việc gia hạn hoặc kết thúc hợp đồng</li>
+                                </ul>
+                            </div>
+
+                            <div style=""background-color: #f8f9fa; border-left: 4px solid #6c757d; padding: 15px; margin: 20px 0; border-radius: 4px;"">
+                                <p style=""color: #333333; margin: 0; font-size: 14px; line-height: 1.6;"">
+                                    <strong>Lưu ý:</strong> Nếu hợp đồng hết hạn mà chưa được gia hạn, quyền truy cập hệ thống của bạn sẽ bị tạm ngưng để đảm bảo bảo mật.
+                                </p>
+                            </div>
+
+                            <center>
+                                <a href=""https://anninhsinhtrac.com/login""
+                                   style=""background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+                                          color: #ffffff;
+                                          padding: 14px 40px;
+                                          text-decoration: none;
+                                          border-radius: 6px;
+                                          font-size: 16px;
+                                          font-weight: bold;
+                                          display: inline-block;
+                                          box-shadow: 0 4px 6px rgba(33, 150, 243, 0.25);"">
+                                    🔐 Đăng nhập hệ thống
+                                </a>
+                            </center>
+
+                            <p style=""color: #666666; font-size: 14px; line-height: 1.6; margin: 30px 0 0 0;"">
+                                Nếu bạn có bất kỳ câu hỏi nào hoặc cần hỗ trợ, vui lòng liên hệ:
+                            </p>
+                            <p style=""color: #666666; font-size: 14px; line-height: 1.8; margin: 10px 0;"">
+                                📞 Hotline: 1900-xxxx<br>
+                                📧 Email: support@basms.com<br>
+                                🌐 Website: www.basms.com<br>
+                                ⏰ Thời gian hỗ trợ: 8:00 - 17:30 (Thứ 2 - Thứ 6)
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style=""background-color: #f8f9fa; padding: 20px 30px; border-radius: 0 0 8px 8px;"">
+                            <p style=""color: #666666; font-size: 12px; line-height: 1.6; margin: 0 0 10px 0; text-align: center;"">
+                                Email này được gửi tự động từ hệ thống BASMS<br>
+                                Vui lòng không trả lời email này
+                            </p>
+                            <p style=""color: #999999; font-size: 11px; margin: 0; text-align: center;"">
+                                © 2025 BASMS - Building & Apartment Security Management System
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>";
+
+        return template
+            .Replace("{recipientName}", recipientName)
+            .Replace("{contractNumber}", contractNumber)
+            .Replace("{contractTypeVi}", contractTypeVi)
+            .Replace("{endDateStr}", endDateStr)
+            .Replace("{daysRemaining}", daysRemaining.ToString())
+            .Replace("{urgencyColor}", urgencyColor)
+            .Replace("{urgencyText}", urgencyText);
+    }
+
+    /// <summary>
     /// Extract tên file ngắn từ S3 key để tránh lỗi Word khi mở file
     /// VD: contracts/signed/.../SIGNED_abc123_HOP_DONG_LAO_DONG_NV_BAO_VE_22_11_2025.docx
     /// => HOP_DONG_LAO_DONG_NV_BAO_VE.docx
