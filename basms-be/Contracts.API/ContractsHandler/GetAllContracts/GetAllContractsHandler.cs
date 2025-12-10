@@ -34,6 +34,7 @@ public record ContractDto
     public Guid? CustomerId { get; init; }
     public string? CustomerName { get; init; }
     public string? CustomerEmail { get; init; }
+    public string? Category { get; init; }
     public DateTime? StartDate { get; init; }
     public DateTime? EndDate { get; init; }
     public int? DaysRemaining { get; init; }
@@ -124,6 +125,7 @@ internal class GetAllContractsHandler(
                     c.UpdatedAt,
                     COALESCE(cust.ContactPersonName) as CustomerName,
                     cust.Email as CustomerEmail,
+                    doc.Category,
                     doc.StartDate,
                     doc.EndDate
                 FROM contracts c
