@@ -84,7 +84,8 @@ internal class GetAllContractsHandler(
             {
                 whereConditions.Add(@"(
                     c.ContractNumber LIKE @SearchKeyword
-                    OR cust.CustomerName LIKE @SearchKeyword
+                    OR cust.CompanyName LIKE @SearchKeyword
+                    OR cust.ContactPersonName LIKE @SearchKeyword
                     OR cust.Email LIKE @SearchKeyword
                 )");
                 parameters.Add("SearchKeyword", $"%{request.SearchKeyword}%");
@@ -122,7 +123,7 @@ internal class GetAllContractsHandler(
                     c.CustomerId,
                     c.CreatedAt,
                     c.UpdatedAt,
-                    cust.CustomerName,
+                    COALESCE(cust.CompanyName, cust.ContactPersonName) as CustomerName,
                     cust.Email as CustomerEmail,
                     doc.StartDate,
                     doc.EndDate
