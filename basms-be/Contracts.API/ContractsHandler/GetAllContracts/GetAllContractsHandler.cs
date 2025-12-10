@@ -111,8 +111,7 @@ internal class GetAllContractsHandler(
                     TotalCount = 0
                 };
             }
-
-            // Get all contracts sorted by CreatedAt DESC (newest first)
+            
             var query = $@"
                 SELECT
                     c.Id,
@@ -123,7 +122,7 @@ internal class GetAllContractsHandler(
                     c.CustomerId,
                     c.CreatedAt,
                     c.UpdatedAt,
-                    COALESCE(cust.CompanyName, cust.ContactPersonName) as CustomerName,
+                    COALESCE(cust.ContactPersonName) as CustomerName,
                     cust.Email as CustomerEmail,
                     doc.StartDate,
                     doc.EndDate
