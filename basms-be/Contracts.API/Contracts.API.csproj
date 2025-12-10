@@ -15,6 +15,7 @@
 
     <ItemGroup>
       <Folder Include="ContractsHandler\ActiveCustomerStatus\" />
+      <Folder Include="ContractsHandler\CheckExpiredContractById\" />
       <Folder Include="ContractsHandler\CreatePublicHoliday\" />
       <Folder Include="ContractsHandler\CreateShiftSchedules\" />
       <Folder Include="ContractsHandler\DeleteShiftSchedules\" />
