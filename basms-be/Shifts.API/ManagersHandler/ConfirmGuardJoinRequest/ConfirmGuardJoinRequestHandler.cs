@@ -207,26 +207,40 @@ internal class ConfirmGuardJoinRequestHandler(
                 }
 
                 // ================================================================
-                // BƯỚC 6: UPDATE MANAGER STATISTICS (if approved)
+                // BƯỚC 6: UPDATE MANAGER TotalGuardsSupervised
                 // ================================================================
                 if (command.IsApproved)
                 {
+                    // APPROVED: Không cần thay đổi TotalGuardsSupervised
+                    // (Đã -1 khi guard gửi request)
+                    logger.LogInformation(
+                        "Guard {GuardId} approved. TotalGuardsSupervised for Manager {ManagerId} remains unchanged (already decremented on request).",
+                        command.GuardId,
+                        command.ManagerId);
+                }
+                else
+                {
+                    // REJECTED: Trả lại slot cho manager (+1 TotalGuardsSupervised)
+                    var incrementSql = @"
+                        UPDATE managers
+                        SET TotalGuardsSupervised = TotalGuardsSupervised + 1,
+                            UpdatedAt = @UpdatedAt
+                        WHERE Id = @ManagerId
+                        AND IsDeleted = 0";
+
                     await connection.ExecuteAsync(
-                        @"UPDATE managers
-                          SET TotalGuardsSupervised = (
-                              SELECT COUNT(*) FROM guards
-                              WHERE DirectManagerId = @ManagerId
-                              AND ContractType = 'accepted_request'
-                              AND IsDeleted = 0
-                          ),
-                          UpdatedAt = @UpdatedAt
-                          WHERE Id = @ManagerId",
+                        incrementSql,
                         new
                         {
                             command.ManagerId,
                             UpdatedAt = DateTime.UtcNow
                         },
                         transaction);
+
+                    logger.LogInformation(
+                        "Guard {GuardId} rejected. TotalGuardsSupervised for Manager {ManagerId} incremented by 1 (slot returned).",
+                        command.GuardId,
+                        command.ManagerId);
                 }
 
                 transaction.Commit();
