@@ -96,6 +96,7 @@ builder.Services.AddMassTransit(x =>
 {
     // Register consumers
     x.AddConsumer<Users.API.Consumers.CreateUserRequestConsumer>();
+    x.AddConsumer<Users.API.Consumers.GetUserByEmailRequestConsumer>();
 
     // Configure RabbitMQ
     x.UsingRabbitMq((context, cfg) =>

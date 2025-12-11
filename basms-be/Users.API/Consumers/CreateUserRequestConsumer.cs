@@ -1,5 +1,6 @@
 using CreateUserRequest = BuildingBlocks.Messaging.Events.CreateUserRequest;
 using CreateUserResponse = BuildingBlocks.Messaging.Events.CreateUserResponse;
+using Dapper;
 
 namespace Users.API.Consumers;
 
@@ -28,9 +29,9 @@ public class CreateUserRequestConsumer(
             // ================================================================
             using var connection = await connectionFactory.CreateConnectionAsync();
 
-            var existingUsers = await connection.GetAllAsync<Models.Users>();
-            var existingUser = existingUsers.FirstOrDefault(u =>
-                u.Email == request.Email && !u.IsDeleted);
+            var existingUser = await connection.QueryFirstOrDefaultAsync<Models.Users>(
+                "SELECT * FROM users WHERE Email = @Email AND IsDeleted = 0 LIMIT 1",
+                new { Email = request.Email });
 
             if (existingUser != null)
             {
@@ -49,9 +50,9 @@ public class CreateUserRequestConsumer(
             // ================================================================
             // BƯỚC 2: LẤY ROLE ID
             // ================================================================
-            var roles = await connection.GetAllAsync<Roles>();
-            var role = roles.FirstOrDefault(r =>
-                r.Name.Equals(request.RoleName, StringComparison.OrdinalIgnoreCase) && !r.IsDeleted);
+            var role = await connection.QueryFirstOrDefaultAsync<Roles>(
+                "SELECT * FROM roles WHERE Name = @RoleName AND IsDeleted = 0 LIMIT 1",
+                new { RoleName = request.RoleName });
 
             if (role == null)
             {
