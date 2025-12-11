@@ -122,16 +122,18 @@ internal class ImportManagerWorkingContractHandler(
                 employeeData.IdentityNumber);
 
             // ================================================================
-            // PARSE CẤP BẬC VÀ LƯƠNG TỪ DOCUMENT
+            // PARSE CẤP BẬC, LƯƠNG VÀ SỐ GUARDS TỪ DOCUMENT
             // ================================================================
 
             var certificationLevel = ParseCertificationLevel(text);
             var standardWage = ParseStandardWage(text);
+            var totalGuardsSupervised = ParseTotalGuardsSupervised(text);
 
             logger.LogInformation(
-                "✓ Parsed certification & wage: Level={Level}, Wage={Wage}",
+                "✓ Parsed manager info: Level={Level}, Wage={Wage}, TotalGuards={TotalGuards}",
                 certificationLevel,
-                standardWage);
+                standardWage,
+                totalGuardsSupervised);
 
             // ================================================================
             // KIỂM TRA USER ĐÃ TỒN TẠI (email, phone, identityNumber)
@@ -181,14 +183,16 @@ internal class ImportManagerWorkingContractHandler(
                     Email = employeeData.Email,
                     CertificationLevel = certificationLevel,
                     StandardWage = standardWage,
+                    TotalGuardsSupervised = totalGuardsSupervised,
                     UpdatedAt = DateTime.UtcNow
                 }, cancellationToken);
 
                 logger.LogInformation(
-                    "✓ Published UpdateManagerInfoEvent for existing Manager {ManagerId}: Level={Level}, Wage={Wage}",
+                    "✓ Published UpdateManagerInfoEvent for existing Manager {ManagerId}: Level={Level}, Wage={Wage}, TotalGuards={TotalGuards}",
                     userId,
                     certificationLevel,
-                    standardWage);
+                    standardWage,
+                    totalGuardsSupervised);
             }
             else
             {
@@ -250,14 +254,16 @@ internal class ImportManagerWorkingContractHandler(
                     Email = employeeData.Email,
                     CertificationLevel = certificationLevel,
                     StandardWage = standardWage,
+                    TotalGuardsSupervised = totalGuardsSupervised,
                     UpdatedAt = DateTime.UtcNow
                 }, cancellationToken);
 
                 logger.LogInformation(
-                    "✓ Published UpdateManagerInfoEvent for Manager {ManagerId}: Level={Level}, Wage={Wage}",
+                    "✓ Published UpdateManagerInfoEvent for Manager {ManagerId}: Level={Level}, Wage={Wage}, TotalGuards={TotalGuards}",
                     userId,
                     certificationLevel,
-                    standardWage);
+                    standardWage,
+                    totalGuardsSupervised);
 
                 // ================================================================
                 // GỬI EMAIL THÔNG TIN ĐĂNG NHẬP CHO MANAGER MỚI
@@ -834,6 +840,38 @@ internal class ImportManagerWorkingContractHandler(
         catch (Exception ex)
         {
             logger.LogError(ex, "Error parsing StandardWage");
+            return null;
+        }
+    }
+
+    /// <summary>
+    ///     Parse Tổng số guards được phân công quản lý từ document text
+    ///     Pattern: "Tổng số nhân viên bảo vệ được giao quản lý/phụ trách: 20 người"
+    /// </summary>
+    private int? ParseTotalGuardsSupervised(string text)
+    {
+        try
+        {
+            // Pattern: "Tổng số nhân viên bảo vệ được giao quản lý/phụ trách: 20 người"
+            var match = Regex.Match(text,
+                @"Tổng số nhân viên bảo vệ được giao quản lý/phụ trách:\s*(\d+)",
+                RegexOptions.IgnoreCase);
+
+            if (match.Success)
+            {
+                if (int.TryParse(match.Groups[1].Value, out var totalGuards))
+                {
+                    logger.LogInformation("✓ Extracted TotalGuardsSupervised: {TotalGuards}", totalGuards);
+                    return totalGuards;
+                }
+            }
+
+            logger.LogWarning("⚠ Failed to extract TotalGuardsSupervised from document");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error parsing TotalGuardsSupervised");
             return null;
         }
     }

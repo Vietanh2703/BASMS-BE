@@ -99,7 +99,7 @@ public record UpdateGuardInfoEvent
 // ================================================================
 
 /// <summary>
-/// Event để update thông tin Manager (CertificationLevel, StandardWage)
+/// Event để update thông tin Manager (CertificationLevel, StandardWage, TotalGuardsSupervised)
 /// Published by Contracts.API sau khi import manager working contract
 /// Consumed by Shifts.API để update Manager record
 /// </summary>
@@ -109,6 +109,7 @@ public record UpdateManagerInfoEvent
     public string? Email { get; init; }
     public string? CertificationLevel { get; init; } // Hạng chứng chỉ: I, II, III, IV, V, VI
     public decimal? StandardWage { get; init; } // Mức lương cơ bản (VNĐ/tháng)
+    public int? TotalGuardsSupervised { get; init; } // Tổng số guards được phân công quản lý
     public DateTime UpdatedAt { get; init; } = DateTime.UtcNow;
 }
 

@@ -22,10 +22,11 @@ public class UpdateManagerInfoConsumer : IConsumer<UpdateManagerInfoEvent>
         var @event = context.Message;
 
         _logger.LogInformation(
-            "Received UpdateManagerInfoEvent for Manager {ManagerId}: Level={Level}, Wage={Wage}",
+            "Received UpdateManagerInfoEvent for Manager {ManagerId}: Level={Level}, Wage={Wage}, TotalGuards={TotalGuards}",
             @event.ManagerId,
             @event.CertificationLevel,
-            @event.StandardWage);
+            @event.StandardWage,
+            @event.TotalGuardsSupervised);
 
         try
         {
@@ -45,15 +46,17 @@ public class UpdateManagerInfoConsumer : IConsumer<UpdateManagerInfoEvent>
             // Update manager with new info
             manager.CertificationLevel = @event.CertificationLevel;
             manager.StandardWage = @event.StandardWage;
+            manager.TotalGuardsSupervised = @event.TotalGuardsSupervised ?? manager.TotalGuardsSupervised;
             manager.UpdatedAt = DateTime.UtcNow;
 
             await connection.UpdateAsync(manager);
 
             _logger.LogInformation(
-                "✓ Updated Manager {ManagerId}: CertificationLevel={Level}, StandardWage={Wage}",
+                "✓ Updated Manager {ManagerId}: CertificationLevel={Level}, StandardWage={Wage}, TotalGuardsSupervised={TotalGuards}",
                 @event.ManagerId,
                 @event.CertificationLevel,
-                @event.StandardWage);
+                @event.StandardWage,
+                @event.TotalGuardsSupervised);
         }
         catch (Exception ex)
         {
