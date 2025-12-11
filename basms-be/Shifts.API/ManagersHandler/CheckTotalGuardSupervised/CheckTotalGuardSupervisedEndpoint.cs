@@ -4,7 +4,7 @@ public class CheckTotalGuardSupervisedEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/managers/{managerId:guid}/check-guard-count",
+        app.MapGet("/api/shifts/managers/{managerId:guid}/check-guard-count",
                 async (Guid managerId, ISender sender) =>
                 {
                     var query = new CheckTotalGuardSupervisedQuery(managerId);
