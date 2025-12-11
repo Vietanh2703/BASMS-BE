@@ -84,25 +84,6 @@ internal class RequestGuardToManagerHandler(
             }
 
             // ================================================================
-            // BƯỚC 2.5: KIỂM TRA SỐ LƯỢNG GUARDS CÒN NHẬN ĐƯỢC
-            // ================================================================
-            if (manager.TotalGuardsSupervised <= 0)
-            {
-                logger.LogWarning(
-                    "Manager {ManagerId} has no available slots for more guards (TotalGuardsSupervised: {Count})",
-                    command.ManagerId,
-                    manager.TotalGuardsSupervised);
-
-                return new RequestGuardToManagerResult(
-                    Success: false,
-                    Message: "Không thể phân công thêm bảo vệ cho quản lý này. Quản lý đã đạt giới hạn số lượng bảo vệ.",
-                    GuardId: command.GuardId,
-                    ManagerId: command.ManagerId,
-                    RequestedAt: DateTime.UtcNow
-                );
-            }
-
-            // ================================================================
             // BƯỚC 3: CHECK IF GUARD ALREADY HAS PENDING REQUEST
             // ================================================================
             if (guard.ContractType == "join_in_request" && guard.DirectManagerId != null)
@@ -162,42 +143,6 @@ internal class RequestGuardToManagerHandler(
                     );
                 }
 
-                // ================================================================
-                // BƯỚC 5: GIẢM TotalGuardsSupervised CỦA MANAGER
-                // ================================================================
-                var updateManagerSql = @"
-                    UPDATE managers
-                    SET TotalGuardsSupervised = TotalGuardsSupervised - 1,
-                        UpdatedAt = @UpdatedAt
-                    WHERE Id = @ManagerId
-                    AND IsDeleted = 0
-                    AND TotalGuardsSupervised > 0";
-
-                var managerRowsAffected = await connection.ExecuteAsync(
-                    updateManagerSql,
-                    new
-                    {
-                        command.ManagerId,
-                        UpdatedAt = DateTime.UtcNow
-                    },
-                    transaction);
-
-                if (managerRowsAffected == 0)
-                {
-                    transaction.Rollback();
-                    logger.LogError(
-                        "Failed to update manager {ManagerId} TotalGuardsSupervised",
-                        command.ManagerId);
-
-                    return new RequestGuardToManagerResult(
-                        Success: false,
-                        Message: "Failed to create join request. Manager has no available slots.",
-                        GuardId: command.GuardId,
-                        ManagerId: command.ManagerId,
-                        RequestedAt: DateTime.UtcNow
-                    );
-                }
-
                 transaction.Commit();
             }
             catch (Exception)
@@ -213,7 +158,6 @@ internal class RequestGuardToManagerHandler(
                 command.ManagerId,
                 manager.FullName);
             
-            // await SendNotificationToManager(manager, guard, command.RequestNote);
 
             return new RequestGuardToManagerResult(
                 Success: true,

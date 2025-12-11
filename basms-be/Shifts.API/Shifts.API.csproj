@@ -28,7 +28,6 @@
       <Folder Include="Models\" />
       <Folder Include="ShiftsHandler\GetContractManaged\" />
       <Folder Include="ShiftsHandler\GetShiftTemplateByManager\" />
-      <Folder Include="WageRatesHandler\" />
     </ItemGroup>
 
     <ItemGroup>
