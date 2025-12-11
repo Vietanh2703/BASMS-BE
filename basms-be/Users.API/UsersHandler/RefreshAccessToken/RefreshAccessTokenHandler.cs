@@ -1,4 +1,5 @@
 using BuildingBlocks.Exceptions;
+using Dapper;
 
 namespace Users.API.UsersHandler.RefreshAccessToken;
 
@@ -39,9 +40,17 @@ public class RefreshAccessTokenHandler(
             try
             {
                 // Bước 3: Tìm refresh token trong database
-                var refreshTokens = await connection.GetAllAsync<RefreshTokens>(transaction);
-                var storedToken = refreshTokens.FirstOrDefault(t => 
-                    t.Token == command.RefreshToken && !t.IsRevoked);
+                var sql = @"
+                    SELECT * FROM refresh_tokens
+                    WHERE Token = @Token
+                    AND IsRevoked = 0
+                    AND IsDeleted = 0
+                    LIMIT 1";
+
+                var storedToken = await connection.QueryFirstOrDefaultAsync<RefreshTokens>(
+                    sql,
+                    new { Token = command.RefreshToken },
+                    transaction);
 
                 if (storedToken == null)
                 {
@@ -206,19 +215,22 @@ public class RefreshAccessTokenHandler(
         string token,
         DateTime expiresAt)
     {
-        // XÓA tất cả access tokens cũ
-        var existingTokens = await connection.GetAllAsync<UserTokens>(transaction);
-        var userTokens = existingTokens.Where(t => 
-            t.UserId == userId && 
-            t.TokenType == "access_token").ToList();
+        // XÓA tất cả access tokens cũ bằng DELETE query
+        var deleteSql = @"
+            DELETE FROM user_tokens
+            WHERE UserId = @UserId
+            AND TokenType = 'access_token'";
 
-        foreach (var existingToken in userTokens)
-        {
-            await connection.DeleteAsync(existingToken, transaction);
-        }
+        await connection.ExecuteAsync(deleteSql, new { UserId = userId }, transaction);
 
         // INSERT access token mới
-        var userToken = new UserTokens
+        var insertSql = @"
+            INSERT INTO user_tokens
+            (Id, UserId, Token, TokenType, ExpiresAt, IsRevoked, CreatedAt, UpdatedAt, IsDeleted)
+            VALUES
+            (@Id, @UserId, @Token, @TokenType, @ExpiresAt, @IsRevoked, @CreatedAt, @UpdatedAt, 0)";
+
+        await connection.ExecuteAsync(insertSql, new
         {
             Id = Guid.NewGuid(),
             UserId = userId,
@@ -228,9 +240,7 @@ public class RefreshAccessTokenHandler(
             IsRevoked = false,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
-        };
-
-        await connection.InsertAsync(userToken, transaction);
+        }, transaction);
     }
 
     // Lưu Refresh Token vào database
@@ -241,18 +251,21 @@ public class RefreshAccessTokenHandler(
         string token,
         DateTime expiresAt)
     {
-        // XÓA tất cả refresh tokens cũ
-        var existingTokens = await connection.GetAllAsync<RefreshTokens>(transaction);
-        var userRefreshTokens = existingTokens.Where(t => 
-            t.UserId == userId).ToList();
+        // XÓA tất cả refresh tokens cũ bằng DELETE query
+        var deleteSql = @"
+            DELETE FROM refresh_tokens
+            WHERE UserId = @UserId";
 
-        foreach (var existingToken in userRefreshTokens)
-        {
-            await connection.DeleteAsync(existingToken, transaction);
-        }
+        await connection.ExecuteAsync(deleteSql, new { UserId = userId }, transaction);
 
         // INSERT refresh token mới
-        var refreshToken = new RefreshTokens
+        var insertSql = @"
+            INSERT INTO refresh_tokens
+            (Id, UserId, Token, ExpiresAt, IsRevoked, CreatedAt, UpdatedAt, IsDeleted)
+            VALUES
+            (@Id, @UserId, @Token, @ExpiresAt, @IsRevoked, @CreatedAt, @UpdatedAt, 0)";
+
+        await connection.ExecuteAsync(insertSql, new
         {
             Id = Guid.NewGuid(),
             UserId = userId,
@@ -261,9 +274,7 @@ public class RefreshAccessTokenHandler(
             IsRevoked = false,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
-        };
-
-        await connection.InsertAsync(refreshToken, transaction);
+        }, transaction);
     }
 
     // Ghi log audit trail
