@@ -149,7 +149,7 @@ curl -X POST http://localhost:5000/api/contracts/working/import \
 
 /// <summary>
 ///     Request model cho import working contract
-///     Chỉ cần DocumentId - guard
+///     Chỉ cần DocumentId - CertificationLevel và StandardWage sẽ được parse từ document
 /// </summary>
 public record ImportWorkingContractRequest(
     Guid DocumentId

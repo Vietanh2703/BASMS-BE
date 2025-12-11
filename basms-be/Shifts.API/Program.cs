@@ -60,6 +60,9 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<Shifts.API.Consumers.UserUpdatedConsumer>();
     x.AddConsumer<Shifts.API.Consumers.UserDeletedConsumer>();
     x.AddConsumer<Shifts.API.Consumers.ContractActivatedConsumer>();
+    x.AddConsumer<Shifts.API.Consumers.UpdateGuardInfoConsumer>();
+    x.AddConsumer<Shifts.API.Consumers.UpdateManagerInfoConsumer>();
+    x.AddConsumer<Shifts.API.Consumers.DeactivateGuardConsumer>();
 
     // Request Clients for Auto-Generate Shifts feature (from BuildingBlocks.Messaging.Contracts)
     x.AddRequestClient<CheckPublicHolidayRequest>();
