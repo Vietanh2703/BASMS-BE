@@ -769,14 +769,14 @@ internal class ImportWorkingContractHandler(
 
     /// <summary>
     ///     Parse Cấp bậc từ document text
-    ///     Pattern: "Cấp bậc: {{{{CertificationLevel}}}}"
+    ///     Pattern: "Cấp bậc: IV" or "Cấp bậc : IV" (with optional space before colon)
     /// </summary>
     private string? ParseCertificationLevel(string text)
     {
         try
         {
-            // Pattern 1: "Cấp bậc: {{{{CertificationLevel}}}}"
-            var match = Regex.Match(text, @"Cấp bậc:\s*([IVX]+)", RegexOptions.IgnoreCase);
+            // Pattern: "Cấp bậc" + optional space + ":" + optional space + Roman numerals
+            var match = Regex.Match(text, @"Cấp bậc\s*:\s*([IVX]+)", RegexOptions.IgnoreCase);
             if (match.Success)
             {
                 var level = match.Groups[1].Value.Trim().ToUpper();
