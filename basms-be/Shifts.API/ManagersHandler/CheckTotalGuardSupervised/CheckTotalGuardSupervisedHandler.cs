@@ -84,12 +84,12 @@ internal class CheckTotalGuardSupervisedHandler(
             // ================================================================
             var totalGuardsSupervised = manager.TotalGuardsSupervised;
             var availableSlots = totalGuardsSupervised - actualGuardsCount;
-            var isOverLimit = actualGuardsCount > totalGuardsSupervised;
+            var isLimit = actualGuardsCount == totalGuardsSupervised;
 
             string message;
-            if (isOverLimit)
+            if (isLimit)
             {
-                message = $"⚠️ Manager has {actualGuardsCount} guards but limit is {totalGuardsSupervised}. Over limit by {actualGuardsCount - totalGuardsSupervised}.";
+                message = $"Manager has {actualGuardsCount} guards but limit is {totalGuardsSupervised}. Over limit by {actualGuardsCount - totalGuardsSupervised}.";
             }
             else if (availableSlots == 0)
             {
@@ -108,7 +108,7 @@ internal class CheckTotalGuardSupervisedHandler(
                 ActualGuardsCount = actualGuardsCount,
                 TotalGuardsSupervised = totalGuardsSupervised,
                 AvailableSlots = availableSlots,
-                IsOverLimit = isOverLimit,
+                IsOverLimit = isLimit,
                 Message = message
             };
         }
