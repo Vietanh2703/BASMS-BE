@@ -8,8 +8,7 @@ public record UpdateTeamRequest(
     string? Specialization,
     string? Description,
     int? MinMembers,
-    int? MaxMembers,
-    bool? IsActive
+    int? MaxMembers
 );
 
 public class UpdateTeamEndpoint : ICarterModule
@@ -34,7 +33,6 @@ public class UpdateTeamEndpoint : ICarterModule
                 Description: req.Description,
                 MinMembers: req.MinMembers,
                 MaxMembers: req.MaxMembers,
-                IsActive: req.IsActive,
                 UpdatedBy: userId
             );
 

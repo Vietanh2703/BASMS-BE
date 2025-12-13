@@ -14,7 +14,6 @@ public record UpdateTeamCommand(
     string? Description,
     int? MinMembers,
     int? MaxMembers,
-    bool? IsActive,
     Guid UpdatedBy
 ) : ICommand<UpdateTeamResult>;
 
@@ -134,13 +133,6 @@ internal class UpdateTeamHandler(
             {
                 changesList.Add($"MaxMembers: {team.MaxMembers?.ToString() ?? "unlimited"} → {request.MaxMembers.Value}");
                 team.MaxMembers = request.MaxMembers.Value;
-                hasChanges = true;
-            }
-
-            if (request.IsActive.HasValue)
-            {
-                changesList.Add($"IsActive: {team.IsActive} → {request.IsActive.Value}");
-                team.IsActive = request.IsActive.Value;
                 hasChanges = true;
             }
 
