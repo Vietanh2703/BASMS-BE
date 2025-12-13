@@ -28,7 +28,7 @@ public class GetAllTeamsEndpoint : ICarterModule
 
     return Results.Ok(result);
 })
-        // .RequireAuthorization()
+        .RequireAuthorization()
         .WithName("GetAllTeams")
         .WithTags("Teams")
         .Produces(200)
