@@ -9,9 +9,7 @@ namespace Shifts.API.TeamsHandler.GetAllTeams;
 public record GetAllTeamsQuery(
     Guid? ManagerId,                // Filter theo manager (optional)
     string? Specialization,         // Filter theo specialization (optional)
-    bool? IsActive,                 // Filter theo active status (optional)
-    int PageNumber,                 // Pagination
-    int PageSize                    // Pagination
+    bool? IsActive                  // Filter theo active status (optional)
 ) : IQuery<GetAllTeamsResult>;
 
 /// <summary>
@@ -21,9 +19,6 @@ public record GetAllTeamsResult
 {
     public List<TeamSummaryDto> Teams { get; init; } = new();
     public int TotalCount { get; init; }
-    public int PageNumber { get; init; }
-    public int PageSize { get; init; }
-    public int TotalPages { get; init; }
 }
 
 public record TeamSummaryDto
@@ -87,24 +82,8 @@ internal class GetAllTeamsHandler(
             var whereClause = string.Join(" AND ", whereConditions);
 
             // ================================================================
-            // COUNT TOTAL
+            // QUERY ALL TEAMS
             // ================================================================
-            var countQuery = $@"
-                SELECT COUNT(1)
-                FROM teams t
-                WHERE {whereClause}";
-
-            var totalCount = await connection.QueryFirstAsync<int>(countQuery, parameters);
-
-            logger.LogInformation("Found {TotalCount} teams matching criteria", totalCount);
-
-            // ================================================================
-            // QUERY TEAMS WITH PAGINATION
-            // ================================================================
-            var offset = (request.PageNumber - 1) * request.PageSize;
-            parameters.Add("Offset", offset);
-            parameters.Add("PageSize", request.PageSize);
-
             var teamsQuery = $@"
                 SELECT
                     t.Id AS TeamId,
@@ -121,26 +100,18 @@ internal class GetAllTeamsHandler(
                 FROM teams t
                 LEFT JOIN managers m ON t.ManagerId = m.Id
                 WHERE {whereClause}
-                ORDER BY t.CreatedAt DESC
-                LIMIT @PageSize OFFSET @Offset";
+                ORDER BY t.CreatedAt DESC";
 
             var teams = await connection.QueryAsync<TeamSummaryDto>(teamsQuery, parameters);
 
-            var totalPages = (int)Math.Ceiling((double)totalCount / request.PageSize);
-
             logger.LogInformation(
-                "✓ Returning {Count} teams (page {PageNumber}/{TotalPages})",
-                teams.Count(),
-                request.PageNumber,
-                totalPages);
+                "✓ Returning {Count} teams",
+                teams.Count());
 
             return new GetAllTeamsResult
             {
                 Teams = teams.ToList(),
-                TotalCount = totalCount,
-                PageNumber = request.PageNumber,
-                PageSize = request.PageSize,
-                TotalPages = totalPages
+                TotalCount = teams.Count()
             };
         }
         catch (Exception ex)

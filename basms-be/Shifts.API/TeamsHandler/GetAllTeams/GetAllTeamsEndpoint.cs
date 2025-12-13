@@ -1,98 +1,59 @@
-using Microsoft.AspNetCore.Mvc;
-
 namespace Shifts.API.TeamsHandler.GetAllTeams;
 
+/// <summary>
+/// Endpoint để lấy danh sách teams với filtering
+/// </summary>
 public class GetAllTeamsEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/shifts/teams", GetAllTeamsAsync)
-            .WithName("GetAllTeams")
-            .WithTags("Teams")
-            .WithSummary("Lấy danh sách teams")
-            .WithDescription(@"
-Lấy danh sách teams với các filter và pagination:
+        app.MapGet("/api/shifts/teams", async (
+    [FromQuery] Guid? managerId,
+    [FromQuery] string? specialization,
+    [FromQuery] bool? isActive,
+    ISender sender,
+    ILogger<GetAllTeamsEndpoint> logger,
+    CancellationToken cancellationToken) =>
+{
+    logger.LogInformation(
+        "GET /api/shifts/teams - Getting all teams");
 
-**Query Parameters:**
-- `managerId` (optional): Filter teams theo manager
-- `specialization` (optional): Filter theo chuyên môn (RESIDENTIAL, COMMERCIAL, EVENT, VIP, INDUSTRIAL)
-- `isActive` (optional): Filter theo trạng thái active (true/false)
-- `pageNumber` (default: 1): Trang hiện tại
-- `pageSize` (default: 20): Số items mỗi trang
+    var query = new GetAllTeamsQuery(
+        ManagerId: managerId,
+        Specialization: specialization,
+        IsActive: isActive
+    );
 
-**Example:**
-```
-GET /teams?managerId=xxx&specialization=RESIDENTIAL&isActive=true&pageNumber=1&pageSize=20
-```
+    var result = await sender.Send(query, cancellationToken);
 
-**Response includes:**
-- List of teams
-- Pagination metadata (totalCount, totalPages, etc.)
-            ")
-            .Produces<GetAllTeamsResult>(StatusCodes.Status200OK)
-            .Produces<ProblemDetails>(StatusCodes.Status500InternalServerError);
-    }
+    logger.LogInformation(
+        "✓ Retrieved {Count} teams",
+        result.Teams.Count);
 
-    private static async Task<IResult> GetAllTeamsAsync(
-        ISender sender,
-        ILogger<GetAllTeamsEndpoint> logger,
-        [FromQuery] Guid? managerId = null,
-        [FromQuery] string? specialization = null,
-        [FromQuery] bool? isActive = null,
-        [FromQuery] int pageNumber = 1,
-        [FromQuery] int pageSize = 20)
-    {
-        try
-        {
-            // Validate pagination
-            if (pageNumber < 1)
-            {
-                return Results.BadRequest(new ProblemDetails
-                {
-                    Title = "Invalid pagination",
-                    Detail = "pageNumber phải >= 1",
-                    Status = StatusCodes.Status400BadRequest
-                });
-            }
+    return Results.Ok(result);
+})
+        // .RequireAuthorization()
+        .WithName("GetAllTeams")
+        .WithTags("Teams")
+        .Produces(200)
+        .Produces(400)
+        .WithSummary("Get all teams with filtering")
+        .WithDescription(@"
+            Returns all teams with optional filtering.
 
-            if (pageSize < 1 || pageSize > 100)
-            {
-                return Results.BadRequest(new ProblemDetails
-                {
-                    Title = "Invalid pagination",
-                    Detail = "pageSize phải từ 1 đến 100",
-                    Status = StatusCodes.Status400BadRequest
-                });
-            }
+            Query Parameters:
+            - managerId (optional): Filter teams by manager ID
+            - specialization (optional): Filter by specialization (RESIDENTIAL, COMMERCIAL, EVENT, VIP, INDUSTRIAL)
+            - isActive (optional): Filter by active status (true/false)
 
-            logger.LogInformation(
-                "GetAllTeams request: ManagerId={ManagerId}, Specialization={Specialization}, IsActive={IsActive}, Page={PageNumber}/{PageSize}",
-                managerId,
-                specialization,
-                isActive,
-                pageNumber,
-                pageSize);
+            Response includes:
+            - List of teams with manager info
+            - Total count
 
-            var query = new GetAllTeamsQuery(
-                ManagerId: managerId,
-                Specialization: specialization,
-                IsActive: isActive,
-                PageNumber: pageNumber,
-                PageSize: pageSize
-            );
-
-            var result = await sender.Send(query);
-
-            return Results.Ok(result);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error getting teams");
-            return Results.Problem(
-                title: "Error getting teams",
-                detail: ex.Message,
-                statusCode: StatusCodes.Status500InternalServerError
-            );
-        }
+            Examples:
+            GET /api/shifts/teams
+            GET /api/shifts/teams?managerId={guid}
+            GET /api/shifts/teams?specialization=RESIDENTIAL&isActive=true
+        ");
     }
 }
