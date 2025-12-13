@@ -1,34 +1,30 @@
 namespace Shifts.API.TeamsHandler.GetAllTeams;
 
 /// <summary>
-/// Endpoint để lấy danh sách teams với filtering
+/// Endpoint để lấy danh sách teams theo manager
 /// </summary>
 public class GetAllTeamsEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
         app.MapGet("/api/shifts/teams", async (
-    [FromQuery] Guid? managerId,
-    [FromQuery] string? specialization,
-    [FromQuery] bool? isActive,
+    [FromQuery] Guid managerId,
     ISender sender,
     ILogger<GetAllTeamsEndpoint> logger,
     CancellationToken cancellationToken) =>
 {
     logger.LogInformation(
-        "GET /api/shifts/teams - Getting all teams");
+        "GET /api/shifts/teams - Getting teams for manager {ManagerId}",
+        managerId);
 
-    var query = new GetAllTeamsQuery(
-        ManagerId: managerId,
-        Specialization: specialization,
-        IsActive: isActive
-    );
+    var query = new GetAllTeamsQuery(ManagerId: managerId);
 
     var result = await sender.Send(query, cancellationToken);
 
     logger.LogInformation(
-        "✓ Retrieved {Count} teams",
-        result.Teams.Count);
+        "✓ Retrieved {Count} teams for manager {ManagerId}",
+        result.Teams.Count,
+        managerId);
 
     return Results.Ok(result);
 })
@@ -37,23 +33,19 @@ public class GetAllTeamsEndpoint : ICarterModule
         .WithTags("Teams")
         .Produces(200)
         .Produces(400)
-        .WithSummary("Get all teams with filtering")
+        .WithSummary("Get all teams by manager")
         .WithDescription(@"
-            Returns all teams with optional filtering.
+            Returns all teams for a specific manager.
 
             Query Parameters:
-            - managerId (optional): Filter teams by manager ID
-            - specialization (optional): Filter by specialization (RESIDENTIAL, COMMERCIAL, EVENT, VIP, INDUSTRIAL)
-            - isActive (optional): Filter by active status (true/false)
+            - managerId (required): Manager ID to filter teams
 
             Response includes:
             - List of teams with manager info
             - Total count
 
-            Examples:
-            GET /api/shifts/teams
+            Example:
             GET /api/shifts/teams?managerId={guid}
-            GET /api/shifts/teams?specialization=RESIDENTIAL&isActive=true
         ");
     }
 }

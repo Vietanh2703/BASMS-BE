@@ -1,15 +1,10 @@
-using Dapper;
-using Shifts.API.Data;
-
 namespace Shifts.API.TeamsHandler.GetAllTeams;
 
 /// <summary>
-/// Query để lấy danh sách teams với filter
+/// Query để lấy danh sách teams theo manager
 /// </summary>
 public record GetAllTeamsQuery(
-    Guid? ManagerId,                // Filter theo manager (optional)
-    string? Specialization,         // Filter theo specialization (optional)
-    bool? IsActive                  // Filter theo active status (optional)
+    Guid ManagerId                  // Manager ID (required)
 ) : IQuery<GetAllTeamsResult>;
 
 /// <summary>
@@ -48,43 +43,15 @@ internal class GetAllTeamsHandler(
         try
         {
             logger.LogInformation(
-                "Getting all teams (ManagerId: {ManagerId}, Specialization: {Specialization}, IsActive: {IsActive})",
-                request.ManagerId,
-                request.Specialization,
-                request.IsActive);
+                "Getting all teams for manager {ManagerId}",
+                request.ManagerId);
 
             using var connection = await dbFactory.CreateConnectionAsync();
 
             // ================================================================
-            // BUILD QUERY WITH FILTERS
+            // QUERY TEAMS BY MANAGER
             // ================================================================
-            var whereConditions = new List<string> { "t.IsDeleted = 0" };
-            var parameters = new DynamicParameters();
-
-            if (request.ManagerId.HasValue)
-            {
-                whereConditions.Add("t.ManagerId = @ManagerId");
-                parameters.Add("ManagerId", request.ManagerId.Value);
-            }
-
-            if (!string.IsNullOrWhiteSpace(request.Specialization))
-            {
-                whereConditions.Add("t.Specialization = @Specialization");
-                parameters.Add("Specialization", request.Specialization.ToUpper());
-            }
-
-            if (request.IsActive.HasValue)
-            {
-                whereConditions.Add("t.IsActive = @IsActive");
-                parameters.Add("IsActive", request.IsActive.Value);
-            }
-
-            var whereClause = string.Join(" AND ", whereConditions);
-
-            // ================================================================
-            // QUERY ALL TEAMS
-            // ================================================================
-            var teamsQuery = $@"
+            var teamsQuery = @"
                 SELECT
                     t.Id AS TeamId,
                     t.TeamCode,
@@ -99,14 +66,18 @@ internal class GetAllTeamsHandler(
                     t.CreatedAt
                 FROM teams t
                 LEFT JOIN managers m ON t.ManagerId = m.Id
-                WHERE {whereClause}
+                WHERE t.ManagerId = @ManagerId
+                  AND t.IsDeleted = 0
                 ORDER BY t.CreatedAt DESC";
 
-            var teams = await connection.QueryAsync<TeamSummaryDto>(teamsQuery, parameters);
+            var teams = await connection.QueryAsync<TeamSummaryDto>(
+                teamsQuery,
+                new { ManagerId = request.ManagerId });
 
             logger.LogInformation(
-                "✓ Returning {Count} teams",
-                teams.Count());
+                "✓ Returning {Count} teams for manager {ManagerId}",
+                teams.Count(),
+                request.ManagerId);
 
             return new GetAllTeamsResult
             {
