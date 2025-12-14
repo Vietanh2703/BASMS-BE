@@ -129,6 +129,44 @@ internal class AddMemberToTeamHandler(
                 guard.CertificationLevel ?? "N/A");
 
             // ================================================================
+            // BƯỚC 3.5: CHECK CERTIFICATION FOR SINGLE-GUARD TEAMS
+            // ================================================================
+            if (team.MaxMembers.HasValue && team.MaxMembers.Value == 1)
+            {
+                logger.LogInformation(
+                    "Team {TeamCode} is a single-guard team, checking certification level...",
+                    team.TeamCode);
+
+                if (string.IsNullOrWhiteSpace(guard.CertificationLevel))
+                {
+                    logger.LogWarning(
+                        "Guard {GuardId} has no certification level for single-guard team {TeamId}",
+                        request.GuardId,
+                        request.TeamId);
+                    throw new InvalidOperationException(
+                        $"Team {team.TeamCode} chỉ có 1 người, guard {guard.FullName} phải có cấp bậc II hoặc III");
+                }
+
+                var validSingleGuardLevels = new[] { "II", "III" };
+                if (!validSingleGuardLevels.Contains(guard.CertificationLevel.ToUpper()))
+                {
+                    logger.LogWarning(
+                        "Guard {GuardId} has Level {Level} but team {TeamId} requires Level II or III",
+                        request.GuardId,
+                        guard.CertificationLevel,
+                        request.TeamId);
+                    throw new InvalidOperationException(
+                        $"Team {team.TeamCode} chỉ có 1 người, guard {guard.FullName} phải có cấp bậc II hoặc III. " +
+                        $"Hiện tại guard có cấp bậc {guard.CertificationLevel}");
+                }
+
+                logger.LogInformation(
+                    "✓ Guard {FullName} with Level {Level} is qualified for single-guard team",
+                    guard.FullName,
+                    guard.CertificationLevel);
+            }
+
+            // ================================================================
             // BƯỚC 4: CHECK GUARD NOT ALREADY IN TEAM
             // ================================================================
             var existingMembership = await connection.QueryFirstOrDefaultAsync<TeamMembers>(
