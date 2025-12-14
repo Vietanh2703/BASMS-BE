@@ -171,7 +171,7 @@ services:
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
       - AWS__Region=${AWS_REGION}
       - AWS__S3__BucketName=${AWS_BUCKET_FACEID_NAME}
-      - FaceRecognitionApi__BaseUrl=${FACE_RECOGNITION_API_URL}
+      - FaceRecognitionApi__BaseUrl=${FACEID_API_BASE_URL}
     depends_on:
       mysql:
         condition: service_healthy
