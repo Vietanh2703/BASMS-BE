@@ -102,9 +102,9 @@ internal class RegisterFaceWithFilesHandler(
     IHttpClientFactory httpClientFactory)
     : ICommandHandler<RegisterFaceWithFilesCommand, RegisterFaceWithFilesResult>
 {
-    private readonly string? _faceApiBaseUrl = configuration["FaceRecognitionApi__BaseUrl"]
-                                              ?? configuration["FACEID_API_BASE_URL"];
-    private readonly string? _faceApiKey = configuration["FaceRecognitionApi__ApiKey"];
+    private readonly string? _faceApiBaseUrl = configuration["FACE_API_BASE_URL"]
+                                              ?? configuration["FACE_API_BASE_URL"];
+    private readonly string? _faceApiKey = configuration["FACE_API_KEY"];
 
     public async Task<RegisterFaceWithFilesResult> Handle(
         RegisterFaceWithFilesCommand request,
