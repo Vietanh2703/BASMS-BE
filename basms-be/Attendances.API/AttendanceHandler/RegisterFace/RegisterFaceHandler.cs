@@ -95,9 +95,12 @@ internal class RegisterFaceHandler(
     IHttpClientFactory httpClientFactory)
     : ICommandHandler<RegisterFaceCommand, RegisterFaceResult>
 {
-    private readonly string? _faceApiBaseUrl = configuration["FaceRecognitionApi__BaseUrl"]
+    private readonly string? _faceApiBaseUrl = configuration["FaceRecognitionApi:BaseUrl"]
+                                              ?? configuration["FaceRecognitionApi__BaseUrl"]
                                               ?? configuration["FACEID_API_BASE_URL"];
-    private readonly string? _faceApiKey = configuration["FaceRecognitionApi__ApiKey"];
+    private readonly string? _faceApiKey = configuration["FaceRecognitionApi:ApiKey"]
+                                          ?? configuration["FaceRecognitionApi__ApiKey"]
+                                          ?? configuration["FACEID_API_KEY"];
 
     public async Task<RegisterFaceResult> Handle(
         RegisterFaceCommand request,
