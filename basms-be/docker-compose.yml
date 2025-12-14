@@ -149,6 +149,37 @@ services:
     networks:
       - basms-network
 
+  # Attendances API
+  attendances-api:
+    build:
+      context: .
+      dockerfile: Attendances.API/Dockerfile
+    container_name: basms-attendances-api
+    restart: unless-stopped
+    ports:
+      - "5004:80"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:80
+      - DB_CONNECTION_STRING_ATTENDANCES=${DB_CONNECTION_STRING_ATTENDANCES}
+      - Jwt__Key=${JWT_SECRET_KEY}
+      - Jwt__Issuer=${JWT_ISSUER}
+      - Jwt__Audience=${JWT_AUDIENCE}
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - RABBITMQ_USERNAME=${RABBITMQ_USERNAME}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+      - AWS__Region=${AWS_REGION}
+      - AWS__S3__BucketName=${AWS_BUCKET_NAME}
+      - FaceRecognitionApi__BaseUrl=${FACE_RECOGNITION_API_URL}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+    networks:
+      - basms-network
+
 volumes:
   mysql_data:
 
