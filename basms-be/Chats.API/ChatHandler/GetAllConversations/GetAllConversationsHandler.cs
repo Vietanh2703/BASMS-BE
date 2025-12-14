@@ -6,15 +6,7 @@ namespace Chats.API.ChatHandler.GetAllConversations;
 /// Query để lấy danh sách tất cả conversations
 /// Sắp xếp theo: LastMessageAt giảm dần (cuộc trò chuyện có tin nhắn mới nhất ở đầu)
 /// </summary>
-public record GetAllConversationsQuery(
-    Guid? UserId = null,
-    string? ConversationType = null,
-    Guid? ShiftId = null,
-    Guid? IncidentId = null,
-    Guid? TeamId = null,
-    Guid? ContractId = null,
-    bool? IsActive = null
-) : IQuery<GetAllConversationsResult>;
+public record GetAllConversationsQuery() : IQuery<GetAllConversationsResult>;
 
 /// <summary>
 /// Result chứa danh sách conversations
@@ -59,7 +51,7 @@ public record ConversationDto
 }
 
 /// <summary>
-/// Handler để lấy danh sách tất cả conversations với filtering
+/// Handler để lấy danh sách tất cả conversations
 /// </summary>
 internal class GetAllConversationsHandler(
     IDbConnectionFactory dbFactory,
@@ -72,80 +64,19 @@ internal class GetAllConversationsHandler(
     {
         try
         {
-            logger.LogInformation(
-                "Getting all conversations: UserId={UserId}, Type={Type}, ShiftId={ShiftId}, IncidentId={IncidentId}",
-                request.UserId?.ToString() ?? "ALL",
-                request.ConversationType ?? "ALL",
-                request.ShiftId?.ToString() ?? "ALL",
-                request.IncidentId?.ToString() ?? "ALL");
+            logger.LogInformation("Getting all conversations");
 
             using var connection = await dbFactory.CreateConnectionAsync();
 
             // ================================================================
-            // BUILD DYNAMIC SQL QUERY
-            // ================================================================
-            var whereClauses = new List<string> { "c.IsDeleted = 0" };
-            var parameters = new DynamicParameters();
-
-            // Filter by user participation (if UserId provided)
-            if (request.UserId.HasValue)
-            {
-                whereClauses.Add(@"EXISTS (
-                    SELECT 1 FROM conversation_participants cp
-                    WHERE cp.ConversationId = c.Id
-                    AND cp.UserId = @UserId
-                    AND cp.IsActive = 1
-                )");
-                parameters.Add("UserId", request.UserId.Value);
-            }
-
-            if (!string.IsNullOrWhiteSpace(request.ConversationType))
-            {
-                whereClauses.Add("c.ConversationType = @ConversationType");
-                parameters.Add("ConversationType", request.ConversationType);
-            }
-
-            if (request.ShiftId.HasValue)
-            {
-                whereClauses.Add("c.ShiftId = @ShiftId");
-                parameters.Add("ShiftId", request.ShiftId.Value);
-            }
-
-            if (request.IncidentId.HasValue)
-            {
-                whereClauses.Add("c.IncidentId = @IncidentId");
-                parameters.Add("IncidentId", request.IncidentId.Value);
-            }
-
-            if (request.TeamId.HasValue)
-            {
-                whereClauses.Add("c.TeamId = @TeamId");
-                parameters.Add("TeamId", request.TeamId.Value);
-            }
-
-            if (request.ContractId.HasValue)
-            {
-                whereClauses.Add("c.ContractId = @ContractId");
-                parameters.Add("ContractId", request.ContractId.Value);
-            }
-
-            if (request.IsActive.HasValue)
-            {
-                whereClauses.Add("c.IsActive = @IsActive");
-                parameters.Add("IsActive", request.IsActive.Value);
-            }
-
-            var whereClause = string.Join(" AND ", whereClauses);
-
-            // ================================================================
             // COUNT TOTAL RECORDS
             // ================================================================
-            var countSql = $@"
+            var countSql = @"
                 SELECT COUNT(*)
-                FROM conversations c
-                WHERE {whereClause}";
+                FROM conversations
+                WHERE IsDeleted = 0";
 
-            var totalCount = await connection.ExecuteScalarAsync<int>(countSql, parameters);
+            var totalCount = await connection.ExecuteScalarAsync<int>(countSql);
 
             logger.LogInformation(
                 "Total conversations found: {TotalCount}",
@@ -155,7 +86,7 @@ internal class GetAllConversationsHandler(
             // GET ALL DATA - SORTED BY LAST MESSAGE TIME DESCENDING
             // ================================================================
 
-            var sql = $@"
+            var sql = @"
                 SELECT
                     c.Id,
                     c.ConversationType,
@@ -174,12 +105,13 @@ internal class GetAllConversationsHandler(
                     c.UpdatedAt,
                     c.CreatedBy
                 FROM conversations c
-                WHERE {whereClause}
+                WHERE c.IsDeleted = 0
                 ORDER BY
-                    c.LastMessageAt DESC NULLS LAST,
+                    CASE WHEN c.LastMessageAt IS NULL THEN 1 ELSE 0 END,
+                    c.LastMessageAt DESC,
                     c.CreatedAt DESC";
 
-            var conversations = await connection.QueryAsync<ConversationDto>(sql, parameters);
+            var conversations = await connection.QueryAsync<ConversationDto>(sql);
             var conversationsList = conversations.ToList();
 
             logger.LogInformation(

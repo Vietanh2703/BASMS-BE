@@ -348,7 +348,8 @@ jobs:
 
             # Start services
             echo "Starting services with Docker Compose..."
-            if ! docker compose up -d --remove-orphans; then
+            # Note: Do NOT use --remove-orphans to preserve Face API and other standalone containers
+            if ! docker compose up -d; then
               echo "❌ ERROR: Docker compose up failed!"
               echo "=== Docker Compose Logs ==="
               docker compose logs

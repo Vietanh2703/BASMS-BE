@@ -6,17 +6,7 @@ namespace Incidents.API.IncidentHandler.GetAllIncidents;
 /// Query để lấy danh sách tất cả incidents
 /// Sắp xếp theo: IncidentTime giảm dần (sự cố mới nhất trước)
 /// </summary>
-public record GetAllIncidentsQuery(
-    Guid? ReporterId = null,
-    Guid? ResponderId = null,
-    Guid? ShiftId = null,
-    Guid? LocationId = null,
-    DateTime? FromDate = null,
-    DateTime? ToDate = null,
-    string? Status = null,
-    string? IncidentType = null,
-    string? Severity = null
-) : IQuery<GetAllIncidentsResult>;
+public record GetAllIncidentsQuery() : IQuery<GetAllIncidentsResult>;
 
 /// <summary>
 /// Result chứa danh sách incidents
@@ -79,7 +69,7 @@ public record IncidentDto
 }
 
 /// <summary>
-/// Handler để lấy danh sách tất cả incidents với filtering
+/// Handler để lấy danh sách tất cả incidents
 /// </summary>
 internal class GetAllIncidentsHandler(
     IDbConnectionFactory dbFactory,
@@ -92,87 +82,19 @@ internal class GetAllIncidentsHandler(
     {
         try
         {
-            logger.LogInformation(
-                "Getting all incidents: ReporterId={ReporterId}, FromDate={FromDate}, ToDate={ToDate}, Status={Status}, Severity={Severity}",
-                request.ReporterId?.ToString() ?? "ALL",
-                request.FromDate?.ToString("yyyy-MM-dd") ?? "ALL",
-                request.ToDate?.ToString("yyyy-MM-dd") ?? "ALL",
-                request.Status ?? "ALL",
-                request.Severity ?? "ALL");
+            logger.LogInformation("Getting all incidents");
 
             using var connection = await dbFactory.CreateConnectionAsync();
 
             // ================================================================
-            // BUILD DYNAMIC SQL QUERY
-            // ================================================================
-            var whereClauses = new List<string> { "IsDeleted = 0" };
-            var parameters = new DynamicParameters();
-
-            if (request.ReporterId.HasValue)
-            {
-                whereClauses.Add("ReporterId = @ReporterId");
-                parameters.Add("ReporterId", request.ReporterId.Value);
-            }
-
-            if (request.ResponderId.HasValue)
-            {
-                whereClauses.Add("ResponderId = @ResponderId");
-                parameters.Add("ResponderId", request.ResponderId.Value);
-            }
-
-            if (request.ShiftId.HasValue)
-            {
-                whereClauses.Add("ShiftId = @ShiftId");
-                parameters.Add("ShiftId", request.ShiftId.Value);
-            }
-
-            if (request.LocationId.HasValue)
-            {
-                whereClauses.Add("LocationId = @LocationId");
-                parameters.Add("LocationId", request.LocationId.Value);
-            }
-
-            if (request.FromDate.HasValue)
-            {
-                whereClauses.Add("DATE(IncidentTime) >= @FromDate");
-                parameters.Add("FromDate", request.FromDate.Value.Date);
-            }
-
-            if (request.ToDate.HasValue)
-            {
-                whereClauses.Add("DATE(IncidentTime) <= @ToDate");
-                parameters.Add("ToDate", request.ToDate.Value.Date);
-            }
-
-            if (!string.IsNullOrWhiteSpace(request.Status))
-            {
-                whereClauses.Add("Status = @Status");
-                parameters.Add("Status", request.Status);
-            }
-
-            if (!string.IsNullOrWhiteSpace(request.IncidentType))
-            {
-                whereClauses.Add("IncidentType = @IncidentType");
-                parameters.Add("IncidentType", request.IncidentType);
-            }
-
-            if (!string.IsNullOrWhiteSpace(request.Severity))
-            {
-                whereClauses.Add("Severity = @Severity");
-                parameters.Add("Severity", request.Severity);
-            }
-
-            var whereClause = string.Join(" AND ", whereClauses);
-
-            // ================================================================
             // COUNT TOTAL RECORDS
             // ================================================================
-            var countSql = $@"
+            var countSql = @"
                 SELECT COUNT(*)
                 FROM incidents
-                WHERE {whereClause}";
+                WHERE IsDeleted = 0";
 
-            var totalCount = await connection.ExecuteScalarAsync<int>(countSql, parameters);
+            var totalCount = await connection.ExecuteScalarAsync<int>(countSql);
 
             logger.LogInformation(
                 "Total incidents found: {TotalCount}",
@@ -182,7 +104,7 @@ internal class GetAllIncidentsHandler(
             // GET ALL DATA - SORTED BY INCIDENT TIME DESCENDING
             // ================================================================
 
-            var sql = $@"
+            var sql = @"
                 SELECT
                     Id,
                     IncidentCode,
@@ -213,11 +135,11 @@ internal class GetAllIncidentsHandler(
                     CreatedBy,
                     UpdatedBy
                 FROM incidents
-                WHERE {whereClause}
+                WHERE IsDeleted = 0
                 ORDER BY
                     IncidentTime DESC";
 
-            var incidents = await connection.QueryAsync<IncidentDto>(sql, parameters);
+            var incidents = await connection.QueryAsync<IncidentDto>(sql);
             var incidentsList = incidents.ToList();
 
             logger.LogInformation(

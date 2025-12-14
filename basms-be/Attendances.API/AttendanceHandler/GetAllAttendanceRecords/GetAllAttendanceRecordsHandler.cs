@@ -6,19 +6,7 @@ namespace Attendances.API.AttendanceHandler.GetAllAttendanceRecords;
 /// Query để lấy danh sách tất cả attendance records
 /// Sắp xếp theo: CheckInTime giảm dần (mới nhất trước)
 /// </summary>
-public record GetAllAttendanceRecordsQuery(
-    Guid? ShiftId = null,
-    Guid? GuardId = null,
-    Guid? ShiftAssignmentId = null,
-    DateTime? FromDate = null,
-    DateTime? ToDate = null,
-    string? Status = null,
-    bool? IsLate = null,
-    bool? IsEarlyLeave = null,
-    bool? HasOvertime = null,
-    bool? IsVerified = null,
-    string? VerificationStatus = null
-) : IQuery<GetAllAttendanceRecordsResult>;
+public record GetAllAttendanceRecordsQuery() : IQuery<GetAllAttendanceRecordsResult>;
 
 /// <summary>
 /// Result chứa danh sách attendance records
@@ -103,7 +91,7 @@ public record AttendanceRecordDto
 }
 
 /// <summary>
-/// Handler để lấy danh sách tất cả attendance records với filtering
+/// Handler để lấy danh sách tất cả attendance records
 /// </summary>
 internal class GetAllAttendanceRecordsHandler(
     IDbConnectionFactory dbFactory,
@@ -116,99 +104,19 @@ internal class GetAllAttendanceRecordsHandler(
     {
         try
         {
-            logger.LogInformation(
-                "Getting all attendance records: ShiftId={ShiftId}, GuardId={GuardId}, FromDate={FromDate}, ToDate={ToDate}, Status={Status}",
-                request.ShiftId?.ToString() ?? "ALL",
-                request.GuardId?.ToString() ?? "ALL",
-                request.FromDate?.ToString("yyyy-MM-dd") ?? "ALL",
-                request.ToDate?.ToString("yyyy-MM-dd") ?? "ALL",
-                request.Status ?? "ALL");
+            logger.LogInformation("Getting all attendance records");
 
             using var connection = await dbFactory.CreateConnectionAsync();
 
             // ================================================================
-            // BUILD DYNAMIC SQL QUERY
-            // ================================================================
-            var whereClauses = new List<string> { "IsDeleted = 0" };
-            var parameters = new DynamicParameters();
-
-            if (request.ShiftId.HasValue)
-            {
-                whereClauses.Add("ShiftId = @ShiftId");
-                parameters.Add("ShiftId", request.ShiftId.Value);
-            }
-
-            if (request.GuardId.HasValue)
-            {
-                whereClauses.Add("GuardId = @GuardId");
-                parameters.Add("GuardId", request.GuardId.Value);
-            }
-
-            if (request.ShiftAssignmentId.HasValue)
-            {
-                whereClauses.Add("ShiftAssignmentId = @ShiftAssignmentId");
-                parameters.Add("ShiftAssignmentId", request.ShiftAssignmentId.Value);
-            }
-
-            if (request.FromDate.HasValue)
-            {
-                whereClauses.Add("DATE(CheckInTime) >= @FromDate");
-                parameters.Add("FromDate", request.FromDate.Value.Date);
-            }
-
-            if (request.ToDate.HasValue)
-            {
-                whereClauses.Add("DATE(CheckInTime) <= @ToDate");
-                parameters.Add("ToDate", request.ToDate.Value.Date);
-            }
-
-            if (!string.IsNullOrWhiteSpace(request.Status))
-            {
-                whereClauses.Add("Status = @Status");
-                parameters.Add("Status", request.Status);
-            }
-
-            if (request.IsLate.HasValue)
-            {
-                whereClauses.Add("IsLate = @IsLate");
-                parameters.Add("IsLate", request.IsLate.Value);
-            }
-
-            if (request.IsEarlyLeave.HasValue)
-            {
-                whereClauses.Add("IsEarlyLeave = @IsEarlyLeave");
-                parameters.Add("IsEarlyLeave", request.IsEarlyLeave.Value);
-            }
-
-            if (request.HasOvertime.HasValue)
-            {
-                whereClauses.Add("HasOvertime = @HasOvertime");
-                parameters.Add("HasOvertime", request.HasOvertime.Value);
-            }
-
-            if (request.IsVerified.HasValue)
-            {
-                whereClauses.Add("IsVerified = @IsVerified");
-                parameters.Add("IsVerified", request.IsVerified.Value);
-            }
-
-            if (!string.IsNullOrWhiteSpace(request.VerificationStatus))
-            {
-                whereClauses.Add("VerificationStatus = @VerificationStatus");
-                parameters.Add("VerificationStatus", request.VerificationStatus);
-            }
-
-            var whereClause = string.Join(" AND ", whereClauses);
-
-            // ================================================================
             // COUNT TOTAL RECORDS
             // ================================================================
-            var countSql = $@"
+            var countSql = @"
                 SELECT COUNT(*)
                 FROM attendance_records
-                WHERE {whereClause}";
+                WHERE IsDeleted = 0";
 
-            var totalCount = await connection.ExecuteScalarAsync<int>(countSql, parameters);
+            var totalCount = await connection.ExecuteScalarAsync<int>(countSql);
 
             logger.LogInformation(
                 "Total attendance records found: {TotalCount}",
@@ -218,7 +126,7 @@ internal class GetAllAttendanceRecordsHandler(
             // GET ALL DATA - SORTED BY CHECK-IN TIME DESCENDING
             // ================================================================
 
-            var sql = $@"
+            var sql = @"
                 SELECT
                     Id,
                     ShiftAssignmentId,
@@ -265,11 +173,11 @@ internal class GetAllAttendanceRecordsHandler(
                     CreatedAt,
                     UpdatedAt
                 FROM attendance_records
-                WHERE {whereClause}
+                WHERE IsDeleted = 0
                 ORDER BY
                     CheckInTime DESC";
 
-            var records = await connection.QueryAsync<AttendanceRecordDto>(sql, parameters);
+            var records = await connection.QueryAsync<AttendanceRecordDto>(sql);
             var recordsList = records.ToList();
 
             logger.LogInformation(
