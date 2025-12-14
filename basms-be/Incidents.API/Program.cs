@@ -113,6 +113,17 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
+// Initialize database tables
+using (var scope = app.Services.CreateScope())
+{
+    var dbFactory = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>();
+    if (dbFactory is MySqlConnectionFactory mysqlFactory)
+    {
+        await mysqlFactory.EnsureTablesCreatedAsync();
+        Console.WriteLine("✓ Incidents database tables initialized successfully");
+    }
+}
+
 // Configure pipeline
 if (app.Environment.IsDevelopment())
 {

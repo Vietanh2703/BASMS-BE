@@ -1,11 +1,14 @@
 using MySql.Data.MySqlClient;
 using System.Data;
+using Dapper;
 
 namespace Chats.API.Data;
 
 public class MySqlConnectionFactory : IDbConnectionFactory
 {
     private readonly string _connectionString;
+    private readonly SemaphoreSlim _semaphore = new(1, 1);
+    private bool _tablesCreated;
 
     public MySqlConnectionFactory(string connectionString)
     {
@@ -16,19 +19,37 @@ public class MySqlConnectionFactory : IDbConnectionFactory
     {
         var connection = new MySqlConnection(_connectionString);
         await connection.OpenAsync();
-        
-        // Auto-create tables on startup
-        await EnsureTablesCreatedAsync();
-        
         return connection;
     }
 
     public string GetConnectionString() => _connectionString;
 
-    private async Task EnsureTablesCreatedAsync()
+    public async Task EnsureTablesCreatedAsync()
     {
-        using var connection = new MySqlConnection(_connectionString);
-        await connection.OpenAsync();
+        if (_tablesCreated) return;
+
+        await _semaphore.WaitAsync();
+        try
+        {
+            if (_tablesCreated) return;
+
+            // Create database if not exists
+            var connectionStringBuilder = new MySqlConnectionStringBuilder(_connectionString);
+            var databaseName = connectionStringBuilder.Database;
+            connectionStringBuilder.Database = null;
+
+            using (var tempConnection = new MySqlConnection(connectionStringBuilder.ConnectionString))
+            {
+                await tempConnection.OpenAsync();
+                await tempConnection.ExecuteAsync($@"
+                    CREATE DATABASE IF NOT EXISTS `{databaseName}`
+                    CHARACTER SET utf8mb4
+                    COLLATE utf8mb4_unicode_ci;
+                ");
+                Console.WriteLine($"✓ Database '{databaseName}' ready");
+            }
+
+            using var connection = await CreateConnectionAsync();
 
         // Create conversations table
         var createConversationsTable = @"
@@ -139,6 +160,12 @@ public class MySqlConnectionFactory : IDbConnectionFactory
         await connection.ExecuteAsync(createMessagesTable);
         await connection.ExecuteAsync(createReadReceiptsTable);
 
+        _tablesCreated = true;
         Console.WriteLine("✅ Chats.API database tables created/verified successfully");
+        }
+        finally
+        {
+            _semaphore.Release();
+        }
     }
 }

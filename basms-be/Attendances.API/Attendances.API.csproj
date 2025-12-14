@@ -14,7 +14,6 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Folder Include="AttendanceHandler\GetAllAttendances\" />
       <Folder Include="Data\" />
       <Folder Include="Models\" />
     </ItemGroup>
