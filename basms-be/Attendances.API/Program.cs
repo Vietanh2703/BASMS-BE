@@ -12,6 +12,9 @@ builder.Services.AddMediatR(config =>
     config.RegisterServicesFromAssembly(typeof(Program).Assembly);
 });
 
+// Đăng ký HttpClient Factory cho Face Recognition API calls
+builder.Services.AddHttpClient();
+
 // Đăng ký Dapper connection factory cho MySQL
 // Singleton vì connection factory có thể tái sử dụng
 builder.Services.AddSingleton<IDbConnectionFactory>(sp =>
