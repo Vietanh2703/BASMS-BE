@@ -29,6 +29,12 @@ public class ShiftTemplates
     /// </summary>
     public Guid? ContractId { get; set; }
 
+    /// <summary>
+    /// Team ID - Team được auto-assign khi generate shifts từ template này
+    /// NULL = không auto-assign, manager phải assign thủ công
+    /// </summary>
+    public Guid? TeamId { get; set; }
+
     // ============================================================================
     // IDENTITY
     // ============================================================================

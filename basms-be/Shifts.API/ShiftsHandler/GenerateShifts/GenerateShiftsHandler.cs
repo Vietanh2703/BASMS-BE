@@ -5,6 +5,8 @@ using Dapper.Contrib.Extensions;
 using MassTransit;
 using Shifts.API.Data;
 using Shifts.API.Models;
+using Shifts.API.ShiftsHandler.AssignTeamToShift;
+using Shifts.API.Helpers;
 using System.Globalization;
 using System.Data;
 
@@ -25,6 +27,7 @@ public class GenerateShiftsHandler(
     IDbConnectionFactory connectionFactory,
     IRequestClient<BatchCheckPublicHolidaysRequest> batchHolidayClient,
     IPublishEndpoint publishEndpoint,
+    ISender sender,
     ILogger<GenerateShiftsHandler> logger)
     : ICommandHandler<GenerateShiftsCommand, GenerateShiftsResult>
 {
@@ -197,6 +200,16 @@ public class GenerateShiftsHandler(
                         "✓ Updated {Count} shift templates from 'await_create_shift' to 'created_shift'",
                         updatedCount);
                 }
+
+                // ================================================================
+                // BƯỚC 6.2: AUTO-ASSIGN TEAMS (nếu template có TeamId)
+                // ================================================================
+                await AutoAssignTeamsToShifts(
+                    connection,
+                    createdShifts,
+                    templates,
+                    command.ManagerId,
+                    cancellationToken);
             }
 
             // ================================================================
@@ -749,5 +762,110 @@ public class GenerateShiftsHandler(
             GeneratedTo = to,
             Errors = errors
         };
+    }
+
+    /// <summary>
+    /// Auto-assign teams to shifts nếu template có TeamId
+    /// </summary>
+    private async Task AutoAssignTeamsToShifts(
+        IDbConnection connection,
+        List<Models.Shifts> createdShifts,
+        List<ShiftTemplates> templates,
+        Guid managerId,
+        CancellationToken cancellationToken)
+    {
+        // Group templates by TeamId (chỉ lấy templates có TeamId)
+        var templatesWithTeam = templates
+            .Where(t => t.TeamId.HasValue)
+            .ToList();
+
+        if (!templatesWithTeam.Any())
+        {
+            logger.LogInformation("No templates with TeamId, skipping auto-assign");
+            return;
+        }
+
+        logger.LogInformation(
+            "📋 Auto-assigning teams for {Count} templates with TeamId",
+            templatesWithTeam.Count);
+
+        foreach (var template in templatesWithTeam)
+        {
+            try
+            {
+                // Tìm shifts được tạo từ template này
+                var shiftsFromTemplate = createdShifts
+                    .Where(s => s.ShiftTemplateId == template.Id)
+                    .ToList();
+
+                if (!shiftsFromTemplate.Any())
+                    continue;
+
+                // Group shifts by (Date + TimeSlot) để assign theo batch
+                var shiftsByDateAndSlot = shiftsFromTemplate
+                    .GroupBy(s => new
+                    {
+                        Date = s.ShiftDate,
+                        TimeSlot = ShiftClassificationHelper.ClassifyShiftTimeSlot(s.ShiftStart)
+                    })
+                    .ToList();
+
+                logger.LogInformation(
+                    "Template {TemplateName}: Assigning Team {TeamId} to {ShiftCount} shifts across {DateCount} dates",
+                    template.TemplateName,
+                    template.TeamId,
+                    shiftsFromTemplate.Count,
+                    shiftsByDateAndSlot.Count);
+
+                // Assign team cho từng group
+                foreach (var group in shiftsByDateAndSlot)
+                {
+                    var dateShifts = group.ToList();
+                    var firstShift = dateShifts.First();
+
+                    var assignCommand = new AssignTeamToShiftCommand(
+                        TeamId: template.TeamId!.Value,
+                        StartDate: group.Key.Date,
+                        EndDate: group.Key.Date, // Single day
+                        ShiftTimeSlot: group.Key.TimeSlot,
+                        LocationId: firstShift.LocationId,
+                        ContractId: template.ContractId,
+                        AssignmentType: "REGULAR",
+                        AssignmentNotes: $"Auto-assigned from template {template.TemplateName}",
+                        AssignedBy: managerId
+                    );
+
+                    var result = await sender.Send(assignCommand, cancellationToken);
+
+                    if (result.Success)
+                    {
+                        logger.LogInformation(
+                            "✓ Auto-assigned Team {TeamId} to {Count} shifts on {Date} ({TimeSlot})",
+                            template.TeamId,
+                            result.TotalGuardsAssigned,
+                            group.Key.Date.ToString("yyyy-MM-dd"),
+                            group.Key.TimeSlot);
+                    }
+                    else
+                    {
+                        logger.LogWarning(
+                            "⚠️ Failed to auto-assign Team {TeamId} on {Date}: {Errors}",
+                            template.TeamId,
+                            group.Key.Date.ToString("yyyy-MM-dd"),
+                            string.Join(", ", result.Errors));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex,
+                    "Error auto-assigning team {TeamId} for template {TemplateName}",
+                    template.TeamId,
+                    template.TemplateName);
+                // Continue with next template, don't fail entire generation
+            }
+        }
+
+        logger.LogInformation("✓ Completed auto-assigning teams");
     }
 }

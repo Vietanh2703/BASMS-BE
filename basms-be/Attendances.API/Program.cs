@@ -1,4 +1,5 @@
 using BuildingBlocks.Extensions;
+using Attendances.API.Consumers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -52,10 +53,8 @@ builder.Services.AddAWSService<IAmazonS3>();
 // Đăng ký MassTransit with RabbitMQ and Consumers
 builder.Services.AddMassTransit(x =>
 {
-    // Register consumers here when created
-    // Example:
-    // x.AddConsumer<ShiftAssignmentCreatedConsumer>();
-    // x.AddConsumer<GuardInfoUpdatedConsumer>();
+    // Register consumers
+    x.AddConsumer<CreateAttendanceRecordConsumer>();
 
     // Request Clients for querying other services
     // Example:

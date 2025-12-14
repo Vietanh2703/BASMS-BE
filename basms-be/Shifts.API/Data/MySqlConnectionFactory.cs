@@ -304,6 +304,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     `Id` CHAR(36) PRIMARY KEY,
                     `ManagerId` CHAR(36) NULL,
                     `ContractId` CHAR(36) NULL,
+                    `TeamId` CHAR(36) NULL COMMENT 'Team to auto-assign when generating shifts from this template',
                     `TemplateCode` VARCHAR(50) NOT NULL,
                     `TemplateName` VARCHAR(200) NOT NULL,
                     `Description` TEXT NULL,
@@ -344,6 +345,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     INDEX `idx_templates_code` (`TemplateCode`),
                     INDEX `idx_templates_manager` (`ManagerId`, `IsActive`),
                     INDEX `idx_templates_contract` (`ContractId`, `IsActive`),
+                    INDEX `idx_templates_team` (`TeamId`, `IsActive`),
                     INDEX `idx_templates_location` (`LocationId`, `IsActive`),
                     INDEX `idx_templates_active` (`IsActive`, `IsDeleted`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
