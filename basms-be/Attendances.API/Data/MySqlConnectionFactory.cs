@@ -68,7 +68,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     `ShiftId` CHAR(36) NOT NULL,
 
                     -- Check-in Information
-                    `CheckInTime` DATETIME NOT NULL,
+                    `CheckInTime` DATETIME NULL COMMENT 'NULL = chưa check-in (PENDING)',
                     `CheckInLatitude` DECIMAL(10,8) NULL,
                     `CheckInLongitude` DECIMAL(11,8) NULL,
                     `CheckInLocationAccuracy` DECIMAL(10,2) NULL,

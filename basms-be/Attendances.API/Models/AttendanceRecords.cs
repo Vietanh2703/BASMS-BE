@@ -37,9 +37,9 @@ public class AttendanceRecords
     // ============================================================================
 
     /// <summary>
-    /// Thời gian check-in thực tế
+    /// Thời gian check-in thực tế (NULL = chưa check-in)
     /// </summary>
-    public DateTime CheckInTime { get; set; }
+    public DateTime? CheckInTime { get; set; }
 
     /// <summary>
     /// Vị trí check-in (latitude)
