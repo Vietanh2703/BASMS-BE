@@ -103,6 +103,7 @@ jobs:
               'DB_CONNECTION_STRING_USERS': os.environ.get('DB_CONNECTION_STRING_USERS', ''),
               'DB_CONNECTION_STRING_CONTRACTS': os.environ.get('DB_CONNECTION_STRING_CONTRACTS', ''),
               'DB_CONNECTION_STRING_SHIFTS': os.environ.get('DB_CONNECTION_STRING_SHIFTS', ''),
+              'DB_CONNECTION_STRING_ATTENDANCES': os.environ.get('DB_CONNECTION_STRING_ATTENDANCES', ''),
               'FIREBASE_API_KEY': os.environ.get('FIREBASE_API_KEY', ''),
               'FIREBASE_URL': os.environ.get('FIREBASE_URL', ''),
               'EMAIL_SENDER': os.environ.get('EMAIL_SENDER', ''),
@@ -114,6 +115,7 @@ jobs:
               'RABBITMQ_USERNAME': os.environ.get('RABBITMQ_USERNAME', ''),
               'RABBITMQ_PASSWORD': os.environ.get('RABBITMQ_PASSWORD', ''),
               'AWS_BUCKET_NAME': os.environ.get('AWS_BUCKET_NAME', ''),
+              'AWS_BUCKET_FACEID_NAME': os.environ.get('AWS_BUCKET_FACEID_NAME', ''),
               'AWS_REGION': os.environ.get('AWS_REGION', ''),
               'AWS_ACCESS_KEY': os.environ.get('AWS_ACCESS_KEY', ''),
               'AWS_SECRET_KEY': os.environ.get('AWS_SECRET_KEY', ''),
@@ -122,6 +124,7 @@ jobs:
               'HERE_API_KEY': os.environ.get('HERE_API_KEY', ''),
               'ALLOWED_ORIGINS': os.environ.get('ALLOWED_ORIGINS', ''),
               'GOOGLE_APPLICATION_CREDENTIALS': '/app/config/firebase-credentials.json'
+              'FACEID_API_BASE_URL': os.environ.get('FACEID_API_BASE_URL', '')
           }
 
           # Write .env.production file WITHOUT quotes (Docker Compose handles this better)
@@ -160,6 +163,7 @@ jobs:
           DB_CONNECTION_STRING_USERS: ${{ secrets.DB_CONNECTION_STRING_USERS }}
           DB_CONNECTION_STRING_CONTRACTS: ${{ secrets.DB_CONNECTION_STRING_CONTRACTS }}
           DB_CONNECTION_STRING_SHIFTS: ${{ secrets.DB_CONNECTION_STRING_SHIFTS }}
+          DB_CONNECTION_STRING_ATTENDANCES: ${{ secrets.DB_CONNECTION_STRING_ATTENDANCES }}
           FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
           FIREBASE_URL: ${{ secrets.FIREBASE_URL }}
           EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
@@ -170,6 +174,7 @@ jobs:
           RABBITMQ_USERNAME: ${{ secrets.RABBITMQ_USERNAME }}
           RABBITMQ_PASSWORD: ${{ secrets.RABBITMQ_PASSWORD }}
           AWS_BUCKET_NAME: ${{ secrets.AWS_BUCKET_NAME }}
+          AWS_BUCKET_FACEID_NAME: ${{ secrets.AWS_BUCKET_FACEID_NAME }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
           AWS_ACCESS_KEY: ${{ secrets.AWS_ACCESS_KEY }}
           AWS_SECRET_KEY: ${{ secrets.AWS_SECRET_KEY }}
@@ -177,6 +182,7 @@ jobs:
           SIGNATURE_CERT_PASSWORD: ${{ secrets.SIGNATURE_CERT_PASSWORD }}
           HERE_API_KEY: ${{ secrets.HERE_API_KEY }}
           ALLOWED_ORIGINS: ${{ secrets.ALLOWED_ORIGINS }}
+          FACEID_API_BASE_URL: ${{ secrets.FACEID_API_BASE_URL }}
 
       - name: Create deployment package
         run: |
@@ -271,17 +277,22 @@ jobs:
             else
               echo "❌ WARNING: firebase-credentials.json not found!"
             fi
-
-            # Stop existing containers
-            echo "Stopping and removing existing containers..."
+            # Stop existing containers (exclude Face API and MySQL)
+            echo "Stopping and removing existing C# API containers..."
             cd ~/basms/current
-            docker compose down --remove-orphans 2>/dev/null || echo "No compose containers to stop"
+            
+            # Stop only C# API containers, preserve Face API and MySQL
+            for service in users-api contracts-api shifts-api attendances-api rabbitmq; do
+              echo "Stopping $service..."
+              docker compose stop $service 2>/dev/null || true
+              docker compose rm -f $service 2>/dev/null || true
+            done
+            
+            # Note: MySQL volume and Face API container are NOT removed to preserve data/state
 
-            # Note: MySQL volume is NOT removed to preserve data across deployments
-
-            # Remove orphan containers
-            echo "Removing orphan containers..."
-            docker ps -a --filter "name=basms-" --format "{{.Names}}" | xargs -r docker rm -f 2>/dev/null || echo "No orphan containers found"
+            # Remove only basms-* containers (excluding basms-face-api and basms-mysql)
+            echo "Removing orphan basms-* containers (excluding Face API and MySQL)..."
+            docker ps -a --filter "name=basms-" --format "{{.Names}}" | grep -v -E "(face|mysql)" | xargs -r docker rm -f 2>/dev/null || echo "No orphan containers found"
 
             # Clean up old images
             echo "Cleaning up old Docker images..."
