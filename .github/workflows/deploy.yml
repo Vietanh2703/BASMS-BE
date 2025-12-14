@@ -104,6 +104,8 @@ jobs:
               'DB_CONNECTION_STRING_CONTRACTS': os.environ.get('DB_CONNECTION_STRING_CONTRACTS', ''),
               'DB_CONNECTION_STRING_SHIFTS': os.environ.get('DB_CONNECTION_STRING_SHIFTS', ''),
               'DB_CONNECTION_STRING_ATTENDANCES': os.environ.get('DB_CONNECTION_STRING_ATTENDANCES', ''),
+              'DB_CONNECTION_STRING_CHATS': os.environ.get('DB_CONNECTION_STRING_CHATS', ''),
+              'DB_CONNECTION_STRING_INCIDENTS': os.environ.get('DB_CONNECTION_STRING_INCIDENTS', ''),
               'FIREBASE_API_KEY': os.environ.get('FIREBASE_API_KEY', ''),
               'FIREBASE_URL': os.environ.get('FIREBASE_URL', ''),
               'EMAIL_SENDER': os.environ.get('EMAIL_SENDER', ''),
@@ -116,6 +118,7 @@ jobs:
               'RABBITMQ_PASSWORD': os.environ.get('RABBITMQ_PASSWORD', ''),
               'AWS_BUCKET_NAME': os.environ.get('AWS_BUCKET_NAME', ''),
               'AWS_BUCKET_FACEID_NAME': os.environ.get('AWS_BUCKET_FACEID_NAME', ''),
+              'AWS_BUCKET_FILE_NAME': os.environ.get('AWS_BUCKET_FILE_NAME', ''),
               'AWS_REGION': os.environ.get('AWS_REGION', ''),
               'AWS_ACCESS_KEY': os.environ.get('AWS_ACCESS_KEY', ''),
               'AWS_SECRET_KEY': os.environ.get('AWS_SECRET_KEY', ''),
@@ -164,6 +167,8 @@ jobs:
           DB_CONNECTION_STRING_CONTRACTS: ${{ secrets.DB_CONNECTION_STRING_CONTRACTS }}
           DB_CONNECTION_STRING_SHIFTS: ${{ secrets.DB_CONNECTION_STRING_SHIFTS }}
           DB_CONNECTION_STRING_ATTENDANCES: ${{ secrets.DB_CONNECTION_STRING_ATTENDANCES }}
+          DB_CONNECTION_STRING_CHATS: ${{ secrets.DB_CONNECTION_STRING_CHATS }}
+          DB_CONNECTION_STRING_INCIDENTS: ${{ secrets.DB_CONNECTION_STRING_INCIDENTS }}
           FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
           FIREBASE_URL: ${{ secrets.FIREBASE_URL }}
           EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
@@ -175,6 +180,7 @@ jobs:
           RABBITMQ_PASSWORD: ${{ secrets.RABBITMQ_PASSWORD }}
           AWS_BUCKET_NAME: ${{ secrets.AWS_BUCKET_NAME }}
           AWS_BUCKET_FACEID_NAME: ${{ secrets.AWS_BUCKET_FACEID_NAME }}
+          AWS_BUCKET_FILE_NAME: ${{ secrets.AWS_BUCKET_FILE_NAME }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
           AWS_ACCESS_KEY: ${{ secrets.AWS_ACCESS_KEY }}
           AWS_SECRET_KEY: ${{ secrets.AWS_SECRET_KEY }}
@@ -282,7 +288,7 @@ jobs:
             cd ~/basms/current
             
             # Stop only C# API containers, preserve Face API and MySQL
-            for service in users-api contracts-api shifts-api attendances-api rabbitmq; do
+            for service in users-api contracts-api shifts-api attendances-api chats-api incidents-api rabbitmq; do
               echo "Stopping $service..."
               docker compose stop $service 2>/dev/null || true
               docker compose rm -f $service 2>/dev/null || true

@@ -170,8 +170,72 @@ services:
       - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
       - AWS__Region=${AWS_REGION}
-      - AWS__S3__BucketName=${AWS_BUCKET_NAME}
+      - AWS__S3__BucketName=${AWS_BUCKET_FACEID_NAME}
       - FaceRecognitionApi__BaseUrl=${FACE_RECOGNITION_API_URL}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+    networks:
+      - basms-network
+
+  # Chats API
+  chats-api:
+    build:
+      context: .
+      dockerfile: Chats.API/Dockerfile
+    container_name: basms-chats-api
+    restart: unless-stopped
+    ports:
+      - "5005:80"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:80
+      - DB_CONNECTION_STRING_CHATS=${DB_CONNECTION_STRING_CHATS}
+      - Jwt__Key=${JWT_SECRET_KEY}
+      - Jwt__Issuer=${JWT_ISSUER}
+      - Jwt__Audience=${JWT_AUDIENCE}
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - RABBITMQ_USERNAME=${RABBITMQ_USERNAME}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+      - AWS_REGION=${AWS_REGION}
+      - AWS_BUCKET_NAME=${AWS_BUCKET_FILE_NAME}
+      - AWS_ACCESS_KEY=${AWS_ACCESS_KEY}
+      - AWS_SECRET_KEY=${AWS_SECRET_KEY}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+    networks:
+      - basms-network
+
+  # Incidents API
+  incidents-api:
+    build:
+      context: .
+      dockerfile: Incidents.API/Dockerfile
+    container_name: basms-incidents-api
+    restart: unless-stopped
+    ports:
+      - "5006:80"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:80
+      - DB_CONNECTION_STRING_INCIDENTS=${DB_CONNECTION_STRING_INCIDENTS}
+      - Jwt__Key=${JWT_SECRET_KEY}
+      - Jwt__Issuer=${JWT_ISSUER}
+      - Jwt__Audience=${JWT_AUDIENCE}
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - RABBITMQ_USERNAME=${RABBITMQ_USERNAME}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+      - AWS_REGION=${AWS_REGION}
+      - AWS_BUCKET_NAME=${AWS_BUCKET_FILE_NAME}
+      - AWS_ACCESS_KEY=${AWS_ACCESS_KEY}
+      - AWS_SECRET_KEY=${AWS_SECRET_KEY}
     depends_on:
       mysql:
         condition: service_healthy
