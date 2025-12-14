@@ -2,6 +2,7 @@ using Dapper;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Attendances.API.Helpers;
 
 namespace Attendances.API.AttendanceHandler.RegisterFaceWithFiles;
 
@@ -360,7 +361,7 @@ internal class RegisterFaceWithFilesHandler(
             using var connection = await dbFactory.CreateConnectionAsync();
 
             var biometricLogId = Guid.NewGuid();
-            var now = DateTime.UtcNow;
+            var now = DateTimeHelper.VietnamNow;
 
             var insertSql = @"
                 INSERT INTO biometric_logs (

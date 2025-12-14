@@ -56,33 +56,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             using var connection = await CreateConnectionAsync();
 
             // ============================================================================
-            // 1. SHIFT_ASSIGNMENTS TABLE (Cache from Shifts Service for quick query)
-            // ============================================================================
-            await connection.ExecuteAsync(@"
-                CREATE TABLE IF NOT EXISTS `shift_assignments` (
-                    `Id` CHAR(36) PRIMARY KEY,
-                    `ShiftId` CHAR(36) NOT NULL,
-                    `GuardId` CHAR(36) NOT NULL,
-                    `Status` VARCHAR(50) NOT NULL DEFAULT 'PENDING',
-                    `AssignedAt` DATETIME NOT NULL,
-                    `ConfirmedAt` DATETIME NULL,
-                    `CompletedAt` DATETIME NULL,
-                    `IsAttended` BOOLEAN NOT NULL DEFAULT FALSE,
-                    `IsNoShow` BOOLEAN NOT NULL DEFAULT FALSE,
-                    `LastSyncedAt` DATETIME NULL,
-                    `SyncStatus` VARCHAR(50) NOT NULL DEFAULT 'SYNCED',
-                    `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    `UpdatedAt` DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
-                    `IsDeleted` BOOLEAN NOT NULL DEFAULT FALSE,
-                    `DeletedAt` DATETIME NULL,
-
-                    INDEX `idx_shift_assignments_shift` (`ShiftId`, `Status`),
-                    INDEX `idx_shift_assignments_guard` (`GuardId`, `Status`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-            ");
-
-            // ============================================================================
-            // 2. ATTENDANCE_RECORDS TABLE (Main attendance tracking)
+            // 1. ATTENDANCE_RECORDS TABLE (Main attendance tracking)
             // ============================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `attendance_records` (
@@ -164,7 +138,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             ");
 
             // ============================================================================
-            // 3. BIOMETRIC_LOGS TABLE (Face recognition logs)
+            // 2. BIOMETRIC_LOGS TABLE (Face recognition logs)
             // ============================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `biometric_logs` (
@@ -240,7 +214,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             ");
 
             // ============================================================================
-            // 4. ATTENDANCE_EXCEPTIONS TABLE
+            // 3. ATTENDANCE_EXCEPTIONS TABLE
             // ============================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `attendance_exceptions` (
@@ -301,7 +275,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             ");
 
             // ============================================================================
-            // 5. OVERTIME_RECORDS TABLE
+            // 4. OVERTIME_RECORDS TABLE
             // ============================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `overtime_records` (
@@ -363,7 +337,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             ");
 
             // ============================================================================
-            // 6. LEAVE_REQUESTS TABLE
+            // 5. LEAVE_REQUESTS TABLE
             // ============================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `leave_requests` (
@@ -435,7 +409,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             ");
 
             // ============================================================================
-            // 7. ATTENDANCE_SUMMARY TABLE
+            // 6. ATTENDANCE_SUMMARY TABLE
             // ============================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `attendance_summary` (
