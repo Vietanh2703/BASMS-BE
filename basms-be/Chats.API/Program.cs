@@ -69,10 +69,10 @@ var jwtKey = builder.Configuration["JWT_SECRET_KEY"] ?? builder.Configuration["J
 var jwtIssuer = builder.Configuration["JWT_ISSUER"] ?? builder.Configuration["Jwt__Issuer"];
 var jwtAudience = builder.Configuration["JWT_AUDIENCE"] ?? builder.Configuration["Jwt__Audience"];
 
-if (!string.IsNullOrWhiteSpace(jwtKey))
-{
-    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-        .AddJwtBearer(options =>
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        if (!string.IsNullOrWhiteSpace(jwtKey))
         {
             options.TokenValidationParameters = new TokenValidationParameters
             {
@@ -85,8 +85,8 @@ if (!string.IsNullOrWhiteSpace(jwtKey))
                 IssuerSigningKey = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(jwtKey)),
                 ClockSkew = TimeSpan.FromMinutes(5)
             };
-        });
-}
+        }
+    });
 
 builder.Services.AddAuthorization();
 
@@ -121,10 +121,10 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseGlobalExceptionHandler();
-
-app.MapCarter();
-app.UseCors("AllowFrontend");
+app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.MapCarter();
 app.MapGet("/", () => "Chats.API is running.");
 app.Run();
