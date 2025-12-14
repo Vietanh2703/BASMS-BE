@@ -105,9 +105,6 @@ internal class RegisterFaceWithFilesHandler(
     private readonly string? _faceApiBaseUrl = configuration["FaceRecognitionApi:BaseUrl"]
                                               ?? configuration["FaceRecognitionApi__BaseUrl"]
                                               ?? configuration["FACEID_API_BASE_URL"];
-    private readonly string? _faceApiKey = configuration["FaceRecognitionApi:ApiKey"]
-                                          ?? configuration["FaceRecognitionApi__ApiKey"]
-                                          ?? configuration["FACEID_API_KEY"];
 
     public async Task<RegisterFaceWithFilesResult> Handle(
         RegisterFaceWithFilesCommand request,
@@ -312,11 +309,6 @@ internal class RegisterFaceWithFilesHandler(
             var httpClient = httpClientFactory.CreateClient();
             httpClient.BaseAddress = new Uri(_faceApiBaseUrl!);
             httpClient.Timeout = TimeSpan.FromSeconds(90); // Longer timeout for 6 images
-
-            if (!string.IsNullOrWhiteSpace(_faceApiKey))
-            {
-                httpClient.DefaultRequestHeaders.Add("X-API-Key", _faceApiKey);
-            }
 
             var requestBody = new FaceRegistrationApiRequest
             {
