@@ -63,9 +63,6 @@ internal record FaceRegistrationApiRequest
     [JsonPropertyName("guard_id")]
     public string GuardId { get; init; } = string.Empty;
 
-    [JsonPropertyName("employee_code")]
-    public string EmployeeCode { get; init; } = string.Empty;
-
     [JsonPropertyName("images")]
     public List<ImageDataDto> Images { get; init; } = new();
 }
@@ -313,7 +310,6 @@ internal class RegisterFaceWithFilesHandler(
             var requestBody = new FaceRegistrationApiRequest
             {
                 GuardId = guardId.ToString(),
-                EmployeeCode = guardId.ToString(),
                 Images = images
             };
 
@@ -323,6 +319,8 @@ internal class RegisterFaceWithFilesHandler(
             logger.LogInformation(
                 "Calling Face Registration API: {Url}",
                 $"{_faceApiBaseUrl}/api/v1/faces/register");
+
+            logger.LogInformation("Request JSON: {Json}", jsonContent);
 
             var response = await httpClient.PostAsync("/api/v1/faces/register", httpContent, cancellationToken);
 
