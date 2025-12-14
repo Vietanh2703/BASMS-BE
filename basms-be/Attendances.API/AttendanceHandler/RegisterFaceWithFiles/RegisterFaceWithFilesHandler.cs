@@ -114,6 +114,18 @@ internal class RegisterFaceWithFilesHandler(
 
         try
         {
+            // DEBUG: Log configuration values
+            logger.LogInformation(
+                "🔍 DEBUG - Configuration check:\n" +
+                "  FaceRecognitionApi:BaseUrl = {Config1}\n" +
+                "  FaceRecognitionApi__BaseUrl = {Config2}\n" +
+                "  FACEID_API_BASE_URL = {Config3}\n" +
+                "  Final _faceApiBaseUrl = {FinalUrl}",
+                configuration["FaceRecognitionApi:BaseUrl"] ?? "NULL",
+                configuration["FaceRecognitionApi__BaseUrl"] ?? "NULL",
+                configuration["FACEID_API_BASE_URL"] ?? "NULL",
+                _faceApiBaseUrl ?? "NULL");
+
             logger.LogInformation(
                 "🚀 Starting face registration for Guard={GuardId} with sequential processing",
                 request.GuardId);
@@ -226,11 +238,22 @@ internal class RegisterFaceWithFilesHandler(
 
             if (string.IsNullOrWhiteSpace(_faceApiBaseUrl))
             {
+                logger.LogError(
+                    "❌ Face Recognition API URL is not configured!\n" +
+                    "  Checked keys:\n" +
+                    "    1. FaceRecognitionApi:BaseUrl = {Config1}\n" +
+                    "    2. FaceRecognitionApi__BaseUrl = {Config2}\n" +
+                    "    3. FACEID_API_BASE_URL = {Config3}\n" +
+                    "  All returned NULL or empty. Please set one of these configuration values.",
+                    configuration["FaceRecognitionApi:BaseUrl"] ?? "NULL",
+                    configuration["FaceRecognitionApi__BaseUrl"] ?? "NULL",
+                    configuration["FACEID_API_BASE_URL"] ?? "NULL");
+
                 return new RegisterFaceWithFilesResult
                 {
                     Success = false,
                     ProcessingSteps = processingSteps,
-                    ErrorMessage = "Face Recognition API URL not configured"
+                    ErrorMessage = "Face Recognition API URL not configured. Check server logs for details."
                 };
             }
 
