@@ -123,7 +123,7 @@ jobs:
               'SIGNATURE_CERT_PASSWORD': os.environ.get('SIGNATURE_CERT_PASSWORD', ''),
               'HERE_API_KEY': os.environ.get('HERE_API_KEY', ''),
               'ALLOWED_ORIGINS': os.environ.get('ALLOWED_ORIGINS', ''),
-              'GOOGLE_APPLICATION_CREDENTIALS': '/app/config/firebase-credentials.json'
+              'GOOGLE_APPLICATION_CREDENTIALS': '/app/config/firebase-credentials.json',
               'FACEID_API_BASE_URL': os.environ.get('FACEID_API_BASE_URL', '')
           }
 
