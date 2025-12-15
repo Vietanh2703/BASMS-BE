@@ -9,15 +9,17 @@ public class GetUnassignedShiftGroupsEndpoint : ICarterModule
     {
         app.MapGet("/api/shifts/unassigned-groups", async (
             [FromQuery] Guid managerId,
+            [FromQuery] Guid? contractId,
             ISender sender,
             ILogger<GetUnassignedShiftGroupsEndpoint> logger,
             CancellationToken cancellationToken) =>
         {
             logger.LogInformation(
-                "GET /api/shifts/unassigned-groups - Getting unassigned shift groups for Manager {ManagerId}",
-                managerId);
+                "GET /api/shifts/unassigned-groups - Getting unassigned shift groups for Manager {ManagerId}, ContractId={ContractId}",
+                managerId,
+                contractId?.ToString() ?? "ALL");
 
-            var query = new GetUnassignedShiftGroupsQuery(managerId);
+            var query = new GetUnassignedShiftGroupsQuery(managerId, contractId);
 
             var result = await sender.Send(query, cancellationToken);
 
@@ -37,10 +39,11 @@ public class GetUnassignedShiftGroupsEndpoint : ICarterModule
             var totalUnassigned = result.ShiftGroups.Sum(g => g.UnassignedShiftCount);
 
             logger.LogInformation(
-                "✓ Retrieved {GroupCount} unassigned shift groups ({TotalShifts} total shifts) for Manager {ManagerId}",
+                "✓ Retrieved {GroupCount} unassigned shift groups ({TotalShifts} total shifts) for Manager {ManagerId}, ContractId={ContractId}",
                 result.ShiftGroups.Count,
                 totalUnassigned,
-                managerId);
+                managerId,
+                contractId?.ToString() ?? "ALL");
 
             return Results.Ok(new
             {
@@ -74,6 +77,7 @@ public class GetUnassignedShiftGroupsEndpoint : ICarterModule
 
             Query Parameters:
             - managerId (required): The manager ID to filter shifts
+            - contractId (optional): Filter by specific contract ID for more detailed results
 
             Response includes:
             - RepresentativeShiftId: ID of the representative shift (nearest shift in the group)
@@ -88,8 +92,9 @@ public class GetUnassignedShiftGroupsEndpoint : ICarterModule
             - NearestShiftDate: The earliest unassigned shift in this group
             - FarthestShiftDate: The latest unassigned shift in this group
 
-            Example:
+            Examples:
             GET /api/shifts/unassigned-groups?managerId={guid}
+            GET /api/shifts/unassigned-groups?managerId={guid}&contractId={contractGuid}
 
             Example Response:
             If there are 10 morning shifts (template 'Ca Sáng') and 15 evening shifts (template 'Ca Chiều')

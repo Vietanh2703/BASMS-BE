@@ -18,10 +18,18 @@ internal class GetUnassignedShiftGroupsHandler(
         try
         {
             logger.LogInformation(
-                "Getting unassigned shift groups for Manager {ManagerId}",
-                request.ManagerId);
+                "Getting unassigned shift groups for Manager {ManagerId}, ContractId={ContractId}",
+                request.ManagerId,
+                request.ContractId?.ToString() ?? "ALL");
 
             using var connection = await dbFactory.CreateConnectionAsync();
+
+            // ================================================================
+            // BUILD DYNAMIC WHERE CLAUSE
+            // ================================================================
+            var contractFilter = request.ContractId.HasValue
+                ? "AND s.ContractId = @ContractId"
+                : "";
 
             // ================================================================
             // SQL QUERY - GROUP BY TemplateId và ContractId
@@ -30,11 +38,12 @@ internal class GetUnassignedShiftGroupsHandler(
             // 1. Join shifts với shift_templates để lấy thông tin template
             // 2. Filter: AssignedGuardsCount = 0 (chưa phân công)
             // 3. Filter: ManagerId từ shift_templates
-            // 4. Group by ShiftTemplateId, ContractId
-            // 5. Lấy thông tin từ một shift đại diện (shift gần nhất)
+            // 4. Filter: ContractId (optional)
+            // 5. Group by ShiftTemplateId, ContractId
+            // 6. Lấy thông tin từ một shift đại diện (shift gần nhất)
             // ================================================================
 
-            var sql = @"
+            var sql = $@"
                 WITH UnassignedShifts AS (
                     SELECT
                         s.Id,
@@ -63,6 +72,7 @@ internal class GetUnassignedShiftGroupsHandler(
                         AND s.IsDeleted = 0
                         AND st.ManagerId = @ManagerId
                         AND st.IsDeleted = 0
+                        {contractFilter}
                 ),
                 GroupStats AS (
                     SELECT
@@ -78,6 +88,7 @@ internal class GetUnassignedShiftGroupsHandler(
                         AND s.IsDeleted = 0
                         AND st.ManagerId = @ManagerId
                         AND st.IsDeleted = 0
+                        {contractFilter}
                     GROUP BY ShiftTemplateId, ContractId
                 )
                 SELECT
@@ -109,6 +120,11 @@ internal class GetUnassignedShiftGroupsHandler(
 
             var parameters = new DynamicParameters();
             parameters.Add("ManagerId", request.ManagerId);
+
+            if (request.ContractId.HasValue)
+            {
+                parameters.Add("ContractId", request.ContractId.Value);
+            }
 
             var groups = await connection.QueryAsync<UnassignedShiftGroupDto>(sql, parameters);
             var groupsList = groups.ToList();

@@ -7,7 +7,8 @@ namespace Shifts.API.ShiftsHandler.GetUnassignedShiftGroups;
 /// Nhóm theo TemplateId và ContractId, chỉ hiện 1 đại diện cho mỗi nhóm
 /// </summary>
 public record GetUnassignedShiftGroupsQuery(
-    Guid ManagerId
+    Guid ManagerId,
+    Guid? ContractId = null
 ) : IQuery<GetUnassignedShiftGroupsResult>;
 
 /// <summary>
