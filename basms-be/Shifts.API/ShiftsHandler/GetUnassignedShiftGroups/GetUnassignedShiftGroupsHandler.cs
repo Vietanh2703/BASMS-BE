@@ -76,11 +76,11 @@ internal class GetUnassignedShiftGroupsHandler(
                 ),
                 GroupStats AS (
                     SELECT
-                        ShiftTemplateId,
-                        ContractId,
+                        s.ShiftTemplateId,
+                        s.ContractId,
                         COUNT(*) as UnassignedCount,
-                        MIN(ShiftDate) as NearestDate,
-                        MAX(ShiftDate) as FarthestDate
+                        MIN(s.ShiftDate) as NearestDate,
+                        MAX(s.ShiftDate) as FarthestDate
                     FROM shifts s
                     INNER JOIN shift_templates st ON s.ShiftTemplateId = st.Id
                     WHERE
@@ -89,7 +89,7 @@ internal class GetUnassignedShiftGroupsHandler(
                         AND st.ManagerId = @ManagerId
                         AND st.IsDeleted = 0
                         {contractFilter}
-                    GROUP BY ShiftTemplateId, ContractId
+                    GROUP BY s.ShiftTemplateId, s.ContractId
                 )
                 SELECT
                     us.Id as RepresentativeShiftId,
