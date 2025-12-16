@@ -133,6 +133,19 @@ internal class CreateTeamHandler(
                 team.Id,
                 team.TeamCode);
 
+            // ================================================================
+            // BƯỚC 5: INCREMENT TOTALTEAMMANAGED CHO MANAGER
+            // ================================================================
+            var updateResult = await connection.ExecuteAsync(@"
+                UPDATE managers
+                SET TotalTeamManaged = COALESCE(TotalTeamManaged, 0) + 1
+                WHERE Id = @ManagerId",
+                new { request.ManagerId });
+
+            logger.LogInformation(
+                "✓ Incremented TotalTeamManaged for Manager {ManagerId}",
+                request.ManagerId);
+
             return new CreateTeamResult(
                 team.Id,
                 team.TeamCode,
