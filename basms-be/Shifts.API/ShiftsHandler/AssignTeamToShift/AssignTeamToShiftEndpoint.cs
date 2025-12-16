@@ -6,10 +6,10 @@ namespace Shifts.API.ShiftsHandler.AssignTeamToShift;
 public record AssignTeamToShiftRequest(
     DateTime StartDate,
     DateTime EndDate,
-    string ShiftTimeSlot,       // MORNING | AFTERNOON | EVENING
+    string ShiftTimeSlot,  
     Guid LocationId,
     Guid? ContractId,
-    string AssignmentType,      // REGULAR | OVERTIME | MANDATORY
+    string AssignmentType,    
     string? AssignmentNotes
 );
 
