@@ -7,7 +7,7 @@ public class GuardViewShiftAssignedEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/guards/{guardId}/shifts/assigned", async (
+        app.MapGet("/api/shifts/guards/{guardId}/shifts/assigned", async (
             Guid guardId,
             [FromQuery] DateTime? fromDate,
             [FromQuery] DateTime? toDate,
