@@ -31,6 +31,7 @@ public class GetAllGuardJoinedEndpoint : ICarterModule
                     employmentStatus = g.EmploymentStatus,
                     hireDate = g.HireDate,
                     contractType = g.ContractType,
+                    certificationLevel = g.CertificationLevel,
                     terminationDate = g.TerminationDate,
                     terminationReason = g.TerminationReason,
                     maxWeeklyHours = g.MaxWeeklyHours,
