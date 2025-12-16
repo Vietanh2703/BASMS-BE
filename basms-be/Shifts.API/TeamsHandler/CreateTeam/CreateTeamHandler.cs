@@ -138,7 +138,7 @@ internal class CreateTeamHandler(
             // ================================================================
             var updateResult = await connection.ExecuteAsync(@"
                 UPDATE managers
-                SET TotalTeamManaged = COALESCE(TotalTeamManaged, 0) + 1
+                SET TotalTeamsManaged = COALESCE(TotalTeamsManaged, 0) + 1
                 WHERE Id = @ManagerId",
                 new { request.ManagerId });
 
