@@ -98,7 +98,7 @@ internal class DeleteTeamHandler(
             // ================================================================
             var updateManagerResult = await connection.ExecuteAsync(@"
                 UPDATE managers
-                SET TotalTeamManaged = GREATEST(COALESCE(TotalTeamManaged, 1) - 1, 0)
+                SET TotalTeamsManaged = GREATEST(COALESCE(TotalTeamsManaged, 1) - 1, 0)
                 WHERE Id = @ManagerId",
                 new { team.ManagerId });
 
