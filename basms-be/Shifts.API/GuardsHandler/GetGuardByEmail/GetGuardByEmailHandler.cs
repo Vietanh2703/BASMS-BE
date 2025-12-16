@@ -52,6 +52,7 @@ internal class GetGuardByEmailHandler(
                 EmploymentStatus: guard.EmploymentStatus,
                 HireDate: guard.HireDate,
                 ContractType: guard.ContractType,
+                CertificationLevel: guard.CertificationLevel,
                 TerminationDate: guard.TerminationDate,
                 TerminationReason: guard.TerminationReason,
                 MaxWeeklyHours: guard.MaxWeeklyHours,
