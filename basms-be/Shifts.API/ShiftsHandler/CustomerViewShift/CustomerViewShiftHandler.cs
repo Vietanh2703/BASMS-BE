@@ -132,8 +132,7 @@ internal class CustomerViewShiftHandler(
             var whereClauses = new List<string>
             {
                 "ContractId = @ContractId",
-                "IsDeleted = 0",
-                "Status != 'CANCELLED'"
+                "IsDeleted = 0"
             };
             var parameters = new DynamicParameters();
             parameters.Add("ContractId", request.ContractId);

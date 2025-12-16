@@ -150,7 +150,7 @@ internal class GetAllShiftsHandler(
             // ================================================================
             // BUILD DYNAMIC SQL QUERY
             // ================================================================
-            var whereClauses = new List<string> { "IsDeleted = 0", "Status != 'CANCELLED'" };
+            var whereClauses = new List<string> { "IsDeleted = 0" };
             var parameters = new DynamicParameters();
 
             // ContractId filter - một contract có thể có nhiều shift templates
