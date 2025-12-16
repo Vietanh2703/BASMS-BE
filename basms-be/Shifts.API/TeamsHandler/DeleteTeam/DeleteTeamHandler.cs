@@ -102,10 +102,13 @@ internal class DeleteTeamHandler(
             logger.LogInformation("Team has no active members - safe to delete");
 
             // ================================================================
-            // BƯỚC 4: SOFT DELETE TEAM
+            // BƯỚC 4: SOFT DELETE TEAM (CHỈ SET IsDeleted = 1, KHÔNG XÓA THẬT)
             // ================================================================
+            var now = DateTime.UtcNow;
             team.IsDeleted = true;
-            team.UpdatedAt = DateTime.UtcNow;
+            team.DeletedAt = now;
+            team.DeletedBy = request.DeletedBy;
+            team.UpdatedAt = now;
             team.UpdatedBy = request.DeletedBy;
 
             await connection.UpdateAsync(team);
