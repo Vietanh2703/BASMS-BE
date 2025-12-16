@@ -87,6 +87,53 @@ internal class AssignTeamToShiftHandler(
             var guardDict = guards.ToDictionary(g => g.Id, g => g);
 
             // ================================================================
+            // BƯỚC 2.5: CHECK CROSS-CONTRACT CONFLICTS
+            // ================================================================
+            logger.LogInformation("🔍 Checking cross-contract conflicts...");
+
+            var crossContractConflict = await CheckCrossContractConflict(
+                connection,
+                request.TeamId,
+                guardIds,
+                request.StartDate,
+                request.EndDate,
+                request.ShiftTimeSlot,
+                request.ContractId);
+
+            if (crossContractConflict.HasConflict)
+            {
+                logger.LogWarning(
+                    "⚠️ Team {TeamId} has conflicts with {Count} other contract(s)",
+                    request.TeamId,
+                    crossContractConflict.ConflictingContracts.Count);
+
+                foreach (var conflict in crossContractConflict.Conflicts)
+                {
+                    errors.Add(
+                        $"❌ CONFLICT với Contract khác: " +
+                        $"Team đã được phân công ca {ShiftClassificationHelper.GetVietnameseSlotName(conflict.ConflictTimeSlot)} " +
+                        $"ngày {conflict.ConflictDate:dd/MM/yyyy} " +
+                        $"tại {conflict.LocationName} " +
+                        $"(Contract ID: {conflict.ContractId}). " +
+                        $"Số guards bị ảnh hưởng: {conflict.AffectedGuardsCount}/{guardIds.Count}. " +
+                        $"{conflict.Reason}");
+                }
+
+                logger.LogError(
+                    "❌ Cannot assign team due to {Count} cross-contract conflict(s)",
+                    crossContractConflict.Conflicts.Count);
+
+                return new AssignTeamToShiftResult
+                {
+                    Success = false,
+                    Errors = errors,
+                    Warnings = warnings
+                };
+            }
+
+            logger.LogInformation("✓ No cross-contract conflicts detected");
+
+            // ================================================================
             // BƯỚC 3: XỬ LÝ TỪNG NGÀY (Multi-day loop)
             // ================================================================
             var currentDate = request.StartDate.Date;
@@ -507,5 +554,341 @@ internal class AssignTeamToShiftHandler(
     {
         public bool HasConflict { get; set; }
         public List<ConflictingGuardInfo> ConflictingGuards { get; set; } = new();
+    }
+
+    // ================================================================
+    // CROSS-CONTRACT CONFLICT DETECTION
+    // ================================================================
+
+    /// <summary>
+    /// Kiểm tra conflict của team với các contract khác
+    /// Bao gồm:
+    /// 1. Shifts đã tạo của contract khác
+    /// 2. Shift templates có TeamId (auto-assign) của contract khác
+    /// </summary>
+    private async Task<CrossContractConflictResult> CheckCrossContractConflict(
+        IDbConnection connection,
+        Guid teamId,
+        List<Guid> guardIds,
+        DateTime startDate,
+        DateTime endDate,
+        string shiftTimeSlot,
+        Guid? currentContractId)
+    {
+        var conflicts = new List<CrossContractConflictInfo>();
+
+        // ================================================================
+        // CASE 1: Check shifts đã tạo của contract khác
+        // ================================================================
+        var existingShiftConflicts = await CheckExistingShiftConflicts(
+            connection,
+            guardIds,
+            startDate,
+            endDate,
+            shiftTimeSlot,
+            currentContractId);
+
+        conflicts.AddRange(existingShiftConflicts);
+
+        // ================================================================
+        // CASE 2: Check shift templates có TeamId (future conflicts)
+        // ================================================================
+        var templateConflicts = await CheckShiftTemplateConflicts(
+            connection,
+            teamId,
+            startDate,
+            endDate,
+            shiftTimeSlot,
+            currentContractId);
+
+        conflicts.AddRange(templateConflicts);
+
+        // ================================================================
+        // Return result
+        // ================================================================
+        return new CrossContractConflictResult
+        {
+            HasConflict = conflicts.Any(),
+            Conflicts = conflicts,
+            ConflictingContracts = conflicts
+                .Select(c => c.ContractId)
+                .Distinct()
+                .ToList()
+        };
+    }
+
+    /// <summary>
+    /// Kiểm tra shifts đã tạo của contract khác mà team members đã được assign
+    /// </summary>
+    private async Task<List<CrossContractConflictInfo>> CheckExistingShiftConflicts(
+        IDbConnection connection,
+        List<Guid> guardIds,
+        DateTime startDate,
+        DateTime endDate,
+        string shiftTimeSlot,
+        Guid? currentContractId)
+    {
+        var conflicts = new List<CrossContractConflictInfo>();
+
+        logger.LogInformation(
+            "Checking existing shift conflicts for {GuardCount} guards from {StartDate} to {EndDate}",
+            guardIds.Count,
+            startDate.ToString("yyyy-MM-dd"),
+            endDate.ToString("yyyy-MM-dd"));
+
+        // Lấy tất cả shifts của contract KHÁC mà guards đã được assign
+        var sql = @"
+            SELECT
+                s.Id AS ShiftId,
+                s.ContractId,
+                s.ShiftDate,
+                s.ShiftStart,
+                s.ShiftEnd,
+                s.LocationName,
+                s.LocationAddress,
+                COUNT(DISTINCT sa.GuardId) AS ConflictingGuardsCount,
+                GROUP_CONCAT(DISTINCT g.FullName) AS ConflictingGuardNames
+            FROM shifts s
+            INNER JOIN shift_assignments sa ON sa.ShiftId = s.Id
+            INNER JOIN guards g ON g.Id = sa.GuardId
+            WHERE sa.GuardId IN @GuardIds
+              AND s.ShiftDate BETWEEN @StartDate AND @EndDate
+              AND s.Status NOT IN ('CANCELLED', 'COMPLETED')
+              AND sa.Status NOT IN ('CANCELLED', 'DECLINED')
+              AND sa.IsDeleted = 0
+              AND s.IsDeleted = 0";
+
+        if (currentContractId.HasValue)
+        {
+            sql += " AND s.ContractId != @CurrentContractId AND s.ContractId IS NOT NULL";
+        }
+        else
+        {
+            sql += " AND s.ContractId IS NOT NULL";
+        }
+
+        sql += @"
+            GROUP BY s.Id, s.ContractId, s.ShiftDate, s.ShiftStart, s.ShiftEnd, s.LocationName
+            HAVING ConflictingGuardsCount > 0
+            ORDER BY s.ShiftDate, s.ShiftStart";
+
+        var shiftsData = await connection.QueryAsync<dynamic>(
+            sql,
+            new
+            {
+                GuardIds = guardIds,
+                StartDate = startDate.Date,
+                EndDate = endDate.Date,
+                CurrentContractId = currentContractId
+            });
+
+        var shiftsList = shiftsData.ToList();
+
+        logger.LogInformation(
+            "Found {Count} shifts from other contracts",
+            shiftsList.Count);
+
+        // Filter theo time slot
+        foreach (var shift in shiftsList)
+        {
+            DateTime shiftStart = shift.ShiftStart;
+            string detectedTimeSlot = ShiftClassificationHelper.ClassifyShiftTimeSlot(shiftStart);
+
+            // Chỉ báo conflict nếu cùng time slot
+            if (detectedTimeSlot == shiftTimeSlot)
+            {
+                conflicts.Add(new CrossContractConflictInfo
+                {
+                    ContractId = (Guid)shift.ContractId,
+                    ConflictType = "EXISTING_SHIFT",
+                    ConflictDate = ((DateTime)shift.ShiftDate).Date,
+                    ConflictTimeSlot = detectedTimeSlot,
+                    LocationName = shift.LocationName ?? "Unknown",
+                    AffectedGuardsCount = (int)shift.ConflictingGuardsCount,
+                    AffectedGuardNames = ((string)shift.ConflictingGuardNames)
+                        .Split(',')
+                        .Select(n => n.Trim())
+                        .ToList(),
+                    Reason = $"Team members đã được phân công vào ca này ({shiftStart:HH:mm}-{((DateTime)shift.ShiftEnd):HH:mm})",
+                    ShiftId = (Guid)shift.ShiftId
+                });
+            }
+        }
+
+        logger.LogInformation(
+            "Detected {Count} existing shift conflicts (same time slot)",
+            conflicts.Count);
+
+        return conflicts;
+    }
+
+    /// <summary>
+    /// Kiểm tra shift templates có TeamId của contract khác (future conflicts)
+    /// </summary>
+    private async Task<List<CrossContractConflictInfo>> CheckShiftTemplateConflicts(
+        IDbConnection connection,
+        Guid teamId,
+        DateTime startDate,
+        DateTime endDate,
+        string shiftTimeSlot,
+        Guid? currentContractId)
+    {
+        var conflicts = new List<CrossContractConflictInfo>();
+
+        logger.LogInformation(
+            "Checking shift template conflicts for team {TeamId}",
+            teamId);
+
+        // Lấy shift templates có TeamId = team này (auto-assign)
+        // Của contract KHÁC
+        // Effective range overlap với assignment range
+        var sql = @"
+            SELECT
+                Id AS TemplateId,
+                ContractId,
+                TemplateName,
+                TemplateCode,
+                StartTime,
+                EndTime,
+                EffectiveFrom,
+                EffectiveTo,
+                LocationName,
+                AppliesMonday,
+                AppliesTuesday,
+                AppliesWednesday,
+                AppliesThursday,
+                AppliesFriday,
+                AppliesSaturday,
+                AppliesSunday
+            FROM shift_templates
+            WHERE TeamId = @TeamId
+              AND IsActive = 1
+              AND IsDeleted = 0";
+
+        if (currentContractId.HasValue)
+        {
+            sql += " AND ContractId != @CurrentContractId AND ContractId IS NOT NULL";
+        }
+        else
+        {
+            sql += " AND ContractId IS NOT NULL";
+        }
+
+        sql += @"
+              AND (EffectiveFrom IS NULL OR EffectiveFrom <= @EndDate)
+              AND (EffectiveTo IS NULL OR EffectiveTo >= @StartDate)";
+
+        var templates = await connection.QueryAsync<dynamic>(
+            sql,
+            new
+            {
+                TeamId = teamId,
+                StartDate = startDate.Date,
+                EndDate = endDate.Date,
+                CurrentContractId = currentContractId
+            });
+
+        var templatesList = templates.ToList();
+
+        logger.LogInformation(
+            "Found {Count} shift templates with TeamId from other contracts",
+            templatesList.Count);
+
+        // Kiểm tra từng template
+        foreach (var template in templatesList)
+        {
+            TimeSpan startTime = template.StartTime;
+            DateTime dummyDateTime = DateTime.Today.Add(startTime);
+            string detectedTimeSlot = ShiftClassificationHelper.ClassifyShiftTimeSlot(dummyDateTime);
+
+            // Chỉ check nếu cùng time slot
+            if (detectedTimeSlot != shiftTimeSlot)
+                continue;
+
+            // Kiểm tra chi tiết từng ngày trong range
+            var currentDate = startDate.Date;
+            var templateEffectiveFrom = template.EffectiveFrom != null
+                ? ((DateTime)template.EffectiveFrom).Date
+                : DateTime.MinValue;
+            var templateEffectiveTo = template.EffectiveTo != null
+                ? ((DateTime)template.EffectiveTo).Date
+                : DateTime.MaxValue;
+
+            while (currentDate <= endDate.Date)
+            {
+                // Check ngày này có nằm trong effective range không
+                if (currentDate < templateEffectiveFrom || currentDate > templateEffectiveTo)
+                {
+                    currentDate = currentDate.AddDays(1);
+                    continue;
+                }
+
+                // Check template có apply cho ngày này không (day of week)
+                var dayOfWeek = currentDate.DayOfWeek;
+                bool appliesOnThisDay = dayOfWeek switch
+                {
+                    DayOfWeek.Monday => template.AppliesMonday,
+                    DayOfWeek.Tuesday => template.AppliesTuesday,
+                    DayOfWeek.Wednesday => template.AppliesWednesday,
+                    DayOfWeek.Thursday => template.AppliesThursday,
+                    DayOfWeek.Friday => template.AppliesFriday,
+                    DayOfWeek.Saturday => template.AppliesSaturday,
+                    DayOfWeek.Sunday => template.AppliesSunday,
+                    _ => false
+                };
+
+                if (appliesOnThisDay)
+                {
+                    // CONFLICT tại ngày này
+                    conflicts.Add(new CrossContractConflictInfo
+                    {
+                        ContractId = (Guid)template.ContractId,
+                        ConflictType = "TEMPLATE_AUTO_ASSIGN",
+                        ConflictDate = currentDate,
+                        ConflictTimeSlot = detectedTimeSlot,
+                        LocationName = template.LocationName ?? "Unknown",
+                        AffectedGuardsCount = 0, // Chưa generate shift nên chưa biết số guards
+                        AffectedGuardNames = new List<string>(),
+                        Reason = $"Template '{template.TemplateName}' có TeamId này, sẽ auto-assign khi generate shifts ({startTime:hh\\:mm}-{((TimeSpan)template.EndTime):hh\\:mm})",
+                        TemplateName = template.TemplateName,
+                        TemplateId = (Guid)template.TemplateId
+                    });
+                }
+
+                currentDate = currentDate.AddDays(1);
+            }
+        }
+
+        logger.LogInformation(
+            "Detected {Count} template conflicts (future auto-assign)",
+            conflicts.Count);
+
+        return conflicts;
+    }
+
+    // ================================================================
+    // CROSS-CONTRACT CONFLICT HELPER CLASSES
+    // ================================================================
+
+    private class CrossContractConflictInfo
+    {
+        public Guid ContractId { get; set; }
+        public string ConflictType { get; set; } = string.Empty; // EXISTING_SHIFT | TEMPLATE_AUTO_ASSIGN
+        public DateTime ConflictDate { get; set; }
+        public string ConflictTimeSlot { get; set; } = string.Empty;
+        public string LocationName { get; set; } = string.Empty;
+        public int AffectedGuardsCount { get; set; }
+        public List<string> AffectedGuardNames { get; set; } = new();
+        public string Reason { get; set; } = string.Empty;
+        public string TemplateName { get; set; } = string.Empty;
+        public Guid? ShiftId { get; set; }
+        public Guid? TemplateId { get; set; }
+    }
+
+    private class CrossContractConflictResult
+    {
+        public bool HasConflict { get; set; }
+        public List<CrossContractConflictInfo> Conflicts { get; set; } = new();
+        public List<Guid> ConflictingContracts { get; set; } = new();
     }
 }
