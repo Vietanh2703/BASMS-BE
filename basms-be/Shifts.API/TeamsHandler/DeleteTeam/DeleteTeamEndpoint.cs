@@ -4,14 +4,13 @@ public class DeleteTeamEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        // Route: DELETE /api/shifts/teams/{id}
+        // Route: PUT /api/shifts/teams/{id}
         app.MapPut("/api/shifts/teams/{id:guid}", async (Guid id, ISender sender, HttpContext context) =>
         {
-            // Lấy userId từ claims
             var userIdClaim = context.User.FindFirst("userId")?.Value;
             if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
             {
-                userId = Guid.NewGuid(); // Fallback for testing
+                userId = Guid.NewGuid();
             }
 
             // Tạo command
@@ -38,18 +37,20 @@ public class DeleteTeamEndpoint : ICarterModule
         .ProducesProblem(StatusCodes.Status400BadRequest)
         .ProducesProblem(StatusCodes.Status404NotFound)
         .ProducesProblem(StatusCodes.Status500InternalServerError)
-        .WithSummary("Delete a team (soft delete)")
-        .WithDescription(@"Soft deletes a team by setting IsDeleted = 1.
+        .WithSummary("Soft delete a team (PUT method)")
+        .WithDescription(@"Soft deletes a team by setting IsDeleted from 0 to 1.
 
-            Validates:
+            Input: TeamId (GUID) from route parameter
+
+            Validation:
             - Team exists and is not already deleted
-            - Team has NOT been assigned to any shifts (checks shift_assignments table)
-            - Team has no active members
+            - Team has NOT been assigned to any active shifts (checks shift_assignments table where IsDeleted = 0)
 
-            If team has shift assignments, the delete operation will be rejected with a descriptive error message.
+            If team has been assigned to any shifts, the operation will be rejected with an error message.
 
             Upon successful deletion:
-            - Sets IsDeleted = true for the team
+            - Sets IsDeleted = 1 (true) for the team
+            - Sets DeletedAt and DeletedBy timestamps
             - Decrements TotalTeamManaged counter for the manager");
     }
 }

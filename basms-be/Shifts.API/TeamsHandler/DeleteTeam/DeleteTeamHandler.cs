@@ -30,7 +30,7 @@ internal class DeleteTeamHandler(
     {
         try
         {
-            logger.LogInformation("Deleting team {TeamId}", request.TeamId);
+            logger.LogInformation("Soft deleting team {TeamId}", request.TeamId);
 
             using var connection = await dbFactory.CreateConnectionAsync();
 
@@ -53,7 +53,7 @@ internal class DeleteTeamHandler(
                 team.TeamName);
 
             // ================================================================
-            // BƯỚC 2: CHECK IF TEAM HAS BEEN ASSIGNED TO SHIFTS
+            // BƯỚC 2: VALIDATE - CHECK IF TEAM HAS BEEN ASSIGNED TO SHIFTS
             // ================================================================
             var assignmentCount = await connection.QueryFirstOrDefaultAsync<int>(@"
                 SELECT COUNT(1)
@@ -65,7 +65,7 @@ internal class DeleteTeamHandler(
             if (assignmentCount > 0)
             {
                 logger.LogWarning(
-                    "Cannot delete team {TeamId} - team has {Count} shift assignments",
+                    "Cannot delete team {TeamId} - team has {Count} active shift assignments",
                     request.TeamId,
                     assignmentCount);
 
@@ -74,35 +74,10 @@ internal class DeleteTeamHandler(
                     $"Không thể xóa team vì đã được phân công {assignmentCount} ca trực. Vui lòng gỡ team khỏi tất cả ca trực trước khi xóa.");
             }
 
-            logger.LogInformation("Team has no shift assignments - safe to delete");
+            logger.LogInformation("Team has no active shift assignments - safe to delete");
 
             // ================================================================
-            // BƯỚC 3: CHECK IF TEAM HAS ACTIVE MEMBERS
-            // ================================================================
-            var activeMemberCount = await connection.QueryFirstOrDefaultAsync<int>(@"
-                SELECT COUNT(*)
-                FROM team_members
-                WHERE TeamId = @TeamId
-                  AND IsDeleted = 0
-                  AND IsActive = 1",
-                new { request.TeamId });
-
-            if (activeMemberCount > 0)
-            {
-                logger.LogWarning(
-                    "Team {TeamId} has {MemberCount} active members",
-                    request.TeamId,
-                    activeMemberCount);
-
-                return new DeleteTeamResult(
-                    false,
-                    $"Không thể xóa team vì còn {activeMemberCount} thành viên đang hoạt động. Vui lòng xóa hoặc chuyển tất cả thành viên trước.");
-            }
-
-            logger.LogInformation("Team has no active members - safe to delete");
-
-            // ================================================================
-            // BƯỚC 4: SOFT DELETE TEAM (CHỈ SET IsDeleted = 1, KHÔNG XÓA THẬT)
+            // BƯỚC 3: SOFT DELETE TEAM (SET IsDeleted = 1)
             // ================================================================
             var now = DateTime.UtcNow;
             team.IsDeleted = true;
@@ -119,7 +94,7 @@ internal class DeleteTeamHandler(
                 team.TeamCode);
 
             // ================================================================
-            // BƯỚC 5: DECREMENT TOTALTEAMMANAGED CHO MANAGER
+            // BƯỚC 4: DECREMENT TOTALTEAMMANAGED CHO MANAGER
             // ================================================================
             var updateManagerResult = await connection.ExecuteAsync(@"
                 UPDATE managers
@@ -137,7 +112,7 @@ internal class DeleteTeamHandler(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error deleting team {TeamId}", request.TeamId);
+            logger.LogError(ex, "Error soft deleting team {TeamId}", request.TeamId);
             throw;
         }
     }
