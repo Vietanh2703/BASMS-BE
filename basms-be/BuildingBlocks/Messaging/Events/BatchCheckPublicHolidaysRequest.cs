@@ -78,3 +78,38 @@ public record ContractData
     public int GenerateShiftsAdvanceDays { get; init; }
     public Guid? CreatedBy { get; init; }
 }
+
+// ================================================================
+// REQUEST/RESPONSE: LẤY CUSTOMER INFO TỪ CONTRACT ID
+// ================================================================
+
+/// <summary>
+/// Request lấy thông tin customer từ contractId
+/// </summary>
+public record GetCustomerByContractRequest
+{
+    public Guid ContractId { get; init; }
+}
+
+/// <summary>
+/// Response chứa customer info
+/// </summary>
+public record GetCustomerByContractResponse
+{
+    public bool Success { get; init; }
+    public CustomerData? Customer { get; init; }
+    public string? ErrorMessage { get; init; }
+}
+
+/// <summary>
+/// Customer data transfer object
+/// </summary>
+public record CustomerData
+{
+    public Guid CustomerId { get; init; }
+    public string CompanyName { get; init; } = string.Empty;
+    public string Email { get; init; } = string.Empty;
+    public string? PhoneNumber { get; init; }
+    public string? ContactPerson { get; init; }
+    public string? Address { get; init; }
+}

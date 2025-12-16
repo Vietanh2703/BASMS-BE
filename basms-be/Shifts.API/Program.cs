@@ -68,6 +68,7 @@ builder.Services.AddMassTransit(x =>
     x.AddRequestClient<CheckPublicHolidayRequest>();
     x.AddRequestClient<CheckLocationClosedRequest>();
     x.AddRequestClient<GetContractShiftSchedulesRequest>();
+    x.AddRequestClient<GetCustomerByContractRequest>();
 
     // Configure RabbitMQ
     x.UsingRabbitMq((context, cfg) =>

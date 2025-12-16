@@ -69,6 +69,40 @@ internal class SendEmailNotificationHandler(
                         request.AdditionalInfo ?? "Ca trực đã được cập nhật");
                     break;
 
+                case "CUSTOMER_CANCELLATION":
+                    // Parse AdditionalInfo: cancellationReason|contractId|managerName
+                    var customerParts = (request.AdditionalInfo ?? "|||").Split('|');
+                    await emailHandler.SendCustomerShiftCancellationEmailAsync(
+                        request.GuardName,  // customerName
+                        request.GuardEmail, // customerEmail
+                        request.ShiftDate,
+                        request.StartTime,
+                        request.EndTime,
+                        request.Location,
+                        customerParts[0], // cancellationReason
+                        customerParts[1], // contractId
+                        customerParts[2]  // managerName
+                    );
+                    break;
+
+                case "DIRECTOR_CANCELLATION":
+                    // Parse AdditionalInfo: locationAddress|cancellationReason|contractId|managerName|managerEmail|affectedGuardsCount|guardsList
+                    var directorParts = (request.AdditionalInfo ?? "||||||").Split('|');
+                    await emailHandler.SendDirectorShiftCancellationEmailAsync(
+                        request.ShiftDate,
+                        request.StartTime,
+                        request.EndTime,
+                        request.Location,
+                        directorParts[0], // locationAddress
+                        directorParts[1], // cancellationReason
+                        directorParts[2], // contractId
+                        directorParts[3], // managerName
+                        directorParts[4], // managerEmail
+                        int.TryParse(directorParts[5], out var count) ? count : 0, // affectedGuardsCount
+                        directorParts[6]  // guardsList
+                    );
+                    break;
+
                 default:
                     logger.LogWarning("Unknown email type: {EmailType}", request.EmailType);
                     return new SendEmailNotificationResult(false, $"Unknown email type: {request.EmailType}");

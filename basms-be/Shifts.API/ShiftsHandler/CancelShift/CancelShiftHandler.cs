@@ -1,4 +1,6 @@
 using Dapper;
+using MassTransit;
+using BuildingBlocks.Messaging.Events;
 using Shifts.API.Handlers.SendNotification;
 using Shifts.API.Handlers.SendEmailNotification;
 
@@ -15,12 +17,13 @@ public record CancelShiftCommand(
 public record CancelShiftResult(
     bool Success,
     string Message,
-    int AffectedGuards              // Số guards bị ảnh hưởng
+    int AffectedGuards             
 );
 
 internal class CancelShiftHandler(
     IDbConnectionFactory dbFactory,
     ISender sender,
+    IRequestClient<GetCustomerByContractRequest> customerClient,
     ILogger<CancelShiftHandler> logger)
     : ICommandHandler<CancelShiftCommand, CancelShiftResult>
 {
@@ -180,16 +183,103 @@ internal class CancelShiftHandler(
                 emailsSent);
 
             // ================================================================
-            // BƯỚC 6: GỬI NOTIFICATION CHO DIRECTOR VÀ CUSTOMER (nếu có contract)
+            // BƯỚC 6: GỬI EMAIL CHO CUSTOMER VÀ DIRECTOR (nếu có contract)
             // ================================================================
             if (shift.ContractId.HasValue)
             {
-                logger.LogInformation("Sending notifications to director and customer");
+                logger.LogInformation("Sending emails to customer and director for shift cancellation");
 
-                // Lấy Customer ID từ contract và Director ID từ system
-                // Tạm thời skip phần này, sẽ implement sau khi có API integration
+                try
+                {
+                    // Lấy thông tin manager
+                    var manager = await connection.GetAsync<Managers>(shift.ManagerId);
+                    var managerName = manager?.FullName ?? "Unknown Manager";
+                    var managerEmail = manager?.Email ?? "Unknown";
 
-                logger.LogInformation("✓ Contract notifications queued");
+                    // Tạo danh sách guards bị ảnh hưởng
+                    var guardsList = string.Join(", ", assignmentsList.Select(a => a.FullName));
+
+                    // ============================================================
+                    // GỬI EMAIL CHO DIRECTOR
+                    // ============================================================
+                    await sender.Send(new SendEmailNotificationCommand(
+                        GuardName: "Director",
+                        GuardEmail: "director@basms.com",
+                        ShiftDate: shift.ShiftDate,
+                        StartTime: shift.ShiftStart.TimeOfDay,
+                        EndTime: shift.ShiftEnd.TimeOfDay,
+                        Location: shift.LocationName ?? "Unknown Location",
+                        EmailType: "DIRECTOR_CANCELLATION",
+                        AdditionalInfo: $"{shift.LocationAddress ?? ""}|{request.CancellationReason}|{shift.ContractId}|{managerName}|{managerEmail}|{assignmentsList.Count}|{guardsList}"
+                    ), cancellationToken);
+
+                    logger.LogInformation(
+                        "✓ Director cancellation email sent to director@basms.com for shift {ShiftId}",
+                        shift.Id);
+
+                    // ============================================================
+                    // GỬI EMAIL CHO CUSTOMER
+                    // ============================================================
+                    try
+                    {
+                        logger.LogInformation(
+                            "Querying customer info from Contracts.API for ContractId: {ContractId}",
+                            shift.ContractId);
+
+                        // Query customer info từ Contracts.API qua RabbitMQ
+                        var customerResponse = await customerClient.GetResponse<GetCustomerByContractResponse>(
+                            new GetCustomerByContractRequest { ContractId = shift.ContractId.Value },
+                            cancellationToken,
+                            timeout: RequestTimeout.After(s: 10)); // 10-second timeout
+
+                        var customerData = customerResponse.Message;
+
+                        if (customerData.Success && customerData.Customer != null)
+                        {
+                            var customer = customerData.Customer;
+
+                            // Gửi email cho customer
+                            await sender.Send(new SendEmailNotificationCommand(
+                                GuardName: customer.CompanyName,
+                                GuardEmail: customer.Email,
+                                ShiftDate: shift.ShiftDate,
+                                StartTime: shift.ShiftStart.TimeOfDay,
+                                EndTime: shift.ShiftEnd.TimeOfDay,
+                                Location: shift.LocationName ?? "Unknown Location",
+                                EmailType: "CUSTOMER_CANCELLATION",
+                                AdditionalInfo: $"{request.CancellationReason}|{shift.ContractId}|{managerName}"
+                            ), cancellationToken);
+
+                            logger.LogInformation(
+                                "✓ Customer cancellation email sent to {CompanyName} ({Email})",
+                                customer.CompanyName,
+                                customer.Email);
+                        }
+                        else
+                        {
+                            logger.LogWarning(
+                                "Could not get customer info for ContractId {ContractId}: {ErrorMessage}",
+                                shift.ContractId,
+                                customerData.ErrorMessage ?? "Unknown error");
+                        }
+                    }
+                    catch (Exception customerEx)
+                    {
+                        logger.LogError(
+                            customerEx,
+                            "Failed to query customer info or send customer email for ContractId {ContractId}",
+                            shift.ContractId);
+                        // Không throw exception vì customer email là optional
+                    }
+                }
+                catch (Exception emailEx)
+                {
+                    logger.LogError(
+                        emailEx,
+                        "Failed to send emails to customer/director for shift {ShiftId}",
+                        shift.Id);
+                    // Không throw exception vì email là optional, shift đã được cancel thành công
+                }
             }
 
             // ================================================================
