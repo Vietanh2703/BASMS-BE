@@ -36,7 +36,8 @@ internal class GetUnassignedShiftGroupsHandler(
             // ================================================================
             // Logic:
             // 1. Join shifts với shift_templates để lấy thông tin template
-            // 2. Filter: AssignedGuardsCount = 0 (chưa phân công)
+            // 2. Filter: AssignedGuardsCount = 0 (chưa phân công) VÀ Status != 'CANCELLED'
+            //    → Loại trừ các shifts đã CANCELLED vì không cần phân công nữa
             // 3. Filter: ManagerId từ shift_templates
             // 4. Filter: ContractId (optional)
             // 5. Group by ShiftTemplateId, ContractId
@@ -69,6 +70,7 @@ internal class GetUnassignedShiftGroupsHandler(
                     INNER JOIN shift_templates st ON s.ShiftTemplateId = st.Id
                     WHERE
                         s.AssignedGuardsCount = 0
+                        AND s.Status != 'CANCELLED'
                         AND s.IsDeleted = 0
                         AND st.ManagerId = @ManagerId
                         AND st.IsDeleted = 0
@@ -85,6 +87,7 @@ internal class GetUnassignedShiftGroupsHandler(
                     INNER JOIN shift_templates st ON s.ShiftTemplateId = st.Id
                     WHERE
                         s.AssignedGuardsCount = 0
+                        AND s.Status != 'CANCELLED'
                         AND s.IsDeleted = 0
                         AND st.ManagerId = @ManagerId
                         AND st.IsDeleted = 0
