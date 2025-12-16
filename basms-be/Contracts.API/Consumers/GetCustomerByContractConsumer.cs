@@ -39,9 +39,7 @@ public class GetCustomerByContractConsumer : IConsumer<GetCustomerByContractRequ
                     c.CustomerId,
                     cust.CompanyName,
                     cust.Email,
-                    cust.PhoneNumber,
-                    cust.ContactPerson,
-                    cust.Address
+                    cust.ContactPersonName
                 FROM contracts c
                 INNER JOIN customers cust ON c.CustomerId = cust.Id
                 WHERE c.Id = @ContractId
@@ -73,9 +71,7 @@ public class GetCustomerByContractConsumer : IConsumer<GetCustomerByContractRequ
                     CustomerId = (Guid)result.CustomerId,
                     CompanyName = result.CompanyName ?? string.Empty,
                     Email = result.Email ?? string.Empty,
-                    PhoneNumber = result.PhoneNumber,
-                    ContactPerson = result.ContactPerson,
-                    Address = result.Address
+                    ContactPersonName = result.ContactPersonName ?? string.Empty
                 },
                 ErrorMessage = null
             };
