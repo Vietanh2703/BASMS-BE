@@ -5,7 +5,7 @@ public class DeleteTeamEndpoint : ICarterModule
     public void AddRoutes(IEndpointRouteBuilder app)
     {
         // Route: PUT /api/shifts/teams/{id}
-        app.MapPut("/api/shifts/teams/{id:guid}", async (Guid id, ISender sender, HttpContext context) =>
+        app.MapPut("/api/shifts/teams/{id:guid}/delete", async (Guid id, ISender sender, HttpContext context) =>
         {
             var userIdClaim = context.User.FindFirst("userId")?.Value;
             if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
