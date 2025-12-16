@@ -133,7 +133,8 @@ internal class GuardViewShiftAssignedHandler(
             {
                 "sa.GuardId = @GuardId",
                 "sa.IsDeleted = 0",
-                "s.IsDeleted = 0"
+                "s.IsDeleted = 0",
+                "s.Status != 'CANCELLED'"
             };
             var parameters = new DynamicParameters();
             parameters.Add("GuardId", request.GuardId);
