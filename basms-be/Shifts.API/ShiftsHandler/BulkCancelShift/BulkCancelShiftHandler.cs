@@ -4,6 +4,7 @@ using BuildingBlocks.Messaging.Events;
 using Shifts.API.Handlers.SendNotification;
 using Shifts.API.Handlers.SendEmailNotification;
 using Shifts.API.Helpers;
+using Shifts.API.Extensions;
 
 namespace Shifts.API.ShiftsHandler.BulkCancelShift;
 
@@ -20,7 +21,9 @@ public record BulkCancelShiftCommand(
     DateTime ToDate,
     string CancellationReason,
     string LeaveType,
-    string? EvidenceImageUrl,
+    Stream? EvidenceFileStream,
+    string? EvidenceFileName,
+    string? EvidenceContentType,
     Guid CancelledBy
 ) : ICommand<BulkCancelShiftResult>;
 
@@ -34,6 +37,7 @@ public record BulkCancelShiftResult(
     int ShiftsCancelled,
     int AssignmentsCancelled,
     int GuardsAffected,
+    string? EvidenceFileUrl,
     List<ShiftCancellationDetail> Details,
     List<string> Warnings,
     List<string> Errors
@@ -61,6 +65,7 @@ internal class BulkCancelShiftHandler(
     IDbConnectionFactory dbFactory,
     ISender sender,
     IPublishEndpoint publishEndpoint,
+    IS3Service s3Service,
     ILogger<BulkCancelShiftHandler> logger)
     : ICommandHandler<BulkCancelShiftCommand, BulkCancelShiftResult>
 {
@@ -75,6 +80,33 @@ internal class BulkCancelShiftHandler(
                 request.GuardId,
                 request.FromDate,
                 request.ToDate);
+
+            // ================================================================
+            // BƯỚC 0: UPLOAD FILE LÊN AWS S3 (NẾU CÓ)
+            // ================================================================
+            string? evidenceFileUrl = null;
+
+            if (request.EvidenceFileStream != null && !string.IsNullOrEmpty(request.EvidenceFileName))
+            {
+                logger.LogInformation(
+                    "📁 Uploading evidence file: {FileName}",
+                    request.EvidenceFileName);
+
+                var (uploadSuccess, fileUrl, uploadErrorMessage) = await s3Service.UploadFileAsync(
+                    request.EvidenceFileStream,
+                    request.EvidenceFileName,
+                    request.EvidenceContentType ?? "application/octet-stream",
+                    cancellationToken);
+
+                if (!uploadSuccess)
+                {
+                    logger.LogError("❌ Failed to upload evidence file: {ErrorMessage}", uploadErrorMessage);
+                    throw new InvalidOperationException($"Upload file thất bại: {uploadErrorMessage}");
+                }
+
+                evidenceFileUrl = fileUrl;
+                logger.LogInformation("✅ Evidence file uploaded successfully: {FileUrl}", fileUrl);
+            }
 
             using var connection = await dbFactory.CreateConnectionAsync();
 
@@ -134,6 +166,7 @@ internal class BulkCancelShiftHandler(
                     ShiftsCancelled: 0,
                     AssignmentsCancelled: 0,
                     GuardsAffected: 0,
+                    EvidenceFileUrl: evidenceFileUrl,
                     Details: new List<ShiftCancellationDetail>(),
                     Warnings: new List<string>(),
                     Errors: new List<string>()
@@ -275,7 +308,7 @@ internal class BulkCancelShiftHandler(
                         LeaveType = request.LeaveType,
                         CancelledAt = DateTime.UtcNow,
                         CancelledBy = request.CancelledBy,
-                        EvidenceImageUrl = request.EvidenceImageUrl
+                        EvidenceImageUrl = evidenceFileUrl
                     }, cancellationToken);
                 }
 
@@ -316,7 +349,7 @@ internal class BulkCancelShiftHandler(
                     StartDate = request.FromDate.Date,
                     EndDate = request.ToDate.Date,
                     IssueDate = vietnamNow,
-                    EvidenceFileUrl = request.EvidenceImageUrl,
+                    EvidenceFileUrl = evidenceFileUrl,
                     TotalShiftsAffected = shiftsCancelled,
                     TotalGuardsAffected = affectedGuardIds.Count,
                     CreatedAt = vietnamNow,
@@ -361,7 +394,7 @@ internal class BulkCancelShiftHandler(
                         shiftsList,
                         request.CancellationReason,
                         request.LeaveType,
-                        request.EvidenceImageUrl,
+                        evidenceFileUrl,
                         cancellationToken);
                 }, cancellationToken);
 
@@ -375,6 +408,7 @@ internal class BulkCancelShiftHandler(
                     ShiftsCancelled: shiftsCancelled,
                     AssignmentsCancelled: assignmentsCancelled,
                     GuardsAffected: affectedGuardIds.Count,
+                    EvidenceFileUrl: evidenceFileUrl,
                     Details: details,
                     Warnings: warnings,
                     Errors: errors

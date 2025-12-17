@@ -32,14 +32,15 @@ public class BulkCancelShiftEndpoint : ICarterModule
             async (
                 HttpRequest request,
                 ISender sender,
-                IS3Service s3Service,
                 ILogger<BulkCancelShiftEndpoint> logger,
                 CancellationToken cancellationToken) =>
             {
                 try
                 {
                     BulkCancelShiftRequest? requestData = null;
-                    string? evidenceImageUrl = null;
+                    Stream? fileStream = null;
+                    string? fileName = null;
+                    string? contentType = null;
 
                     // ================================================================
                     // BƯỚC 1: PARSE REQUEST (JSON hoặc MULTIPART)
@@ -83,7 +84,7 @@ public class BulkCancelShiftEndpoint : ICarterModule
                             });
                         }
 
-                        // Upload file (nếu có)
+                        // Validate và lưu file info (nếu có)
                         if (form.Files.Count > 0)
                         {
                             var file = form.Files[0];
@@ -113,46 +114,23 @@ public class BulkCancelShiftEndpoint : ICarterModule
                             }
 
                             logger.LogInformation(
-                                "📁 Uploading evidence file: {FileName} ({Size}MB)",
+                                "📁 Received evidence file: {FileName} ({Size}MB)",
                                 file.FileName,
                                 file.Length / 1024.0 / 1024.0);
 
-                            // Upload lên S3
-                            var contentType = file.ContentType ?? GetContentType(fileExtension);
-                            using var stream = file.OpenReadStream();
-
-                            var (success, fileUrl, errorMessage) = await s3Service.UploadFileAsync(
-                                stream,
-                                file.FileName,
-                                contentType,
-                                cancellationToken);
-
-                            if (!success)
-                            {
-                                logger.LogError("❌ Failed to upload evidence file: {ErrorMessage}", errorMessage);
-                                return Results.BadRequest(new
-                                {
-                                    success = false,
-                                    message = $"Upload file thất bại: {errorMessage}"
-                                });
-                            }
-
-                            evidenceImageUrl = fileUrl;
-                            logger.LogInformation("✅ Evidence file uploaded successfully: {FileUrl}", fileUrl);
-                        }
-                        else if (!string.IsNullOrEmpty(requestData?.EvidenceImageUrl))
-                        {
-                            // Nếu không có file nhưng có URL sẵn
-                            evidenceImageUrl = requestData.EvidenceImageUrl;
+                            // Lưu file info để pass vào handler (handler sẽ upload lên S3)
+                            fileStream = file.OpenReadStream();
+                            fileName = file.FileName;
+                            contentType = file.ContentType ?? GetContentType(fileExtension);
                         }
                     }
                     else if (request.ContentType?.Contains("application/json") == true)
                     {
-                        // JSON REQUEST
+                        // JSON REQUEST (không hỗ trợ file upload, chỉ dùng form-data)
                         logger.LogInformation("📄 Parsing JSON request");
 
                         requestData = await request.ReadFromJsonAsync<BulkCancelShiftRequest>(cancellationToken);
-                        evidenceImageUrl = requestData?.EvidenceImageUrl;
+                        // JSON không có file, fileStream sẽ là null
                     }
                     else
                     {
@@ -214,7 +192,9 @@ public class BulkCancelShiftEndpoint : ICarterModule
                         ToDate: requestData.ToDate,
                         CancellationReason: requestData.CancellationReason,
                         LeaveType: requestData.LeaveType,
-                        EvidenceImageUrl: evidenceImageUrl,
+                        EvidenceFileStream: fileStream,
+                        EvidenceFileName: fileName,
+                        EvidenceContentType: contentType,
                         CancelledBy: requestData.CancelledBy
                     );
 
@@ -243,7 +223,7 @@ public class BulkCancelShiftEndpoint : ICarterModule
                             shiftsCancelled = result.ShiftsCancelled,
                             assignmentsCancelled = result.AssignmentsCancelled,
                             guardsAffected = result.GuardsAffected,
-                            evidenceImageUrl, // URL của file đã upload
+                            evidenceFileUrl = result.EvidenceFileUrl, // URL của file đã upload lên S3
                             details = result.Details.Select(d => new
                             {
                                 shiftId = d.ShiftId,

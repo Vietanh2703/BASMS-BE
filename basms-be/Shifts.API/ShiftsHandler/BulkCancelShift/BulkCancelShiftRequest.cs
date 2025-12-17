@@ -32,12 +32,6 @@ public record BulkCancelShiftRequest
     public string LeaveType { get; init; } = "OTHER";
 
     /// <summary>
-    /// S3 URL ảnh chứng từ (đơn xin nghỉ, giấy khám bệnh, giấy thai sản, v.v.)
-    /// Upload trước qua /api/files/upload
-    /// </summary>
-    public string? EvidenceImageUrl { get; init; }
-
-    /// <summary>
     /// Manager thực hiện hủy
     /// </summary>
     public Guid CancelledBy { get; init; }
