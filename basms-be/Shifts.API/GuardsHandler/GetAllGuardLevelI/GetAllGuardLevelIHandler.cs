@@ -3,14 +3,15 @@ using Shifts.API.GuardsHandler.GetGuardById;
 namespace Shifts.API.GuardsHandler.GetAllGuardLevelI;
 
 /// <summary>
-/// Query để lấy tất cả guards có CertificationLevel I
+/// Query để lấy tất cả guards có CertificationLevel I theo ManagerId
 /// </summary>
-public record GetAllGuardLevelIQuery : IQuery<GetAllGuardLevelIResult>;
+public record GetAllGuardLevelIQuery(Guid ManagerId) : IQuery<GetAllGuardLevelIResult>;
 
 /// <summary>
 /// Result chứa danh sách guards Level I
 /// </summary>
 public record GetAllGuardLevelIResult(
+    Guid ManagerId,
     int TotalGuards,
     List<GuardDetailDto> Guards
 );
@@ -29,20 +30,26 @@ internal class GetAllGuardLevelIHandler(
     {
         try
         {
-            logger.LogInformation("Getting all guards with CertificationLevel I");
+            logger.LogInformation(
+                "Getting all guards with CertificationLevel I for Manager {ManagerId}",
+                request.ManagerId);
 
             using var connection = await connectionFactory.CreateConnectionAsync();
 
-            // Lấy tất cả guards có CertificationLevel = "I"
+            // Lấy tất cả guards có CertificationLevel = "I" và DirectManagerId khớp
             var allGuards = await connection.GetAllAsync<Guards>();
             var levelIGuards = allGuards
-                .Where(g => g.CertificationLevel == "I" && !g.IsDeleted && g.IsActive)
+                .Where(g => g.CertificationLevel == "I"
+                            && g.DirectManagerId == request.ManagerId
+                            && !g.IsDeleted
+                            && g.IsActive)
                 .OrderBy(g => g.EmployeeCode)
                 .ToList();
 
             logger.LogInformation(
-                "Found {Count} guards with CertificationLevel I",
-                levelIGuards.Count);
+                "Found {Count} guards with CertificationLevel I for Manager {ManagerId}",
+                levelIGuards.Count,
+                request.ManagerId);
 
             // Map entities sang DTOs
             var guardDtos = levelIGuards.Select(guard => new GuardDetailDto(
@@ -76,10 +83,12 @@ internal class GetAllGuardLevelIHandler(
             )).ToList();
 
             logger.LogInformation(
-                "Successfully retrieved {Count} Level I guards",
-                guardDtos.Count);
+                "Successfully retrieved {Count} Level I guards for Manager {ManagerId}",
+                guardDtos.Count,
+                request.ManagerId);
 
             return new GetAllGuardLevelIResult(
+                ManagerId: request.ManagerId,
                 TotalGuards: guardDtos.Count,
                 Guards: guardDtos
             );

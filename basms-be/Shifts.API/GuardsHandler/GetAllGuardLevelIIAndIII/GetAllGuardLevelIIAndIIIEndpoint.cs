@@ -10,25 +10,30 @@ public class GetAllGuardLevelIIAndIIIEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/shifts/guards/level-ii-and-iii", async (
+        app.MapGet("/api/shifts/guards/manager/{managerId:guid}/level-ii-and-iii", async (
+            Guid managerId,
             ISender sender,
             ILogger<GetAllGuardLevelIIAndIIIEndpoint> logger,
             CancellationToken cancellationToken) =>
         {
-            logger.LogInformation("GET /api/shifts/guards/level-ii-and-iii - Getting all Level II and III guards");
+            logger.LogInformation(
+                "GET /api/shifts/guards/manager/{ManagerId}/level-ii-and-iii - Getting all Level II and III guards",
+                managerId);
 
-            var query = new GetAllGuardLevelIIAndIIIQuery();
+            var query = new GetAllGuardLevelIIAndIIIQuery(managerId);
             var result = await sender.Send(query, cancellationToken);
 
             logger.LogInformation(
-                "✓ Found {TotalCount} guards: {LevelIICount} Level II, {LevelIIICount} Level III",
+                "✓ Found {TotalCount} guards for Manager {ManagerId}: {LevelIICount} Level II, {LevelIIICount} Level III",
                 result.TotalGuards,
+                managerId,
                 result.LevelIICount,
                 result.LevelIIICount);
 
             return Results.Ok(new
             {
                 success = true,
+                managerId = result.ManagerId,
                 totalGuards = result.TotalGuards,
                 levelIICount = result.LevelIICount,
                 levelIIICount = result.LevelIIICount,

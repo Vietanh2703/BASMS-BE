@@ -3,14 +3,15 @@ using Shifts.API.GuardsHandler.GetGuardById;
 namespace Shifts.API.GuardsHandler.GetAllGuardLevelIIAndIII;
 
 /// <summary>
-/// Query để lấy tất cả guards có CertificationLevel II và III
+/// Query để lấy tất cả guards có CertificationLevel II và III theo ManagerId
 /// </summary>
-public record GetAllGuardLevelIIAndIIIQuery : IQuery<GetAllGuardLevelIIAndIIIResult>;
+public record GetAllGuardLevelIIAndIIIQuery(Guid ManagerId) : IQuery<GetAllGuardLevelIIAndIIIResult>;
 
 /// <summary>
 /// Result chứa danh sách guards Level II và III
 /// </summary>
 public record GetAllGuardLevelIIAndIIIResult(
+    Guid ManagerId,
     int TotalGuards,
     int LevelIICount,
     int LevelIIICount,
@@ -31,14 +32,17 @@ internal class GetAllGuardLevelIIAndIIIHandler(
     {
         try
         {
-            logger.LogInformation("Getting all guards with CertificationLevel II and III");
+            logger.LogInformation(
+                "Getting all guards with CertificationLevel II and III for Manager {ManagerId}",
+                request.ManagerId);
 
             using var connection = await connectionFactory.CreateConnectionAsync();
 
-            // Lấy tất cả guards có CertificationLevel = "II" hoặc "III"
+            // Lấy tất cả guards có CertificationLevel = "II" hoặc "III" và DirectManagerId khớp
             var allGuards = await connection.GetAllAsync<Guards>();
             var levelIIAndIIIGuards = allGuards
                 .Where(g => (g.CertificationLevel == "II" || g.CertificationLevel == "III")
+                            && g.DirectManagerId == request.ManagerId
                             && !g.IsDeleted
                             && g.IsActive)
                 .OrderBy(g => g.CertificationLevel) // Level II trước, sau đó Level III
@@ -50,8 +54,9 @@ internal class GetAllGuardLevelIIAndIIIHandler(
             int levelIIICount = levelIIAndIIIGuards.Count(g => g.CertificationLevel == "III");
 
             logger.LogInformation(
-                "Found {TotalCount} guards: {LevelIICount} Level II, {LevelIIICount} Level III",
+                "Found {TotalCount} guards for Manager {ManagerId}: {LevelIICount} Level II, {LevelIIICount} Level III",
                 levelIIAndIIIGuards.Count,
+                request.ManagerId,
                 levelIICount,
                 levelIIICount);
 
@@ -87,10 +92,12 @@ internal class GetAllGuardLevelIIAndIIIHandler(
             )).ToList();
 
             logger.LogInformation(
-                "Successfully retrieved {Count} Level II and III guards",
-                guardDtos.Count);
+                "Successfully retrieved {Count} Level II and III guards for Manager {ManagerId}",
+                guardDtos.Count,
+                request.ManagerId);
 
             return new GetAllGuardLevelIIAndIIIResult(
+                ManagerId: request.ManagerId,
                 TotalGuards: guardDtos.Count,
                 LevelIICount: levelIICount,
                 LevelIIICount: levelIIICount,
