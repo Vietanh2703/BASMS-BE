@@ -11,7 +11,7 @@ public class GetShiftIssueByGuardIdEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/guards/{guardId:guid}/shift-issues", async (
+        app.MapGet("/api/shifts/guards/{guardId:guid}/shift-issues", async (
             [FromRoute] Guid guardId,
             ISender sender,
             ILogger<GetShiftIssueByGuardIdEndpoint> logger,
