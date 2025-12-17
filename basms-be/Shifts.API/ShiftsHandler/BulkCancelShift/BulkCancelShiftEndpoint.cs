@@ -51,17 +51,23 @@ public class BulkCancelShiftEndpoint : ICarterModule
 
                         var form = await request.ReadFormAsync(cancellationToken);
 
-                        // Parse JSON data từ form field "data"
-                        if (!form.ContainsKey("data"))
+                        // Log tất cả các keys trong form để debug
+                        logger.LogInformation("Form keys: {Keys}", string.Join(", ", form.Keys));
+                        logger.LogInformation("Form files count: {Count}", form.Files.Count);
+
+                        // Parse JSON data từ form field "data" (case-insensitive)
+                        var dataKey = form.Keys.FirstOrDefault(k => k.Equals("data", StringComparison.OrdinalIgnoreCase));
+
+                        if (dataKey == null)
                         {
                             return Results.BadRequest(new
                             {
                                 success = false,
-                                message = "Thiếu field 'data' chứa JSON request trong multipart form"
+                                message = $"Thiếu field 'data' chứa JSON request trong multipart form. Các field hiện tại: [{string.Join(", ", form.Keys)}]"
                             });
                         }
 
-                        var jsonData = form["data"].ToString();
+                        var jsonData = form[dataKey].ToString();
                         try
                         {
                             requestData = JsonSerializer.Deserialize<BulkCancelShiftRequest>(
