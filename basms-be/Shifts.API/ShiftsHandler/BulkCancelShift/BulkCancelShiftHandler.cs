@@ -130,23 +130,26 @@ internal class BulkCancelShiftHandler(
                 (string)guard.FullName);
 
             // ================================================================
-            // BƯỚC 2: TÌM TẤT CẢ SHIFTS CỦA GUARD TRONG DATE RANGE
+            // BƯỚC 2: TÌM TẤT CẢ ASSIGNMENTS CỦA GUARD NÀY TRONG DATE RANGE
+            // CHỈ CANCEL ASSIGNMENTS CỦA GUARD NÀY, KHÔNG CANCEL SHIFT!
             // ================================================================
-            var shiftsQuery = @"
-                SELECT DISTINCT s.*
-                FROM shifts s
-                INNER JOIN shift_assignments sa ON sa.ShiftId = s.Id
+            var assignmentsQuery = @"
+                SELECT sa.*, g.Email, g.FullName, g.PhoneNumber,
+                       s.ShiftDate, s.ShiftStart, s.ShiftEnd, s.LocationName
+                FROM shift_assignments sa
+                INNER JOIN guards g ON sa.GuardId = g.Id
+                INNER JOIN shifts s ON sa.ShiftId = s.Id
                 WHERE sa.GuardId = @GuardId
                   AND s.ShiftDate >= @FromDate
                   AND s.ShiftDate <= @ToDate
-                  AND s.IsDeleted = 0
                   AND sa.IsDeleted = 0
-                  AND s.Status NOT IN ('CANCELLED', 'COMPLETED')
+                  AND s.IsDeleted = 0
                   AND sa.Status NOT IN ('CANCELLED', 'COMPLETED')
+                  AND s.Status NOT IN ('CANCELLED', 'COMPLETED')
                 ORDER BY s.ShiftDate, s.ShiftStart";
 
-            var shifts = await connection.QueryAsync<Models.Shifts>(
-                shiftsQuery,
+            var assignments = await connection.QueryAsync<AssignmentWithGuardInfo>(
+                assignmentsQuery,
                 new
                 {
                     GuardId = request.GuardId,
@@ -154,11 +157,11 @@ internal class BulkCancelShiftHandler(
                     ToDate = request.ToDate.Date
                 });
 
-            var shiftsList = shifts.ToList();
+            var assignmentsList = assignments.ToList();
 
-            if (!shiftsList.Any())
+            if (!assignmentsList.Any())
             {
-                logger.LogWarning("⚠️ No shifts found for Guard {GuardId} in date range", request.GuardId);
+                logger.LogWarning("⚠️ No assignments found for Guard {GuardId} in date range", request.GuardId);
                 return new BulkCancelShiftResult(
                     Success: true,
                     Message: "Không tìm thấy ca trực nào cần hủy trong khoảng thời gian này",
@@ -174,81 +177,30 @@ internal class BulkCancelShiftHandler(
             }
 
             logger.LogInformation(
-                "✓ Found {Count} shifts to cancel",
-                shiftsList.Count);
+                "✓ Found {Count} assignments to cancel for guard {GuardId}",
+                assignmentsList.Count,
+                request.GuardId);
+
+            // Lấy danh sách ShiftIds để cập nhật counters sau
+            var affectedShiftIds = assignmentsList.Select(a => a.ShiftId).Distinct().ToList();
 
             // ================================================================
-            // BƯỚC 3: LẤY TẤT CẢ ASSIGNMENTS CẦN CANCEL
-            // ================================================================
-            var shiftIds = shiftsList.Select(s => s.Id).ToList();
-
-            var assignmentsQuery = @"
-                SELECT sa.*, g.Email, g.FullName, g.PhoneNumber
-                FROM shift_assignments sa
-                INNER JOIN guards g ON sa.GuardId = g.Id
-                WHERE sa.ShiftId IN @ShiftIds
-                  AND sa.IsDeleted = 0
-                  AND sa.Status NOT IN ('CANCELLED', 'COMPLETED')";
-
-            var assignments = await connection.QueryAsync<AssignmentWithGuardInfo>(
-                assignmentsQuery,
-                new { ShiftIds = shiftIds });
-
-            var assignmentsList = assignments.ToList();
-
-            logger.LogInformation(
-                "✓ Found {Count} assignments across all shifts",
-                assignmentsList.Count);
-
-            // Tính số guards bị ảnh hưởng
-            var affectedGuardIds = assignmentsList.Select(a => a.GuardId).Distinct().ToList();
-
-            // ================================================================
-            // BƯỚC 4: BEGIN TRANSACTION - BULK UPDATE DATABASE
+            // BƯỚC 3: BEGIN TRANSACTION - BULK UPDATE DATABASE
             // ================================================================
             using var transaction = connection.BeginTransaction();
 
             try
             {
-                int shiftsCancelled = 0;
                 int assignmentsCancelled = 0;
                 var details = new List<ShiftCancellationDetail>();
                 var warnings = new List<string>();
                 var errors = new List<string>();
 
                 // ============================================================
-                // 4.1. BULK UPDATE SHIFTS
+                // 3.1. CANCEL CHỈ ASSIGNMENTS CỦA GUARD NÀY
                 // ============================================================
-                var updateShiftsSql = @"
-                    UPDATE shifts
-                    SET
-                        Status = 'CANCELLED',
-                        CancelledAt = @CancelledAt,
-                        CancellationReason = @CancellationReason,
-                        UpdatedAt = @UpdatedAt,
-                        UpdatedBy = @UpdatedBy,
-                        Version = Version + 1
-                    WHERE Id IN @ShiftIds
-                      AND IsDeleted = 0
-                      AND Status NOT IN ('CANCELLED', 'COMPLETED')";
+                var assignmentIds = assignmentsList.Select(a => a.Id).ToList();
 
-                shiftsCancelled = await connection.ExecuteAsync(
-                    updateShiftsSql,
-                    new
-                    {
-                        ShiftIds = shiftIds,
-                        CancelledAt = DateTime.UtcNow,
-                        CancellationReason = request.CancellationReason,
-                        UpdatedAt = DateTime.UtcNow,
-                        UpdatedBy = request.CancelledBy
-                    },
-                    transaction);
-
-                logger.LogInformation("✓ Updated {Count} shifts to CANCELLED", shiftsCancelled);
-
-                // ============================================================
-                // 4.2. BULK UPDATE ASSIGNMENTS
-                // ============================================================
                 var updateAssignmentsSql = @"
                     UPDATE shift_assignments
                     SET
@@ -256,7 +208,7 @@ internal class BulkCancelShiftHandler(
                         CancelledAt = @CancelledAt,
                         CancellationReason = @CancellationReason,
                         UpdatedAt = @UpdatedAt
-                    WHERE ShiftId IN @ShiftIds
+                    WHERE Id IN @AssignmentIds
                       AND IsDeleted = 0
                       AND Status NOT IN ('CANCELLED', 'COMPLETED')";
 
@@ -264,29 +216,108 @@ internal class BulkCancelShiftHandler(
                     updateAssignmentsSql,
                     new
                     {
-                        ShiftIds = shiftIds,
+                        AssignmentIds = assignmentIds,
                         CancelledAt = DateTime.UtcNow,
                         CancellationReason = request.CancellationReason,
                         UpdatedAt = DateTime.UtcNow
                     },
                     transaction);
 
-                logger.LogInformation("✓ Updated {Count} assignments to CANCELLED", assignmentsCancelled);
+                logger.LogInformation(
+                    "✓ Cancelled {Count} assignments for guard {GuardId}",
+                    assignmentsCancelled,
+                    request.GuardId);
 
                 // ============================================================
-                // 4.3. TẠO DETAILS CHO TỪNG SHIFT
+                // 3.2. CẬP NHẬT COUNTERS CỦA TỪNG SHIFT BỊ ẢNH HƯỞNG
                 // ============================================================
-                foreach (var shift in shiftsList)
+                foreach (var shiftId in affectedShiftIds)
                 {
-                    var assignmentsForShift = assignmentsList.Count(a => a.ShiftId == shift.Id);
+                    // Đếm lại số guards còn lại sau khi cancel
+                    var countsSql = @"
+                        SELECT
+                            COUNT(*) as TotalAssignments,
+                            SUM(CASE WHEN Status = 'CONFIRMED' THEN 1 ELSE 0 END) as ConfirmedCount,
+                            SUM(CASE WHEN Status = 'CHECKED_IN' OR Status = 'CHECKED_OUT' THEN 1 ELSE 0 END) as CheckedInCount,
+                            SUM(CASE WHEN Status = 'COMPLETED' THEN 1 ELSE 0 END) as CompletedCount
+                        FROM shift_assignments
+                        WHERE ShiftId = @ShiftId
+                          AND IsDeleted = 0
+                          AND Status NOT IN ('CANCELLED')";
 
+                    var counts = await connection.QueryFirstOrDefaultAsync<dynamic>(
+                        countsSql,
+                        new { ShiftId = shiftId },
+                        transaction);
+
+                    // Lấy RequiredGuards để tính staffing status
+                    var requiredGuards = await connection.QueryFirstOrDefaultAsync<int>(
+                        "SELECT RequiredGuards FROM shifts WHERE Id = @ShiftId",
+                        new { ShiftId = shiftId },
+                        transaction);
+
+                    int totalAssignments = counts?.TotalAssignments ?? 0;
+                    int confirmedCount = counts?.ConfirmedCount ?? 0;
+                    int checkedInCount = counts?.CheckedInCount ?? 0;
+                    int completedCount = counts?.CompletedCount ?? 0;
+
+                    // Tính staffing status
+                    bool isFullyStaffed = totalAssignments >= requiredGuards;
+                    bool isUnderstaffed = totalAssignments < requiredGuards;
+                    decimal staffingPercentage = requiredGuards > 0
+                        ? (decimal)totalAssignments / requiredGuards * 100
+                        : 0;
+
+                    // Cập nhật shift counters
+                    var updateShiftCountersSql = @"
+                        UPDATE shifts
+                        SET
+                            AssignedGuardsCount = @AssignedCount,
+                            ConfirmedGuardsCount = @ConfirmedCount,
+                            CheckedInGuardsCount = @CheckedInCount,
+                            CompletedGuardsCount = @CompletedCount,
+                            IsFullyStaffed = @IsFullyStaffed,
+                            IsUnderstaffed = @IsUnderstaffed,
+                            StaffingPercentage = @StaffingPercentage,
+                            UpdatedAt = @UpdatedAt,
+                            UpdatedBy = @UpdatedBy,
+                            Version = Version + 1
+                        WHERE Id = @ShiftId";
+
+                    await connection.ExecuteAsync(
+                        updateShiftCountersSql,
+                        new
+                        {
+                            ShiftId = shiftId,
+                            AssignedCount = totalAssignments,
+                            ConfirmedCount = confirmedCount,
+                            CheckedInCount = checkedInCount,
+                            CompletedCount = completedCount,
+                            IsFullyStaffed = isFullyStaffed,
+                            IsUnderstaffed = isUnderstaffed,
+                            StaffingPercentage = staffingPercentage,
+                            UpdatedAt = DateTime.UtcNow,
+                            UpdatedBy = request.CancelledBy
+                        },
+                        transaction);
+                }
+
+                logger.LogInformation(
+                    "✓ Updated counters for {Count} affected shifts",
+                    affectedShiftIds.Count);
+
+                // ============================================================
+                // 3.3. TẠO DETAILS CHO TỪNG ASSIGNMENT
+                // ============================================================
+                foreach (var assignment in assignmentsList)
+                {
                     details.Add(new ShiftCancellationDetail(
-                        ShiftId: shift.Id,
-                        ShiftDate: shift.ShiftDate,
-                        ShiftTimeSlot: ShiftClassificationHelper.ClassifyShiftTimeSlot(shift.ShiftStart),
-                        ShiftStartTime: shift.ShiftStart.TimeOfDay,
-                        ShiftEndTime: shift.ShiftEnd.TimeOfDay,
-                        AssignmentsCancelled: assignmentsForShift,
+                        ShiftId: assignment.ShiftId,
+                        ShiftDate: assignment.ShiftDate,
+                        ShiftTimeSlot: ShiftClassificationHelper.ClassifyShiftTimeSlot(assignment.ShiftStart),
+                        ShiftStartTime: assignment.ShiftStart.TimeOfDay,
+                        ShiftEndTime: assignment.ShiftEnd.TimeOfDay,
+                        AssignmentsCancelled: 1, // Mỗi assignment này là 1 assignment bị cancel
                         Success: true,
                         ErrorMessage: null
                     ));
@@ -317,17 +348,17 @@ internal class BulkCancelShiftHandler(
                     assignmentsList.Count);
 
                 // ============================================================
-                // BƯỚC 6: COMMIT TRANSACTION
+                // BƯỚC 4: COMMIT TRANSACTION
                 // ============================================================
                 transaction.Commit();
 
                 logger.LogInformation(
-                    "✅ Bulk cancel committed: {Shifts} shifts, {Assignments} assignments",
-                    shiftsCancelled,
+                    "✅ Bulk cancel committed: {Shifts} shifts affected, {Assignments} assignments cancelled",
+                    affectedShiftIds.Count,
                     assignmentsCancelled);
 
                 // ================================================================
-                // 🆕 BƯỚC 6.5: LƯU BULK SHIFT ISSUE RECORD
+                // 🆕 BƯỚC 4.5: LƯU BULK SHIFT ISSUE RECORD
                 // ================================================================
                 var vietnamNow = TimeZoneInfo.ConvertTimeFromUtc(
                     DateTime.UtcNow,
@@ -350,8 +381,8 @@ internal class BulkCancelShiftHandler(
                     EndDate = request.ToDate.Date,
                     IssueDate = vietnamNow,
                     EvidenceFileUrl = evidenceFileUrl,
-                    TotalShiftsAffected = shiftsCancelled,
-                    TotalGuardsAffected = affectedGuardIds.Count,
+                    TotalShiftsAffected = affectedShiftIds.Count, // Số shifts bị ảnh hưởng
+                    TotalGuardsAffected = 1, // Chỉ 1 guard (guard này)
                     CreatedAt = vietnamNow,
                     CreatedBy = request.CancelledBy,
                     UpdatedAt = (DateTime?)null,
@@ -377,21 +408,20 @@ internal class BulkCancelShiftHandler(
                     )", issueRecord);
 
                 logger.LogInformation(
-                    "✓ Saved bulk shift issue record: {IssueId}, Type: {IssueType}, Shifts: {Shifts}, Guard: {GuardName}",
+                    "✓ Saved bulk shift issue record: {IssueId}, Type: {IssueType}, Assignments: {Assignments}, Guard: {GuardName}",
                     issueRecord.Id,
                     issueRecord.IssueType,
-                    issueRecord.TotalShiftsAffected,
+                    assignmentsCancelled,
                     (string)guard.FullName);
 
                 // ================================================================
-                // BƯỚC 7: GỬI NOTIFICATIONS (ASYNC - NGOÀI TRANSACTION)
+                // BƯỚC 5: GỬI NOTIFICATIONS (ASYNC - NGOÀI TRANSACTION)
                 // ================================================================
                 _ = Task.Run(async () =>
                 {
                     await SendBulkCancellationNotifications(
                         guard,
                         assignmentsList,
-                        shiftsList,
                         request.CancellationReason,
                         request.LeaveType,
                         evidenceFileUrl,
@@ -403,11 +433,11 @@ internal class BulkCancelShiftHandler(
                 // ================================================================
                 return new BulkCancelShiftResult(
                     Success: true,
-                    Message: $"Đã hủy thành công {shiftsCancelled} ca trực cho bảo vệ {guard.FullName}",
-                    TotalShiftsProcessed: shiftsList.Count,
-                    ShiftsCancelled: shiftsCancelled,
+                    Message: $"Đã hủy thành công {assignmentsCancelled} assignment(s) trong {affectedShiftIds.Count} ca trực cho bảo vệ {guard.FullName}",
+                    TotalShiftsProcessed: affectedShiftIds.Count,
+                    ShiftsCancelled: 0, // Không cancel shift, chỉ cancel assignments
                     AssignmentsCancelled: assignmentsCancelled,
-                    GuardsAffected: affectedGuardIds.Count,
+                    GuardsAffected: 1, // Chỉ 1 guard (guard này)
                     EvidenceFileUrl: evidenceFileUrl,
                     Details: details,
                     Warnings: warnings,
@@ -434,7 +464,6 @@ internal class BulkCancelShiftHandler(
     private async Task SendBulkCancellationNotifications(
         dynamic guard,
         List<AssignmentWithGuardInfo> assignments,
-        List<Models.Shifts> shifts,
         string cancellationReason,
         string leaveType,
         string? evidenceImageUrl,
@@ -457,21 +486,21 @@ internal class BulkCancelShiftHandler(
                     _ => "Nghỉ việc"
                 };
 
-                // Tạo danh sách ca bị hủy
-                var shiftList = string.Join("\n", shifts.Select(s =>
-                    $"- Ngày {s.ShiftDate:dd/MM/yyyy}: {ShiftClassificationHelper.ClassifyShiftTimeSlot(s.ShiftStart)} ({s.ShiftStart.TimeOfDay:hh\\:mm}-{s.ShiftEnd.TimeOfDay:hh\\:mm})"));
+                // Tạo danh sách assignments bị hủy
+                var shiftList = string.Join("\n", assignments.Select(a =>
+                    $"- Ngày {a.ShiftDate:dd/MM/yyyy}: {ShiftClassificationHelper.ClassifyShiftTimeSlot(a.ShiftStart)} ({a.ShiftStart.TimeOfDay:hh\\:mm}-{a.ShiftEnd.TimeOfDay:hh\\:mm}) tại {a.LocationName ?? "N/A"}"));
 
                 var emailBody = $@"
-{leaveTypeName} từ {shifts.Min(s => s.ShiftDate):dd/MM/yyyy} đến {shifts.Max(s => s.ShiftDate):dd/MM/yyyy}|
+{leaveTypeName} từ {assignments.Min(a => a.ShiftDate):dd/MM/yyyy} đến {assignments.Max(a => a.ShiftDate):dd/MM/yyyy}|
 Lý do: {cancellationReason}|
-Số ca bị hủy: {shifts.Count}|
+Số ca bị hủy: {assignments.Count}|
 {shiftList}|
 {evidenceImageUrl ?? ""}";
 
                 await sender.Send(new SendEmailNotificationCommand(
                     GuardName: guard.FullName,
                     GuardEmail: guard.Email,
-                    ShiftDate: shifts.Min(s => s.ShiftDate),
+                    ShiftDate: assignments.Min(a => a.ShiftDate),
                     StartTime: TimeSpan.Zero,
                     EndTime: TimeSpan.Zero,
                     Location: "",
@@ -496,18 +525,19 @@ Số ca bị hủy: {shifts.Count}|
                 _ => "nghỉ việc"
             };
 
+            var affectedShiftsCount = assignments.Select(a => a.ShiftId).Distinct().Count();
+
             var directorEmailBody = $@"
 Báo cáo: Bảo vệ {guard.FullName} (#{guard.EmployeeCode}) {leaveTypeDisplay}|
-Thời gian nghỉ: {shifts.Min(s => s.ShiftDate):dd/MM/yyyy} - {shifts.Max(s => s.ShiftDate):dd/MM/yyyy}|
+Thời gian nghỉ: {assignments.Min(a => a.ShiftDate):dd/MM/yyyy} - {assignments.Max(a => a.ShiftDate):dd/MM/yyyy}|
 Lý do: {cancellationReason}|
-Số ca bị hủy: {shifts.Count} ca|
-Số bảo vệ khác bị ảnh hưởng: {assignments.Select(a => a.GuardId).Distinct().Count() - 1}|
+Số assignment bị hủy: {assignments.Count} assignment(s) trong {affectedShiftsCount} ca|
 {evidenceImageUrl ?? ""}";
 
             await sender.Send(new SendEmailNotificationCommand(
                 GuardName: "Director",
                 GuardEmail: "director@basms.com",
-                ShiftDate: shifts.Min(s => s.ShiftDate),
+                ShiftDate: assignments.Min(a => a.ShiftDate),
                 StartTime: TimeSpan.Zero,
                 EndTime: TimeSpan.Zero,
                 Location: "",
@@ -521,13 +551,13 @@ Số bảo vệ khác bị ảnh hưởng: {assignments.Select(a => a.GuardId).D
             // 3. GỬI IN-APP NOTIFICATION CHO GUARD
             // ================================================================
             await sender.Send(new SendNotificationCommand(
-                ShiftId: shifts.First().Id,
-                ContractId: shifts.First().ContractId,
+                ShiftId: assignments.First().ShiftId,
+                ContractId: null, // Bulk cancel không có contract cụ thể
                 RecipientId: (Guid)guard.Id,
                 RecipientType: "GUARD",
                 Action: "BULK_SHIFT_CANCELLED",
-                Title: $"{shifts.Count} ca trực đã bị hủy",
-                Message: $"Các ca trực từ {shifts.Min(s => s.ShiftDate):dd/MM/yyyy} đến {shifts.Max(s => s.ShiftDate):dd/MM/yyyy} đã bị hủy. Lý do: {cancellationReason}",
+                Title: $"{assignments.Count} ca trực đã bị hủy",
+                Message: $"Các ca trực từ {assignments.Min(a => a.ShiftDate):dd/MM/yyyy} đến {assignments.Max(a => a.ShiftDate):dd/MM/yyyy} đã bị hủy. Lý do: {cancellationReason}",
                 Metadata: null,
                 Priority: "HIGH"
             ), cancellationToken);
@@ -556,4 +586,10 @@ internal class AssignmentWithGuardInfo
     public string? Email { get; set; }
     public string FullName { get; set; } = string.Empty;
     public string PhoneNumber { get; set; } = string.Empty;
+
+    // Shift info (joined from shifts table)
+    public DateTime ShiftDate { get; set; }
+    public DateTime ShiftStart { get; set; }
+    public DateTime ShiftEnd { get; set; }
+    public string? LocationName { get; set; }
 }
