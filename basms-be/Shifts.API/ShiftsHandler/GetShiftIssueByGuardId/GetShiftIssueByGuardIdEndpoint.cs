@@ -103,7 +103,8 @@ Trả về danh sách tất cả shift issues liên quan đến một guard cụ
         ""startDate"": ""2025-12-01"",
         ""endDate"": ""2025-12-05"",
         ""issueDate"": ""2025-12-01T08:00:00Z"",
-        ""evidenceFileUrl"": ""https://s3.aws.com/evidence/sick-leave-001.pdf"",
+        ""evidenceFileUrl"": ""https://user-file-data-bucket.s3.ap-southeast-2.amazonaws.com/shifts/2025/12/01/evidence.pdf"",
+        ""evidenceFilePresignedUrl"": ""https://user-file-data-bucket.s3.ap-southeast-2.amazonaws.com/shifts/2025/12/01/evidence.pdf?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=..."",
         ""totalShiftsAffected"": 10,
         ""totalGuardsAffected"": 1,
         ""createdAt"": ""2025-12-01T08:30:00Z"",
@@ -133,7 +134,9 @@ Trả về danh sách tất cả shift issues liên quan đến một guard cụ
 - Issues được sắp xếp theo IssueDate giảm dần (mới nhất trước)
 - ShiftId có thể null (nếu là bulk cancel nhiều shifts)
 - StartDate/EndDate có thể null (nếu là cancel shift đơn lẻ)
-- EvidenceFileUrl có thể null (nếu không có file chứng từ)
+- EvidenceFileUrl: S3 URL gốc của file chứng từ (có thể null)
+- EvidenceFilePresignedUrl: Pre-signed URL để download trực tiếp từ S3 (expires sau 15 phút, có thể null)
+- Frontend nên dùng evidenceFilePresignedUrl để hiển thị/download file
 - Nếu guard không có issues, trả về mảng rỗng
 - Nếu guard không tồn tại, trả về 400 Bad Request
 

@@ -18,6 +18,11 @@ public interface IS3Service
         CancellationToken cancellationToken = default);
 
     Task<bool> DeleteFileAsync(string fileUrl, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Tạo pre-signed URL cho file (URL tạm thời để download trực tiếp từ S3)
+    /// </summary>
+    string GetPresignedUrl(string fileUrlOrKey, int expirationMinutes = 15);
 }
 
 public class S3Service : IS3Service
@@ -117,6 +122,52 @@ public class S3Service : IS3Service
         {
             _logger.LogError(ex, "❌ Error deleting file from S3: {FileUrlOrKey}", fileUrlOrKey);
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Tạo pre-signed URL cho file - URL tạm thời cho phép download trực tiếp từ S3
+    /// </summary>
+    public string GetPresignedUrl(string fileUrlOrKey, int expirationMinutes = 15)
+    {
+        try
+        {
+            // Extract key: support both full URL and S3 key
+            string fileKey;
+            if (fileUrlOrKey.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                fileUrlOrKey.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                // Full URL: extract key from URL
+                var uri = new Uri(fileUrlOrKey);
+                fileKey = uri.AbsolutePath.TrimStart('/');
+            }
+            else
+            {
+                // Already an S3 key
+                fileKey = fileUrlOrKey;
+            }
+
+            _logger.LogInformation("🔗 Generating pre-signed URL for {FileKey}, expires in {Minutes} minutes",
+                fileKey, expirationMinutes);
+
+            var request = new GetPreSignedUrlRequest
+            {
+                BucketName = _settings.BucketName,
+                Key = fileKey,
+                Expires = DateTime.UtcNow.AddMinutes(expirationMinutes),
+                Protocol = Protocol.HTTPS
+            };
+
+            var presignedUrl = _s3Client.GetPreSignedURL(request);
+
+            _logger.LogInformation("✅ Pre-signed URL generated successfully for {FileKey}", fileKey);
+
+            return presignedUrl;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ Error generating pre-signed URL for {FileUrlOrKey}", fileUrlOrKey);
+            throw;
         }
     }
 

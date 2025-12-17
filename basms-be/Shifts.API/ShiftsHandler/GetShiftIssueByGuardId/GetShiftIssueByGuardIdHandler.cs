@@ -1,5 +1,6 @@
 using Dapper;
 using Shifts.API.Data;
+using Shifts.API.Extensions;
 
 namespace Shifts.API.ShiftsHandler.GetShiftIssueByGuardId;
 
@@ -34,6 +35,7 @@ public record ShiftIssueDto
     public DateTime? EndDate { get; init; }
     public DateTime IssueDate { get; init; }
     public string? EvidenceFileUrl { get; init; }
+    public string? EvidenceFilePresignedUrl { get; init; }
     public int TotalShiftsAffected { get; init; }
     public int TotalGuardsAffected { get; init; }
     public DateTime CreatedAt { get; init; }
@@ -43,9 +45,11 @@ public record ShiftIssueDto
 /// <summary>
 /// Handler để lấy danh sách shift issues của một guard cụ thể
 /// Sắp xếp theo IssueDate giảm dần (mới nhất trước)
+/// Tự động tạo presigned URL cho evidence files
 /// </summary>
 internal class GetShiftIssueByGuardIdHandler(
     IDbConnectionFactory dbFactory,
+    IS3Service s3Service,
     ILogger<GetShiftIssueByGuardIdHandler> logger)
     : IQueryHandler<GetShiftIssueByGuardIdQuery, GetShiftIssueByGuardIdResult>
 {
@@ -110,20 +114,70 @@ internal class GetShiftIssueByGuardIdHandler(
                     IssueDate DESC,
                     CreatedAt DESC";
 
-            var results = await connection.QueryAsync<ShiftIssueDto>(sql, new { GuardId = request.GuardId });
-            var issuesList = results.ToList();
+            var results = await connection.QueryAsync<dynamic>(sql, new { GuardId = request.GuardId });
+            var rawIssues = results.ToList();
 
             logger.LogInformation(
                 "Found {Count} shift issues for Guard {GuardId}",
-                issuesList.Count,
+                rawIssues.Count,
                 request.GuardId);
+
+            // ================================================================
+            // TẠO PRESIGNED URL CHO EVIDENCE FILES
+            // ================================================================
+            var issuesWithPresignedUrls = new List<ShiftIssueDto>();
+
+            foreach (dynamic issue in rawIssues)
+            {
+                string? presignedUrl = null;
+                string? evidenceFileUrl = issue.EvidenceFileUrl;
+                Guid issueId = issue.Id;
+
+                // Nếu có EvidenceFileUrl, tạo presigned URL
+                if (!string.IsNullOrEmpty(evidenceFileUrl))
+                {
+                    try
+                    {
+                        presignedUrl = s3Service.GetPresignedUrl(evidenceFileUrl, expirationMinutes: 15);
+                        logger.LogInformation(
+                            "✓ Generated presigned URL for issue {IssueId}",
+                            issueId);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex,
+                            "Failed to generate presigned URL for issue {IssueId}, file: {FileUrl}",
+                            issueId,
+                            evidenceFileUrl);
+                        // Không throw exception, chỉ để presignedUrl = null
+                    }
+                }
+
+                issuesWithPresignedUrls.Add(new ShiftIssueDto
+                {
+                    Id = issueId,
+                    ShiftId = issue.ShiftId,
+                    GuardId = issue.GuardId,
+                    IssueType = issue.IssueType ?? string.Empty,
+                    Reason = issue.Reason ?? string.Empty,
+                    StartDate = issue.StartDate,
+                    EndDate = issue.EndDate,
+                    IssueDate = issue.IssueDate,
+                    EvidenceFileUrl = evidenceFileUrl,
+                    EvidenceFilePresignedUrl = presignedUrl,
+                    TotalShiftsAffected = issue.TotalShiftsAffected,
+                    TotalGuardsAffected = issue.TotalGuardsAffected,
+                    CreatedAt = issue.CreatedAt,
+                    CreatedBy = issue.CreatedBy
+                });
+            }
 
             return new GetShiftIssueByGuardIdResult
             {
                 Success = true,
                 GuardId = request.GuardId,
-                Issues = issuesList,
-                TotalIssues = issuesList.Count
+                Issues = issuesWithPresignedUrls,
+                TotalIssues = issuesWithPresignedUrls.Count
             };
         }
         catch (Exception ex)
