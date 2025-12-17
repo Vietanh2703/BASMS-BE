@@ -181,6 +181,18 @@ internal class BulkCancelShiftHandler(
                 assignmentsList.Count,
                 request.GuardId);
 
+            // Log chi tiết để debug
+            foreach (var a in assignmentsList.Take(3)) // Log first 3 for debugging
+            {
+                logger.LogInformation(
+                    "  - Assignment {Id}: GuardId={GuardId}, GuardName={Name}, ShiftId={ShiftId}, Date={Date}",
+                    a.Id,
+                    a.GuardId,
+                    a.FullName,
+                    a.ShiftId,
+                    a.ShiftDate.ToString("yyyy-MM-dd"));
+            }
+
             // Lấy danh sách ShiftIds để cập nhật counters sau
             var affectedShiftIds = assignmentsList.Select(a => a.ShiftId).Distinct().ToList();
 
@@ -201,6 +213,12 @@ internal class BulkCancelShiftHandler(
                 // ============================================================
                 var assignmentIds = assignmentsList.Select(a => a.Id).ToList();
 
+                logger.LogInformation(
+                    "🔍 About to cancel {Count} assignment IDs: [{Ids}] for GuardId: {GuardId}",
+                    assignmentIds.Count,
+                    string.Join(", ", assignmentIds.Take(5)), // Log first 5 IDs
+                    request.GuardId);
+
                 var updateAssignmentsSql = @"
                     UPDATE shift_assignments
                     SET
@@ -209,6 +227,7 @@ internal class BulkCancelShiftHandler(
                         CancellationReason = @CancellationReason,
                         UpdatedAt = @UpdatedAt
                     WHERE Id IN @AssignmentIds
+                      AND GuardId = @GuardId
                       AND IsDeleted = 0
                       AND Status NOT IN ('CANCELLED', 'COMPLETED')";
 
@@ -217,6 +236,7 @@ internal class BulkCancelShiftHandler(
                     new
                     {
                         AssignmentIds = assignmentIds,
+                        GuardId = request.GuardId, // Extra safety check
                         CancelledAt = DateTime.UtcNow,
                         CancellationReason = request.CancellationReason,
                         UpdatedAt = DateTime.UtcNow
@@ -227,6 +247,38 @@ internal class BulkCancelShiftHandler(
                     "✓ Cancelled {Count} assignments for guard {GuardId}",
                     assignmentsCancelled,
                     request.GuardId);
+
+                // Verify: Đảm bảo chỉ cancel đúng guard
+                var verifyQuery = @"
+                    SELECT COUNT(DISTINCT GuardId) as GuardCount
+                    FROM shift_assignments
+                    WHERE Id IN @AssignmentIds
+                      AND Status = 'CANCELLED'
+                      AND CancellationReason = @CancellationReason";
+
+                var verifyResult = await connection.QueryFirstOrDefaultAsync<dynamic>(
+                    verifyQuery,
+                    new { AssignmentIds = assignmentIds, CancellationReason = request.CancellationReason },
+                    transaction);
+
+                int distinctGuardsAffected = verifyResult?.GuardCount != null
+                    ? Convert.ToInt32((long)verifyResult.GuardCount)
+                    : 0;
+
+                if (distinctGuardsAffected > 1)
+                {
+                    logger.LogError(
+                        "⚠️ WARNING: {Count} distinct guards were affected! Expected only 1 guard ({GuardId})",
+                        distinctGuardsAffected,
+                        request.GuardId);
+
+                    // Rollback vì có lỗi logic
+                    transaction.Rollback();
+                    throw new InvalidOperationException(
+                        $"Logic error: {distinctGuardsAffected} guards were affected instead of 1. Transaction rolled back.");
+                }
+
+                logger.LogInformation("✓ Verified: Only 1 guard affected (GuardId: {GuardId})", request.GuardId);
 
                 // ============================================================
                 // 3.2. CẬP NHẬT COUNTERS CỦA TỪNG SHIFT BỊ ẢNH HƯỞNG
