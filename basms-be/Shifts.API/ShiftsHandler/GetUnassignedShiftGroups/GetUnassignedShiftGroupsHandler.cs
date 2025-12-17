@@ -37,13 +37,15 @@ internal class GetUnassignedShiftGroupsHandler(
             // Logic:
             // 1. Join shifts với shift_templates để lấy thông tin template
             // 2. Filter: AssignedGuardsCount = 0 (không có guards hiện tại)
-            //    → Bao gồm cả shifts chưa bao giờ assign VÀ shifts đã assign nhưng tất cả bị cancel
-            // 3. Filter: Status IN ('DRAFT', 'SCHEDULED', 'PARTIAL') - shifts cần phân công
+            // 3. Filter: CHƯA BAO GIỜ có shift_assignments (NOT EXISTS)
+            //    → Chỉ hiển thị shifts chưa bao giờ assign
+            //    → KHÔNG hiển thị shifts đã assign nhưng bị cancel tạm thời (giữ lại để reassign sau)
+            // 4. Filter: Status IN ('DRAFT', 'SCHEDULED', 'PARTIAL') - shifts cần phân công
             //    → Loại trừ 'CANCELLED' (shift đã hủy) và 'COMPLETED' (đã hoàn thành)
-            // 4. Filter: ManagerId từ shift_templates
-            // 5. Filter: ContractId (optional)
-            // 6. Group by ShiftTemplateId, ContractId
-            // 7. Lấy thông tin từ một shift đại diện (shift gần nhất)
+            // 5. Filter: ManagerId từ shift_templates
+            // 6. Filter: ContractId (optional)
+            // 7. Group by ShiftTemplateId, ContractId
+            // 8. Lấy thông tin từ một shift đại diện (shift gần nhất)
             // ================================================================
 
             var sql = $@"
@@ -66,10 +68,6 @@ internal class GetUnassignedShiftGroupsHandler(
                         s.Status,
                         st.TemplateName,
                         st.TemplateCode,
-                        (SELECT COUNT(*) FROM shift_assignments sa
-                         WHERE sa.ShiftId = s.Id
-                           AND sa.Status = 'CANCELLED'
-                           AND sa.IsDeleted = 0) as CancelledCount,
                         ROW_NUMBER() OVER (
                             PARTITION BY s.ShiftTemplateId, s.ContractId
                             ORDER BY s.ShiftDate ASC
@@ -82,6 +80,12 @@ internal class GetUnassignedShiftGroupsHandler(
                         AND s.IsDeleted = 0
                         AND st.ManagerId = @ManagerId
                         AND st.IsDeleted = 0
+                        AND NOT EXISTS (
+                            SELECT 1
+                            FROM shift_assignments sa
+                            WHERE sa.ShiftId = s.Id
+                              AND sa.IsDeleted = 0
+                        )
                         {contractFilter}
                 ),
                 GroupStats AS (
@@ -99,6 +103,12 @@ internal class GetUnassignedShiftGroupsHandler(
                         AND s.IsDeleted = 0
                         AND st.ManagerId = @ManagerId
                         AND st.IsDeleted = 0
+                        AND NOT EXISTS (
+                            SELECT 1
+                            FROM shift_assignments sa
+                            WHERE sa.ShiftId = s.Id
+                              AND sa.IsDeleted = 0
+                        )
                         {contractFilter}
                     GROUP BY s.ShiftTemplateId, s.ContractId
                 )
