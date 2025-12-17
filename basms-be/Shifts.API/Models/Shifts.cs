@@ -431,9 +431,9 @@ public class Shifts
     public virtual ICollection<ShiftAssignments> Assignments { get; set; } = new List<ShiftAssignments>();
 
     /// <summary>
-    /// Conflicts của ca này
+    /// Issues của ca này (cancel, sự cố, v.v.)
     /// </summary>
     [Write(false)]
     [Computed]
-    public virtual ICollection<ShiftConflicts> Conflicts { get; set; } = new List<ShiftConflicts>();
+    public virtual ICollection<ShiftIssues> Issues { get; set; } = new List<ShiftIssues>();
 }

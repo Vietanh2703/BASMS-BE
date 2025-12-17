@@ -43,6 +43,32 @@ public class CreateAttendanceRecordConsumer : IConsumer<ShiftAssignmentCreatedEv
             using var connection = await _dbFactory.CreateConnectionAsync();
 
             // ================================================================
+            // 🆕 BƯỚC 0: VERIFY ASSIGNMENT VẪN CÒN ACTIVE (RACE CONDITION PROTECTION)
+            // ================================================================
+            // Kiểm tra assignment có bị cancel trong lúc event đang trong queue không
+            var assignmentStatus = await connection.QueryFirstOrDefaultAsync<string>(
+                @"SELECT Status FROM shift_assignments
+                  WHERE Id = @ShiftAssignmentId AND IsDeleted = 0",
+                new { message.ShiftAssignmentId });
+
+            if (assignmentStatus == null)
+            {
+                _logger.LogWarning(
+                    "⚠️ ShiftAssignment {AssignmentId} not found or deleted, skipping attendance creation",
+                    message.ShiftAssignmentId);
+                return;
+            }
+
+            if (assignmentStatus == "CANCELLED")
+            {
+                _logger.LogWarning(
+                    "⚠️ ShiftAssignment {AssignmentId} is CANCELLED, skipping attendance creation. " +
+                    "Event arrived late after cancellation.",
+                    message.ShiftAssignmentId);
+                return; // ✅ PREVENT tạo attendance cho assignment đã cancel
+            }
+
+            // ================================================================
             // KIỂM TRA XEM ĐÃ TỒN TẠI ATTENDANCE RECORD CHƯA
             // ================================================================
             var existingRecord = await connection.QueryFirstOrDefaultAsync<AttendanceRecords>(

@@ -23,6 +23,7 @@ public record CancelShiftResult(
 internal class CancelShiftHandler(
     IDbConnectionFactory dbFactory,
     ISender sender,
+    IPublishEndpoint publishEndpoint,
     IRequestClient<GetCustomerByContractRequest> customerClient,
     ILogger<CancelShiftHandler> logger)
     : ICommandHandler<CancelShiftCommand, CancelShiftResult>
@@ -134,6 +135,79 @@ internal class CancelShiftHandler(
             logger.LogInformation(
                 "✓ Updated {Count} shift assignments to CANCELLED",
                 affectedRows);
+
+            // ================================================================
+            // 🆕 BƯỚC 4.5: PUBLISH EVENTS ĐỂ SYNC VỚI ATTENDANCES.API
+            // ================================================================
+            logger.LogInformation("📤 Publishing ShiftAssignmentCancelledEvent...");
+
+            foreach (var assignment in assignmentsList)
+            {
+                await publishEndpoint.Publish(new ShiftAssignmentCancelledEvent
+                {
+                    ShiftAssignmentId = assignment.Id,
+                    ShiftId = assignment.ShiftId,
+                    GuardId = assignment.GuardId,
+                    CancellationReason = request.CancellationReason,
+                    LeaveType = "OTHER", // Single cancel thường là hủy đơn lẻ
+                    CancelledAt = DateTime.UtcNow,
+                    CancelledBy = request.CancelledBy,
+                    EvidenceImageUrl = null
+                }, cancellationToken);
+            }
+
+            logger.LogInformation(
+                "✓ Published {Count} events to sync with Attendances.API",
+                assignmentsList.Count);
+
+            // ================================================================
+            // 🆕 BƯỚC 4.6: LƯU SHIFT ISSUE RECORD
+            // ================================================================
+            var vietnamNow = TimeZoneInfo.ConvertTimeFromUtc(
+                DateTime.UtcNow,
+                TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time"));
+
+            var issueRecord = new
+            {
+                Id = Guid.NewGuid(),
+                ShiftId = shift.Id,
+                GuardId = (Guid?)null, // Single cancel không liên quan đến guard cụ thể
+                IssueType = "CANCEL_SHIFT",
+                Reason = request.CancellationReason,
+                StartDate = (DateTime?)null,
+                EndDate = (DateTime?)null,
+                IssueDate = vietnamNow,
+                EvidenceFileUrl = (string?)null,
+                TotalShiftsAffected = 1,
+                TotalGuardsAffected = assignmentsList.Count,
+                CreatedAt = vietnamNow,
+                CreatedBy = request.CancelledBy,
+                UpdatedAt = (DateTime?)null,
+                UpdatedBy = (Guid?)null,
+                IsDeleted = false,
+                DeletedAt = (DateTime?)null,
+                DeletedBy = (Guid?)null
+            };
+
+            await connection.ExecuteAsync(@"
+                INSERT INTO shift_issues (
+                    Id, ShiftId, GuardId, IssueType, Reason,
+                    StartDate, EndDate, IssueDate, EvidenceFileUrl,
+                    TotalShiftsAffected, TotalGuardsAffected,
+                    CreatedAt, CreatedBy, UpdatedAt, UpdatedBy,
+                    IsDeleted, DeletedAt, DeletedBy
+                ) VALUES (
+                    @Id, @ShiftId, @GuardId, @IssueType, @Reason,
+                    @StartDate, @EndDate, @IssueDate, @EvidenceFileUrl,
+                    @TotalShiftsAffected, @TotalGuardsAffected,
+                    @CreatedAt, @CreatedBy, @UpdatedAt, @UpdatedBy,
+                    @IsDeleted, @DeletedAt, @DeletedBy
+                )", issueRecord);
+
+            logger.LogInformation(
+                "✓ Saved shift issue record: {IssueId}, Type: {IssueType}",
+                issueRecord.Id,
+                issueRecord.IssueType);
 
             // ================================================================
             // BƯỚC 5: GỬI IN-APP NOTIFICATIONS VÀ EMAILS CHO GUARDS

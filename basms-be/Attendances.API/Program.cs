@@ -55,6 +55,7 @@ builder.Services.AddMassTransit(x =>
 {
     // Register consumers
     x.AddConsumer<CreateAttendanceRecordConsumer>();
+    x.AddConsumer<CancelAttendanceRecordConsumer>(); // 🆕 Consumer để sync khi assignment bị cancel
 
     // Request Clients for querying other services
     // Example:

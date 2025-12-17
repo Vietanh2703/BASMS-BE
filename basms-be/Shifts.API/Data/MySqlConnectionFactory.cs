@@ -533,34 +533,54 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             ");
 
             // ============================================================================
-            // 9. SHIFT_CONFLICTS TABLE
+            // 9. SHIFT_ISSUES TABLE (Lưu thông tin sự cố ảnh hưởng tới ca trực)
             // ============================================================================
+            // USE CASES:
+            // - Cancel shift (đơn lẻ)
+            // - Bulk cancel shifts (nghỉ ốm dài ngày, thai sản)
+            // - Các sự cố khác ảnh hưởng tới ca trực hoặc nhân sự
             await connection.ExecuteAsync(@"
-                CREATE TABLE IF NOT EXISTS `shift_conflicts` (
+                CREATE TABLE IF NOT EXISTS `shift_issues` (
                     `Id` CHAR(36) PRIMARY KEY,
-                    `ConflictType` VARCHAR(100) NOT NULL,
-                    `Severity` VARCHAR(50) NOT NULL,
-                    `GuardId` CHAR(36) NOT NULL,
-                    `ShiftId1` CHAR(36) NOT NULL,
-                    `ShiftId2` CHAR(36) NULL,
-                    `ShiftAssignmentId` CHAR(36) NULL,
-                    `Description` TEXT NOT NULL,
-                    `DetectedAt` DATETIME NOT NULL,
-                    `Status` VARCHAR(50) NOT NULL DEFAULT 'OPEN',
-                    `ResolvedAt` DATETIME NULL,
-                    `ResolvedBy` CHAR(36) NULL,
-                    `ResolutionNotes` TEXT NULL,
-                    `AutoResolvable` BOOLEAN NOT NULL DEFAULT FALSE,
-                    `SuggestedAction` TEXT NULL,
-                    `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    `UpdatedAt` DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
-                    `IsDeleted` BOOLEAN NOT NULL DEFAULT FALSE,
 
-                    INDEX `idx_conflicts_guard` (`GuardId`, `Status`),
-                    INDEX `idx_conflicts_shift1` (`ShiftId1`),
-                    INDEX `idx_conflicts_status` (`Status`),
-                    INDEX `idx_conflicts_severity` (`Severity`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+                    -- Shift bị ảnh hưởng (NULL nếu là issue liên quan đến nhiều shifts)
+                    `ShiftId` CHAR(36) NULL COMMENT 'Shift bị ảnh hưởng (NULL nếu bulk cancel)',
+
+                    -- Guard liên quan (nếu có)
+                    `GuardId` CHAR(36) NULL COMMENT 'Guard liên quan đến issue',
+
+                    -- Issue information
+                    `IssueType` VARCHAR(50) NOT NULL COMMENT 'CANCEL_SHIFT | BULK_CANCEL | SICK_LEAVE | MATERNITY_LEAVE | OTHER',
+                    `Reason` TEXT NOT NULL COMMENT 'Lý do chi tiết (nghỉ ốm, thai sản, v.v.)',
+
+                    -- Date range (cho trường hợp nghỉ dài ngày)
+                    `StartDate` DATE NULL COMMENT 'Ngày bắt đầu nghỉ (cho bulk cancel)',
+                    `EndDate` DATE NULL COMMENT 'Ngày kết thúc nghỉ (cho bulk cancel)',
+                    `IssueDate` DATETIME NOT NULL COMMENT 'Ngày phát sinh sự cố',
+
+                    -- Evidence (chứng từ)
+                    `EvidenceFileUrl` TEXT NULL COMMENT 'URL file chứng từ trên S3 (đơn xin nghỉ, giấy khám bệnh, v.v.)',
+
+                    -- Statistics
+                    `TotalShiftsAffected` INT NOT NULL DEFAULT 0 COMMENT 'Tổng số ca bị ảnh hưởng',
+                    `TotalGuardsAffected` INT NOT NULL DEFAULT 0 COMMENT 'Tổng số guard bị ảnh hưởng',
+
+                    -- Audit
+                    `CreatedAt` DATETIME NOT NULL COMMENT 'Thời gian tạo record (VN timezone)',
+                    `CreatedBy` CHAR(36) NOT NULL COMMENT 'Manager tạo record',
+                    `UpdatedAt` DATETIME NULL COMMENT 'Thời gian cập nhật cuối (VN timezone)',
+                    `UpdatedBy` CHAR(36) NULL COMMENT 'Người cập nhật cuối',
+                    `IsDeleted` BOOLEAN NOT NULL DEFAULT FALSE,
+                    `DeletedAt` DATETIME NULL,
+                    `DeletedBy` CHAR(36) NULL,
+
+                    INDEX `idx_shift_issues_shift` (`ShiftId`, `IsDeleted`),
+                    INDEX `idx_shift_issues_guard` (`GuardId`, `IsDeleted`),
+                    INDEX `idx_shift_issues_type` (`IssueType`, `IsDeleted`),
+                    INDEX `idx_shift_issues_date_range` (`StartDate`, `EndDate`),
+                    INDEX `idx_shift_issues_created` (`CreatedAt`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                COMMENT='Lưu thông tin sự cố ảnh hưởng tới ca trực và nhân sự';
             ");
 
             // ============================================================================
