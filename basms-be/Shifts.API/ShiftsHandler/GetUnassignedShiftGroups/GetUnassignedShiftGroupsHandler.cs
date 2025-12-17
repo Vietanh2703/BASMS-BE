@@ -36,12 +36,14 @@ internal class GetUnassignedShiftGroupsHandler(
             // ================================================================
             // Logic:
             // 1. Join shifts với shift_templates để lấy thông tin template
-            // 2. Filter: AssignedGuardsCount = 0 (chưa phân công) VÀ Status != 'CANCELLED'
-            //    → Loại trừ các shifts đã CANCELLED vì không cần phân công nữa
-            // 3. Filter: ManagerId từ shift_templates
-            // 4. Filter: ContractId (optional)
-            // 5. Group by ShiftTemplateId, ContractId
-            // 6. Lấy thông tin từ một shift đại diện (shift gần nhất)
+            // 2. Filter: AssignedGuardsCount = 0 (không có guards hiện tại)
+            //    → Bao gồm cả shifts chưa bao giờ assign VÀ shifts đã assign nhưng tất cả bị cancel
+            // 3. Filter: Status IN ('DRAFT', 'SCHEDULED', 'PARTIAL') - shifts cần phân công
+            //    → Loại trừ 'CANCELLED' (shift đã hủy) và 'COMPLETED' (đã hoàn thành)
+            // 4. Filter: ManagerId từ shift_templates
+            // 5. Filter: ContractId (optional)
+            // 6. Group by ShiftTemplateId, ContractId
+            // 7. Lấy thông tin từ một shift đại diện (shift gần nhất)
             // ================================================================
 
             var sql = $@"
@@ -57,11 +59,17 @@ internal class GetUnassignedShiftGroupsHandler(
                         s.ShiftEnd,
                         s.WorkDurationHours,
                         s.RequiredGuards,
+                        s.AssignedGuardsCount,
                         s.ShiftDate,
                         s.IsNightShift,
                         s.ShiftType,
+                        s.Status,
                         st.TemplateName,
                         st.TemplateCode,
+                        (SELECT COUNT(*) FROM shift_assignments sa
+                         WHERE sa.ShiftId = s.Id
+                           AND sa.Status = 'CANCELLED'
+                           AND sa.IsDeleted = 0) as CancelledCount,
                         ROW_NUMBER() OVER (
                             PARTITION BY s.ShiftTemplateId, s.ContractId
                             ORDER BY s.ShiftDate ASC
@@ -70,7 +78,7 @@ internal class GetUnassignedShiftGroupsHandler(
                     INNER JOIN shift_templates st ON s.ShiftTemplateId = st.Id
                     WHERE
                         s.AssignedGuardsCount = 0
-                        AND s.Status != 'CANCELLED'
+                        AND s.Status IN ('DRAFT', 'SCHEDULED', 'PARTIAL')
                         AND s.IsDeleted = 0
                         AND st.ManagerId = @ManagerId
                         AND st.IsDeleted = 0
@@ -87,7 +95,7 @@ internal class GetUnassignedShiftGroupsHandler(
                     INNER JOIN shift_templates st ON s.ShiftTemplateId = st.Id
                     WHERE
                         s.AssignedGuardsCount = 0
-                        AND s.Status != 'CANCELLED'
+                        AND s.Status IN ('DRAFT', 'SCHEDULED', 'PARTIAL')
                         AND s.IsDeleted = 0
                         AND st.ManagerId = @ManagerId
                         AND st.IsDeleted = 0
