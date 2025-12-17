@@ -256,10 +256,11 @@ internal class BulkCancelShiftHandler(
                         new { ShiftId = shiftId },
                         transaction);
 
-                    int totalAssignments = counts?.TotalAssignments ?? 0;
-                    int confirmedCount = counts?.ConfirmedCount ?? 0;
-                    int checkedInCount = counts?.CheckedInCount ?? 0;
-                    int completedCount = counts?.CompletedCount ?? 0;
+                    // MySQL trả về long cho COUNT/SUM, phải cast sang int
+                    int totalAssignments = counts?.TotalAssignments != null ? Convert.ToInt32((long)counts.TotalAssignments) : 0;
+                    int confirmedCount = counts?.ConfirmedCount != null ? Convert.ToInt32((long)counts.ConfirmedCount) : 0;
+                    int checkedInCount = counts?.CheckedInCount != null ? Convert.ToInt32((long)counts.CheckedInCount) : 0;
+                    int completedCount = counts?.CompletedCount != null ? Convert.ToInt32((long)counts.CompletedCount) : 0;
 
                     // Tính staffing status
                     bool isFullyStaffed = totalAssignments >= requiredGuards;
