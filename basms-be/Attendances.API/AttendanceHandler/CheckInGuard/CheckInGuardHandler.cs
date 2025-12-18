@@ -804,6 +804,34 @@ internal class CheckInGuardHandler(
                 base64Image = Convert.ToBase64String(imageBytes);
             }
 
+            // Generate presigned URL if template URL is S3 URI
+            string? presignedTemplateUrl = templateUrl;
+            if (templateUrl.StartsWith("s3://"))
+            {
+                logger.LogInformation("Converting S3 URI to presigned URL: {S3Uri}", templateUrl);
+
+                var parts = templateUrl.Replace("s3://", "").Split('/', 2);
+                if (parts.Length == 2)
+                {
+                    var bucketName = parts[0];
+                    var key = parts[1];
+
+                    var urlRequest = new GetPreSignedUrlRequest
+                    {
+                        BucketName = bucketName,
+                        Key = key,
+                        Expires = DateTime.UtcNow.AddMinutes(15)
+                    };
+
+                    presignedTemplateUrl = s3Client.GetPreSignedURL(urlRequest);
+                    logger.LogInformation("Generated presigned URL for template");
+                }
+                else
+                {
+                    logger.LogWarning("Invalid S3 URI format for template URL: {TemplateUrl}", templateUrl);
+                }
+            }
+
             var httpClient = httpClientFactory.CreateClient();
             httpClient.BaseAddress = new Uri(_faceApiBaseUrl);
             httpClient.Timeout = TimeSpan.FromSeconds(30);
@@ -812,13 +840,21 @@ internal class CheckInGuardHandler(
             {
                 GuardId = guardId.ToString(),
                 CheckImageBase64 = base64Image,
-                TemplateUrl = templateUrl
+                TemplateUrl = presignedTemplateUrl
             };
 
             var jsonContent = JsonSerializer.Serialize(requestBody);
             var httpContent = new StringContent(jsonContent, Encoding.UTF8, "application/json");
 
-            logger.LogInformation("Calling old Face Verification API (template-based): {Url}", $"{_faceApiBaseUrl}/api/v1/faces/verify");
+            logger.LogInformation(
+                "Calling old Face Verification API (template-based): {Url}",
+                $"{_faceApiBaseUrl}/api/v1/faces/verify");
+            logger.LogInformation(
+                "Request body: GuardId={GuardId}, TemplateUrl={TemplateUrl} (Original: {Original}), ImageSize={ImageSize}KB",
+                guardId,
+                presignedTemplateUrl == templateUrl ? templateUrl : "presigned URL",
+                templateUrl,
+                base64Image.Length / 1024);
 
             var response = await httpClient.PostAsync("/api/v1/faces/verify", httpContent, cancellationToken);
 
