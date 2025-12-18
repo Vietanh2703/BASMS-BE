@@ -21,6 +21,19 @@ public record RegisterFaceWithFilesCommand(
 ) : ICommand<RegisterFaceWithFilesResult>;
 
 /// <summary>
+/// Processing log từ Python API
+/// </summary>
+public record ProcessingLog
+{
+    public string Timestamp { get; init; } = string.Empty;
+    public string Step { get; init; } = string.Empty;
+    public string? PoseType { get; init; }
+    public string Status { get; init; } = string.Empty;
+    public string Message { get; init; } = string.Empty;
+    public Dictionary<string, object>? Details { get; init; }
+}
+
+/// <summary>
 /// Result chứa thông tin đăng ký khuôn mặt
 /// </summary>
 public record RegisterFaceWithFilesResult
@@ -29,6 +42,7 @@ public record RegisterFaceWithFilesResult
     public Guid? BiometricLogId { get; init; }
     public string? TemplateUrl { get; init; }
     public List<ImageProcessingStatus> ProcessingSteps { get; init; } = new();
+    public List<ProcessingLog> DetailedLogs { get; init; } = new();
     public List<float> QualityScores { get; init; } = new();
     public float AverageQuality { get; init; }
     public string? ErrorMessage { get; init; }
@@ -68,6 +82,27 @@ internal record FaceRegistrationApiRequest
     public List<ImageDataDto> Images { get; init; } = new();
 }
 
+internal record ProcessingLogDto
+{
+    [JsonPropertyName("timestamp")]
+    public string Timestamp { get; init; } = string.Empty;
+
+    [JsonPropertyName("step")]
+    public string Step { get; init; } = string.Empty;
+
+    [JsonPropertyName("pose_type")]
+    public string? PoseType { get; init; }
+
+    [JsonPropertyName("status")]
+    public string Status { get; init; } = string.Empty;
+
+    [JsonPropertyName("message")]
+    public string Message { get; init; } = string.Empty;
+
+    [JsonPropertyName("details")]
+    public Dictionary<string, object>? Details { get; init; }
+}
+
 internal record FaceRegistrationApiResponse
 {
     [JsonPropertyName("success")]
@@ -84,6 +119,9 @@ internal record FaceRegistrationApiResponse
 
     [JsonPropertyName("average_quality")]
     public float AverageQuality { get; init; }
+
+    [JsonPropertyName("processing_logs")]
+    public List<ProcessingLogDto> ProcessingLogs { get; init; } = new();
 
     [JsonPropertyName("message")]
     public string Message { get; init; } = string.Empty;
@@ -246,6 +284,17 @@ internal class RegisterFaceWithFilesHandler(
                 {
                     Success = false,
                     ProcessingSteps = processingSteps,
+                    DetailedLogs = registrationResult?.ProcessingLogs
+                        .Select(log => new ProcessingLog
+                        {
+                            Timestamp = log.Timestamp,
+                            Step = log.Step,
+                            PoseType = log.PoseType,
+                            Status = log.Status,
+                            Message = log.Message,
+                            Details = log.Details
+                        })
+                        .ToList() ?? new(),
                     ErrorMessage = registrationResult?.Message ?? "Failed to call Face Recognition API"
                 };
             }
@@ -270,12 +319,41 @@ internal class RegisterFaceWithFilesHandler(
                 biometricLogId,
                 registrationResult.AverageQuality);
 
+            // Log detailed processing steps từ Python API
+            foreach (var log in registrationResult.ProcessingLogs)
+            {
+                var logLevel = log.Status.ToLower() switch
+                {
+                    "error" => LogLevel.Error,
+                    "warning" => LogLevel.Warning,
+                    "success" => LogLevel.Information,
+                    _ => LogLevel.Debug
+                };
+
+                logger.Log(logLevel,
+                    "[Python API] [{Step}] {Message} {PoseType}",
+                    log.Step,
+                    log.Message,
+                    log.PoseType != null ? $"(pose: {log.PoseType})" : "");
+            }
+
             return new RegisterFaceWithFilesResult
             {
                 Success = true,
                 BiometricLogId = biometricLogId,
                 TemplateUrl = registrationResult.TemplateUrl,
                 ProcessingSteps = processingSteps,
+                DetailedLogs = registrationResult.ProcessingLogs
+                    .Select(log => new ProcessingLog
+                    {
+                        Timestamp = log.Timestamp,
+                        Step = log.Step,
+                        PoseType = log.PoseType,
+                        Status = log.Status,
+                        Message = log.Message,
+                        Details = log.Details
+                    })
+                    .ToList(),
                 QualityScores = registrationResult.QualityScores,
                 AverageQuality = registrationResult.AverageQuality,
                 Message = "Face registered successfully with sequential processing"

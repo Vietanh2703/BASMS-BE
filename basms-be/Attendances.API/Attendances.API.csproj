@@ -14,6 +14,8 @@
     </ItemGroup>
 
     <ItemGroup>
+      <Folder Include="AttendanceHandler\CheckInGuard\" />
+      <Folder Include="AttendanceHandler\CheckOutGuard\" />
       <Folder Include="AttendanceHandler\GetAttendanceStatusByGuardId\" />
       <Folder Include="Data\" />
       <Folder Include="Models\" />
