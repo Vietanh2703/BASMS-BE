@@ -7,7 +7,7 @@ public class CheckInGuardEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/attendance/check-in", async (
+        app.MapPost("/api/attendances/check-in", async (
                 HttpRequest httpRequest,
                 ISender sender,
                 ILogger<CheckInGuardEndpoint> logger,
