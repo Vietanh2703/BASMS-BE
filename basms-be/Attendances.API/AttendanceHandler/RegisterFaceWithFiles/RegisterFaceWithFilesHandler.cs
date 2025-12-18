@@ -114,6 +114,9 @@ internal record FaceRegistrationApiResponse
     [JsonPropertyName("template_url")]
     public string? TemplateUrl { get; init; }
 
+    [JsonPropertyName("image_urls")]
+    public Dictionary<string, string> ImageUrls { get; init; } = new();
+
     [JsonPropertyName("quality_scores")]
     public List<float> QualityScores { get; init; } = new();
 
@@ -304,12 +307,20 @@ internal class RegisterFaceWithFilesHandler(
                 registrationResult.TemplateUrl);
 
             // ================================================================
-            // STEP 3: CREATE BIOMETRIC LOG
+            // STEP 3: CREATE BIOMETRIC LOG WITH TEMPLATE + IMAGE URLs
             // ================================================================
+
+            // Create JSON containing both template URL and image URLs
+            var registeredFaceData = new
+            {
+                template_url = registrationResult.TemplateUrl,
+                image_urls = registrationResult.ImageUrls
+            };
+            var registeredFaceDataJson = JsonSerializer.Serialize(registeredFaceData);
 
             var biometricLogId = await CreateBiometricLogAsync(
                 request.GuardId,
-                registrationResult.TemplateUrl,
+                registeredFaceDataJson,
                 registrationResult.AverageQuality,
                 cancellationToken);
 
@@ -426,11 +437,11 @@ internal class RegisterFaceWithFilesHandler(
     }
 
     /// <summary>
-    /// Tạo BiometricLog
+    /// Tạo BiometricLog với JSON chứa template URL và image URLs
     /// </summary>
     private async Task<Guid> CreateBiometricLogAsync(
         Guid guardId,
-        string? templateUrl,
+        string? registeredFaceDataJson,
         float averageQuality,
         CancellationToken cancellationToken)
     {
@@ -466,7 +477,7 @@ internal class RegisterFaceWithFilesHandler(
                 GuardId = guardId,
                 BiometricUserId = guardId.ToString(),
                 AuthenticationMethod = "FACE",
-                RegisteredFaceTemplateUrl = templateUrl,
+                RegisteredFaceTemplateUrl = registeredFaceDataJson, // JSON containing template + image URLs
                 FaceQualityScore = (decimal)averageQuality,
                 DeviceTimestamp = now,
                 ReceivedAt = now,
