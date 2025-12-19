@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json.Serialization;
 using Attendances.API.Helpers;
+using Attendances.API.Extensions;
 
 namespace Attendances.API.AttendanceHandler.CheckInGuard;
 
@@ -88,7 +89,7 @@ internal class CheckInGuardHandler(
     ILogger<CheckInGuardHandler> logger,
     IConfiguration configuration,
     IHttpClientFactory httpClientFactory,
-    IAmazonS3 s3Client,
+    IS3Service s3Service,
     IPublishEndpoint publishEndpoint)
     : ICommandHandler<CheckInGuardCommand, CheckInGuardResult>
 {
@@ -98,10 +99,6 @@ internal class CheckInGuardHandler(
 
     private readonly string? _shiftsApiBaseUrl = configuration["ShiftsApi:BaseUrl"]
                                                 ?? configuration["ShiftsApi__BaseUrl"];
-
-    private readonly string _s3BucketName = configuration["AWS:S3:BucketName"]
-                                           ?? configuration["AWS__S3__BucketName"]
-                                           ?? "basms-faces";
 
     private const double MaxDistanceMeters = 200.0;
     private const float MinFaceMatchScore = 70.0f;
@@ -600,26 +597,23 @@ internal class CheckInGuardHandler(
 
         using var stream = image.OpenReadStream();
 
-        var putRequest = new PutObjectRequest
+        // Upload file to S3 using S3Service
+        var (success, fileUrl, errorMessage) = await s3Service.UploadFileWithCustomKeyAsync(
+            stream,
+            key,
+            "image/jpeg",
+            cancellationToken);
+
+        if (!success || string.IsNullOrEmpty(fileUrl))
         {
-            BucketName = _s3BucketName,
-            Key = key,
-            InputStream = stream,
-            ContentType = "image/jpeg",
-            CannedACL = S3CannedACL.Private
-        };
+            logger.LogError("Failed to upload check-in image to S3: {ErrorMessage}", errorMessage);
+            throw new InvalidOperationException($"Failed to upload image to S3: {errorMessage}");
+        }
 
-        await s3Client.PutObjectAsync(putRequest, cancellationToken);
+        logger.LogInformation("✓ Check-in image uploaded successfully: {FileUrl}", fileUrl);
 
-        // Generate pre-signed URL (valid for 7 days)
-        var urlRequest = new GetPreSignedUrlRequest
-        {
-            BucketName = _s3BucketName,
-            Key = key,
-            Expires = DateTime.UtcNow.AddDays(7)
-        };
-
-        return s3Client.GetPreSignedURL(urlRequest);
+        // Generate pre-signed URL (valid for 7 days = 10080 minutes)
+        return s3Service.GetPresignedUrl(fileUrl, expirationMinutes: 10080);
     }
 
     private async Task<ShiftLocationInfo?> GetShiftLocationAsync(

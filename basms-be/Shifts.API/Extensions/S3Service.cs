@@ -147,7 +147,7 @@ public class S3Service : IS3Service
                 fileKey = fileUrlOrKey;
             }
 
-            _logger.LogInformation("🔗 Generating pre-signed URL for {FileKey}, expires in {Minutes} minutes",
+            _logger.LogInformation("Generating pre-signed URL for {FileKey}, expires in {Minutes} minutes",
                 fileKey, expirationMinutes);
 
             var request = new GetPreSignedUrlRequest
