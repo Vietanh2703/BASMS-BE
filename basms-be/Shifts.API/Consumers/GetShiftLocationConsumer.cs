@@ -39,7 +39,7 @@ public class GetShiftLocationConsumer : IConsumer<GetShiftLocationRequest>
                     Id,
                     LocationLatitude,
                     LocationLongitude,
-                    ScheduledStartTime
+                    ShiftStart
                 FROM shifts
                 WHERE Id = @ShiftId
                   AND IsDeleted = 0",
@@ -67,9 +67,9 @@ public class GetShiftLocationConsumer : IConsumer<GetShiftLocationRequest>
                 Location = new ShiftLocationData
                 {
                     ShiftId = (Guid)shift.Id,
-                    LocationLatitude = (double)shift.LocationLatitude,
-                    LocationLongitude = (double)shift.LocationLongitude,
-                    ScheduledStartTime = (DateTime)shift.ScheduledStartTime
+                    LocationLatitude = shift.LocationLatitude != null ? (double)(decimal)shift.LocationLatitude : 0.0,
+                    LocationLongitude = shift.LocationLongitude != null ? (double)(decimal)shift.LocationLongitude : 0.0,
+                    ScheduledStartTime = (DateTime)shift.ShiftStart
                 },
                 ErrorMessage = null
             };
