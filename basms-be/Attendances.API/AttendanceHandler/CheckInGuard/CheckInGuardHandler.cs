@@ -47,33 +47,9 @@ internal record FaceVerificationApiRequest
 
     [JsonPropertyName("template_url")]
     public string? TemplateUrl { get; init; }
-}
 
-internal record FaceVerificationWithImagesApiRequest
-{
-    [JsonPropertyName("guard_id")]
-    public string GuardId { get; init; } = string.Empty;
-
-    [JsonPropertyName("check_image_base64")]
-    public string CheckImageBase64 { get; init; } = string.Empty;
-
-    [JsonPropertyName("registered_image_urls")]
-    public Dictionary<string, string> RegisteredImageUrls { get; init; } = new();
-}
-
-internal record ImageVerificationResultDto
-{
-    [JsonPropertyName("pose_type")]
-    public string PoseType { get; init; } = string.Empty;
-
-    [JsonPropertyName("is_match")]
-    public bool IsMatch { get; init; }
-
-    [JsonPropertyName("confidence")]
-    public float Confidence { get; init; }
-
-    [JsonPropertyName("quality_score")]
-    public float QualityScore { get; init; }
+    [JsonPropertyName("event_type")]
+    public string EventType { get; init; } = "check_in";
 }
 
 internal record FaceVerificationApiResponse
@@ -92,45 +68,6 @@ internal record FaceVerificationApiResponse
 
     [JsonPropertyName("message")]
     public string Message { get; init; } = string.Empty;
-}
-
-internal record FaceVerificationWithImagesApiResponse
-{
-    [JsonPropertyName("is_match")]
-    public bool IsMatch { get; init; }
-
-    [JsonPropertyName("confidence")]
-    public float Confidence { get; init; }
-
-    [JsonPropertyName("best_match_pose")]
-    public string? BestMatchPose { get; init; }
-
-    [JsonPropertyName("face_detected")]
-    public bool FaceDetected { get; init; }
-
-    [JsonPropertyName("face_quality")]
-    public float FaceQuality { get; init; }
-
-    [JsonPropertyName("individual_results")]
-    public List<ImageVerificationResultDto> IndividualResults { get; init; } = new();
-
-    [JsonPropertyName("model_version")]
-    public string ModelVersion { get; init; } = string.Empty;
-
-    [JsonPropertyName("processing_time_ms")]
-    public float ProcessingTimeMs { get; init; }
-
-    [JsonPropertyName("message")]
-    public string Message { get; init; } = string.Empty;
-}
-
-internal record RegisteredFaceData
-{
-    [JsonPropertyName("template_url")]
-    public string? TemplateUrl { get; init; }
-
-    [JsonPropertyName("image_urls")]
-    public Dictionary<string, string> ImageUrls { get; init; } = new();
 }
 
 /// <summary>
@@ -533,7 +470,7 @@ internal class CheckInGuardHandler(
     private async Task<FaceVerificationApiResponse?> VerifyFaceAsync(
         Guid guardId,
         IFormFile checkInImage,
-        string registeredFaceDataJson,
+        string registeredFaceTemplateUrl,
         CancellationToken cancellationToken)
     {
         try
@@ -557,138 +494,31 @@ internal class CheckInGuardHandler(
                 base64Image = Convert.ToBase64String(imageBytes);
             }
 
-            // Parse JSON to get image URLs
-            // Support both old format (simple template URL) and new format (JSON with image URLs)
-            RegisteredFaceData? registeredFaceData = null;
-
-            // Check if it's JSON format
-            if (registeredFaceDataJson.TrimStart().StartsWith("{"))
-            {
-                try
-                {
-                    var jsonOptions = new JsonSerializerOptions
-                    {
-                        PropertyNameCaseInsensitive = true
-                    };
-                    registeredFaceData = JsonSerializer.Deserialize<RegisteredFaceData>(registeredFaceDataJson, jsonOptions);
-                }
-                catch (JsonException ex)
-                {
-                    logger.LogError(
-                        ex,
-                        "❌ Failed to parse RegisteredFaceTemplateUrl JSON. JSON length: {Length}, Start: {Start}",
-                        registeredFaceDataJson.Length,
-                        registeredFaceDataJson.Length > 100 ? registeredFaceDataJson.Substring(0, 100) : registeredFaceDataJson);
-                    return null;
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(
-                        ex,
-                        "❌ Unexpected error parsing RegisteredFaceTemplateUrl JSON: {Message}",
-                        ex.Message);
-                    return null;
-                }
-            }
-            else
-            {
-                // Old format - simple template URL
-                logger.LogWarning(
-                    "Guard {GuardId} using old registration format (template URL only). Please re-register for multi-image verification.",
-                    guardId);
-
-                // Fallback to old verification endpoint
-                return await VerifyFaceWithTemplateAsync(
-                    guardId,
-                    checkInImage,
-                    registeredFaceDataJson,
-                    cancellationToken);
-            }
-
-            if (registeredFaceData == null || registeredFaceData.ImageUrls == null || !registeredFaceData.ImageUrls.Any())
-            {
-                logger.LogError(
-                    "❌ No registered images found in RegisteredFaceTemplateUrl. Data: {Data}",
-                    registeredFaceData == null ? "NULL" :
-                    registeredFaceData.ImageUrls == null ? "ImageUrls is NULL" :
-                    $"ImageUrls count: {registeredFaceData.ImageUrls.Count}");
-                return null;
-            }
-
-            logger.LogInformation(
-                "✓ Found {Count} registered face images: {PoseTypes}",
-                registeredFaceData.ImageUrls.Count,
-                string.Join(", ", registeredFaceData.ImageUrls.Keys));
-
-            // Generate presigned URLs for registered images from S3
-            var presignedUrls = new Dictionary<string, string>();
-            foreach (var (poseType, s3Url) in registeredFaceData.ImageUrls)
-            {
-                // Parse s3://bucket/key format
-                if (!s3Url.StartsWith("s3://"))
-                {
-                    logger.LogWarning("Invalid S3 URL format for {PoseType}: {Url}", poseType, s3Url);
-                    continue;
-                }
-
-                var parts = s3Url.Replace("s3://", "").Split('/', 2);
-                if (parts.Length != 2)
-                {
-                    logger.LogWarning("Cannot parse S3 URL for {PoseType}: {Url}", poseType, s3Url);
-                    continue;
-                }
-
-                var bucketName = parts[0];
-                var key = parts[1];
-
-                // Generate presigned URL (valid for 15 minutes - enough for verification)
-                var urlRequest = new GetPreSignedUrlRequest
-                {
-                    BucketName = bucketName,
-                    Key = key,
-                    Expires = DateTime.UtcNow.AddMinutes(15)
-                };
-
-                var presignedUrl = s3Client.GetPreSignedURL(urlRequest);
-                presignedUrls[poseType] = presignedUrl;
-
-                logger.LogInformation("Generated presigned URL for {PoseType}: {Key}", poseType, key);
-            }
-
-            if (!presignedUrls.Any())
-            {
-                logger.LogError(
-                    "❌ Failed to generate any presigned URLs for registered images. " +
-                    "Original images count: {OriginalCount}",
-                    registeredFaceData.ImageUrls.Count);
-                return null;
-            }
-
-            logger.LogInformation(
-                "✓ Generated {Count} presigned URLs for face verification",
-                presignedUrls.Count);
-
-            // Call new verification endpoint with multiple images
+            // Prepare request body - Python API will handle parsing template_url and generating presigned URLs
             var httpClient = httpClientFactory.CreateClient();
             httpClient.BaseAddress = new Uri(_faceApiBaseUrl);
-            httpClient.Timeout = TimeSpan.FromSeconds(60); // Longer timeout for multi-image verification
+            httpClient.Timeout = TimeSpan.FromSeconds(60);
 
-            var requestBody = new FaceVerificationWithImagesApiRequest
+            var requestBody = new FaceVerificationApiRequest
             {
                 GuardId = guardId.ToString(),
                 CheckImageBase64 = base64Image,
-                RegisteredImageUrls = presignedUrls
+                TemplateUrl = registeredFaceTemplateUrl
             };
 
             var jsonContent = JsonSerializer.Serialize(requestBody);
             var httpContent = new StringContent(jsonContent, Encoding.UTF8, "application/json");
 
             logger.LogInformation(
-                "Calling Face Verification API with {Count} registered images: {Url}",
-                presignedUrls.Count,
-                $"{_faceApiBaseUrl}/api/v1/faces/verify-with-images");
+                "Calling Face Verification API: {Url}",
+                $"{_faceApiBaseUrl}/api/v1/faces/verify");
+            logger.LogInformation(
+                "Request: GuardId={GuardId}, ImageSize={ImageSize}KB, TemplateUrlLength={TemplateUrlLength}",
+                guardId,
+                base64Image.Length / 1024,
+                registeredFaceTemplateUrl?.Length ?? 0);
 
-            var response = await httpClient.PostAsync("/api/v1/faces/verify-with-images", httpContent, cancellationToken);
+            var response = await httpClient.PostAsync("/api/v1/faces/verify", httpContent, cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -707,9 +537,9 @@ internal class CheckInGuardHandler(
             {
                 PropertyNameCaseInsensitive = true
             };
-            var detailedResult = JsonSerializer.Deserialize<FaceVerificationWithImagesApiResponse>(responseContent, options);
+            var result = JsonSerializer.Deserialize<FaceVerificationApiResponse>(responseContent, options);
 
-            if (detailedResult == null)
+            if (result == null)
             {
                 logger.LogError(
                     "❌ Failed to deserialize verification response. Response: {Response}",
@@ -717,33 +547,14 @@ internal class CheckInGuardHandler(
                 return null;
             }
 
-            // Log detailed results
             logger.LogInformation(
-                "Verification results: IsMatch={IsMatch}, BestConfidence={Confidence}%, BestPose={BestPose}, ProcessingTime={Time}ms",
-                detailedResult.IsMatch,
-                detailedResult.Confidence,
-                detailedResult.BestMatchPose,
-                detailedResult.ProcessingTimeMs);
+                "Verification result: IsMatch={IsMatch}, Confidence={Confidence}%, FaceDetected={FaceDetected}, Quality={Quality}%",
+                result.IsMatch,
+                result.Confidence,
+                result.FaceDetected,
+                result.FaceQuality);
 
-            foreach (var individualResult in detailedResult.IndividualResults)
-            {
-                logger.LogInformation(
-                    "  - {PoseType}: Match={IsMatch}, Confidence={Confidence}%, Quality={Quality}%",
-                    individualResult.PoseType,
-                    individualResult.IsMatch,
-                    individualResult.Confidence,
-                    individualResult.QualityScore);
-            }
-
-            // Convert to simple response format for backward compatibility
-            return new FaceVerificationApiResponse
-            {
-                IsMatch = detailedResult.IsMatch,
-                Confidence = detailedResult.Confidence,
-                FaceDetected = detailedResult.FaceDetected,
-                FaceQuality = detailedResult.FaceQuality,
-                Message = detailedResult.Message
-            };
+            return result;
         }
         catch (HttpRequestException ex)
         {
@@ -773,147 +584,6 @@ internal class CheckInGuardHandler(
             logger.LogError(
                 ex,
                 "❌ Unexpected error when calling Face Verification API: {Message}",
-                ex.Message);
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Fallback method for old registration format (template URL only)
-    /// </summary>
-    private async Task<FaceVerificationApiResponse?> VerifyFaceWithTemplateAsync(
-        Guid guardId,
-        IFormFile checkInImage,
-        string templateUrl,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            if (string.IsNullOrWhiteSpace(_faceApiBaseUrl))
-            {
-                logger.LogError("Face Recognition API URL not configured");
-                return null;
-            }
-
-            // Convert image to base64
-            string base64Image;
-            using (var memoryStream = new MemoryStream())
-            {
-                await checkInImage.CopyToAsync(memoryStream, cancellationToken);
-                var imageBytes = memoryStream.ToArray();
-                base64Image = Convert.ToBase64String(imageBytes);
-            }
-
-            // Generate presigned URL if template URL is S3 URI
-            string? presignedTemplateUrl = templateUrl;
-            if (templateUrl.StartsWith("s3://"))
-            {
-                logger.LogInformation("Converting S3 URI to presigned URL: {S3Uri}", templateUrl);
-
-                var parts = templateUrl.Replace("s3://", "").Split('/', 2);
-                if (parts.Length == 2)
-                {
-                    var bucketName = parts[0];
-                    var key = parts[1];
-
-                    var urlRequest = new GetPreSignedUrlRequest
-                    {
-                        BucketName = bucketName,
-                        Key = key,
-                        Expires = DateTime.UtcNow.AddMinutes(15)
-                    };
-
-                    presignedTemplateUrl = s3Client.GetPreSignedURL(urlRequest);
-                    logger.LogInformation("Generated presigned URL for template");
-                }
-                else
-                {
-                    logger.LogWarning("Invalid S3 URI format for template URL: {TemplateUrl}", templateUrl);
-                }
-            }
-
-            var httpClient = httpClientFactory.CreateClient();
-            httpClient.BaseAddress = new Uri(_faceApiBaseUrl);
-            httpClient.Timeout = TimeSpan.FromSeconds(30);
-
-            var requestBody = new FaceVerificationApiRequest
-            {
-                GuardId = guardId.ToString(),
-                CheckImageBase64 = base64Image,
-                TemplateUrl = presignedTemplateUrl
-            };
-
-            var jsonContent = JsonSerializer.Serialize(requestBody);
-            var httpContent = new StringContent(jsonContent, Encoding.UTF8, "application/json");
-
-            logger.LogInformation(
-                "Calling old Face Verification API (template-based): {Url}",
-                $"{_faceApiBaseUrl}/api/v1/faces/verify");
-            logger.LogInformation(
-                "Request body: GuardId={GuardId}, TemplateUrl={TemplateUrl} (Original: {Original}), ImageSize={ImageSize}KB",
-                guardId,
-                presignedTemplateUrl == templateUrl ? templateUrl : "presigned URL",
-                templateUrl,
-                base64Image.Length / 1024);
-
-            var response = await httpClient.PostAsync("/api/v1/faces/verify", httpContent, cancellationToken);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
-                logger.LogError(
-                    "❌ Face Verification API (template-based) failed - StatusCode={StatusCode}, Error={Error}",
-                    response.StatusCode,
-                    errorContent);
-                return null;
-            }
-
-            var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
-            logger.LogInformation("Face API Response (template-based): {Response}", responseContent);
-
-            var options = new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            };
-            var result = JsonSerializer.Deserialize<FaceVerificationApiResponse>(responseContent, options);
-
-            if (result == null)
-            {
-                logger.LogError(
-                    "❌ Failed to deserialize verification response (template-based). Response: {Response}",
-                    responseContent);
-            }
-
-            return result;
-        }
-        catch (HttpRequestException ex)
-        {
-            logger.LogError(
-                ex,
-                "❌ HTTP error when calling old Face Verification API at {Url}. Check if the service is running and accessible.",
-                _faceApiBaseUrl);
-            return null;
-        }
-        catch (TaskCanceledException ex)
-        {
-            logger.LogError(
-                ex,
-                "❌ Face Verification API (template-based) request timeout after {Timeout} seconds",
-                30);
-            return null;
-        }
-        catch (JsonException ex)
-        {
-            logger.LogError(
-                ex,
-                "❌ Failed to parse JSON when calling old Face Verification API");
-            return null;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(
-                ex,
-                "❌ Unexpected error when calling old Face Verification API: {Message}",
                 ex.Message);
             return null;
         }
