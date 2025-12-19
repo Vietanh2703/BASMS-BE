@@ -205,8 +205,8 @@ public class CheckOutGuardEndpoint : ICarterModule
                     message = result.Message
                 });
             })
-            .DisableAntiforgery() // Required for form-data
-            // .RequireAuthorization()
+            .DisableAntiforgery()
+            .RequireAuthorization()
             .WithName("CheckOutGuard")
             .WithTags("Attendance")
             .Produces(200)
