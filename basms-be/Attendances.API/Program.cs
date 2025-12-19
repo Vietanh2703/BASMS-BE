@@ -61,17 +61,27 @@ var awsSecretKey = builder.Configuration["AWS_SECRET_KEY"]
 var awsFolderPrefix = builder.Configuration["AWS:FolderPrefix"] ?? "attendances";
 
 // Validate AWS configuration
-if (string.IsNullOrWhiteSpace(awsRegion))
+if (string.IsNullOrWhiteSpace(awsRegion) || awsRegion.StartsWith("${"))
 {
-    throw new InvalidOperationException("AWS_REGION is not configured. Please set AWS_REGION environment variable.");
+    throw new InvalidOperationException($"AWS_REGION is not configured properly. Value: '{awsRegion}'. Please set AWS_REGION environment variable.");
 }
-if (string.IsNullOrWhiteSpace(awsBucketName))
+if (string.IsNullOrWhiteSpace(awsBucketName) || awsBucketName.StartsWith("${"))
 {
-    throw new InvalidOperationException("AWS_BUCKET_FACEID_NAME is not configured. Please set AWS_BUCKET_FACEID_NAME environment variable.");
+    throw new InvalidOperationException($"AWS_BUCKET_FACEID_NAME is not configured properly. Value: '{awsBucketName}'. Please set AWS_BUCKET_FACEID_NAME environment variable.");
 }
-if (string.IsNullOrWhiteSpace(awsAccessKey) || string.IsNullOrWhiteSpace(awsSecretKey))
+if (string.IsNullOrWhiteSpace(awsAccessKey) || awsAccessKey.StartsWith("${") ||
+    string.IsNullOrWhiteSpace(awsSecretKey) || awsSecretKey.StartsWith("${"))
 {
-    throw new InvalidOperationException("AWS credentials are not configured. Please set AWS_ACCESS_KEY and AWS_SECRET_KEY environment variables.");
+    throw new InvalidOperationException("AWS credentials are not configured properly. Please set AWS_ACCESS_KEY and AWS_SECRET_KEY environment variables.");
+}
+
+// Trim whitespace from bucket name (common issue with environment variables)
+awsBucketName = awsBucketName.Trim();
+
+// Validate bucket name format
+if (awsBucketName.Contains(" ") || awsBucketName.Contains("_"))
+{
+    throw new InvalidOperationException($"Invalid S3 bucket name: '{awsBucketName}'. Bucket names cannot contain spaces or underscores.");
 }
 
 Console.WriteLine($"AWS S3 Config - Region: {awsRegion}, Bucket: {awsBucketName}, Prefix: {awsFolderPrefix}");

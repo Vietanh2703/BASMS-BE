@@ -109,7 +109,8 @@ public class S3Service : IS3Service
     {
         try
         {
-            _logger.LogInformation("Uploading file to S3 with custom key: {S3Key}", s3Key);
+            _logger.LogInformation("Uploading file to S3 - Bucket: {BucketName}, Region: {Region}, Key: {S3Key}",
+                _settings.BucketName, _settings.Region, s3Key);
 
             var uploadRequest = new TransferUtilityUploadRequest
             {
@@ -132,7 +133,8 @@ public class S3Service : IS3Service
         }
         catch (AmazonS3Exception s3Ex)
         {
-            _logger.LogError(s3Ex, "S3 error uploading file with custom key {S3Key}: {ErrorCode}", s3Key, s3Ex.ErrorCode);
+            _logger.LogError(s3Ex, "S3 error uploading file - Bucket: {BucketName}, Region: {Region}, Key: {S3Key}, ErrorCode: {ErrorCode}, StatusCode: {StatusCode}",
+                _settings.BucketName, _settings.Region, s3Key, s3Ex.ErrorCode, s3Ex.StatusCode);
             return (false, null, $"S3 upload failed: {s3Ex.Message}");
         }
         catch (Exception ex)
