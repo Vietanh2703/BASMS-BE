@@ -120,8 +120,8 @@ public class RegisterFaceWithFilesEndpoint : ICarterModule
         message = result.Message
     });
 })
-        .DisableAntiforgery() // Required for form-data
-        // .RequireAuthorization()
+        .DisableAntiforgery()
+        .RequireAuthorization()
         .WithName("RegisterFaceWithFiles")
         .WithTags("Attendances")
         .Produces(200)

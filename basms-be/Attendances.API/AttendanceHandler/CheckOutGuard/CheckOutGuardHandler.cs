@@ -695,6 +695,7 @@ internal class CheckOutGuardHandler(
                 HasOvertime = @HasOvertime,
                 OvertimeMinutes = @OvertimeMinutes,
                 Status = 'CHECKED_OUT',
+                IsIncomplete = false,
                 Notes = 'COMPLETED_SHIFT',
                 UpdatedAt = @UpdatedAt
             WHERE Id = @Id";
