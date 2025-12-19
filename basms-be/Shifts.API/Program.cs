@@ -123,6 +123,7 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<Shifts.API.Consumers.UpdateManagerInfoConsumer>();
     x.AddConsumer<Shifts.API.Consumers.DeactivateGuardConsumer>();
     x.AddConsumer<Shifts.API.Consumers.GetShiftLocationConsumer>(); // Request/Response consumer
+    Console.WriteLine("✓ Registered GetShiftLocationConsumer for Request/Response");
 
     // Request Clients for Auto-Generate Shifts feature (from BuildingBlocks.Messaging.Contracts)
     x.AddRequestClient<CheckPublicHolidayRequest>();

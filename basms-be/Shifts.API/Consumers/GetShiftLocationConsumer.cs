@@ -25,12 +25,14 @@ public class GetShiftLocationConsumer : IConsumer<GetShiftLocationRequest>
         var request = context.Message;
 
         _logger.LogInformation(
-            "Received GetShiftLocationRequest for ShiftId: {ShiftId}",
+            "🔵 [GetShiftLocationConsumer] Received request for ShiftId: {ShiftId}",
             request.ShiftId);
 
         try
         {
+            _logger.LogInformation("🔵 [GetShiftLocationConsumer] Creating database connection...");
             using var connection = await _dbFactory.CreateConnectionAsync();
+            _logger.LogInformation("🔵 [GetShiftLocationConsumer] Database connection created successfully");
 
             var shift = await connection.QueryFirstOrDefaultAsync<dynamic>(@"
                 SELECT
@@ -73,12 +75,13 @@ public class GetShiftLocationConsumer : IConsumer<GetShiftLocationRequest>
             };
 
             _logger.LogInformation(
-                "Returning shift location info for ShiftId: {ShiftId} at ({Lat}, {Lon})",
+                "✅ [GetShiftLocationConsumer] Returning shift location for ShiftId: {ShiftId} at ({Lat}, {Lon})",
                 request.ShiftId,
                 response.Location.LocationLatitude,
                 response.Location.LocationLongitude);
 
             await context.RespondAsync(response);
+            _logger.LogInformation("✅ [GetShiftLocationConsumer] Response sent successfully");
         }
         catch (Exception ex)
         {
@@ -86,7 +89,13 @@ public class GetShiftLocationConsumer : IConsumer<GetShiftLocationRequest>
                 "Failed to get shift location for ShiftId: {ShiftId}",
                 request.ShiftId);
 
-            throw; // Re-throw to trigger MassTransit retry
+            // Send error response instead of throwing to avoid timeout on requester side
+            await context.RespondAsync(new GetShiftLocationResponse
+            {
+                Success = false,
+                Location = null,
+                ErrorMessage = $"Error retrieving shift location: {ex.Message}"
+            });
         }
     }
 }
