@@ -1,8 +1,3 @@
-using Amazon;
-using Amazon.Extensions.NETCore.Setup;
-using Amazon.Runtime;
-using BuildingBlocks.Extensions;
-using BuildingBlocks.Messaging.Events;
 using Attendances.API.Consumers;
 
 var builder = WebApplication.CreateBuilder(args);

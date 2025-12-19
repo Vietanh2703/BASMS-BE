@@ -143,4 +143,5 @@ public record ShiftLocationData
     public double LocationLatitude { get; init; }
     public double LocationLongitude { get; init; }
     public DateTime ScheduledStartTime { get; init; }
+    public DateTime ScheduledEndTime { get; init; }
 }

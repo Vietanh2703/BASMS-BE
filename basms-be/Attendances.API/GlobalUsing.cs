@@ -18,3 +18,7 @@ global using BuildingBlocks.Messaging.Events;
 global using Microsoft.IdentityModel.Tokens;
 global using Amazon.S3;
 global using Amazon.S3.Model;
+global using Amazon;
+global using Amazon.Extensions.NETCore.Setup;
+global using Amazon.Runtime;
+global using BuildingBlocks.Extensions;
