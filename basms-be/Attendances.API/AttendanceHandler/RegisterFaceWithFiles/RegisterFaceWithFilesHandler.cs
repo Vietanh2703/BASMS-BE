@@ -318,7 +318,7 @@ internal class RegisterFaceWithFilesHandler(
             };
             var registeredFaceDataJson = JsonSerializer.Serialize(registeredFaceData);
 
-            var biometricLogId = await CreateBiometricLogAsync(
+            var biometricLogId = await CreateOrUpdateBiometricLogAsync(
                 request.GuardId,
                 registeredFaceDataJson,
                 registrationResult.AverageQuality,
@@ -437,9 +437,10 @@ internal class RegisterFaceWithFilesHandler(
     }
 
     /// <summary>
-    /// Tạo BiometricLog với JSON chứa template URL và image URLs
+    /// Tạo mới hoặc update BiometricLog cho Guard (cho phép retry nhiều lần khi quality chưa đạt)
+    /// Check guardId tồn tại chưa → nếu có: UPDATE, nếu chưa: CREATE
     /// </summary>
-    private async Task<Guid> CreateBiometricLogAsync(
+    private async Task<Guid> CreateOrUpdateBiometricLogAsync(
         Guid guardId,
         string? registeredFaceDataJson,
         float averageQuality,
@@ -449,51 +450,109 @@ internal class RegisterFaceWithFilesHandler(
         {
             using var connection = await dbFactory.CreateConnectionAsync();
 
-            var biometricLogId = Guid.NewGuid();
             var now = DateTimeHelper.VietnamNow;
 
-            var insertSql = @"
-                INSERT INTO biometric_logs (
-                    Id, DeviceId, DeviceType, GuardId, BiometricUserId,
-                    AuthenticationMethod, RegisteredFaceTemplateUrl,
-                    FaceQualityScore, DeviceTimestamp, ReceivedAt,
-                    EventType, IsVerified, VerificationStatus,
-                    IsProcessed, ProcessingStatus,
-                    CreatedAt
-                ) VALUES (
-                    @Id, @DeviceId, @DeviceType, @GuardId, @BiometricUserId,
-                    @AuthenticationMethod, @RegisteredFaceTemplateUrl,
-                    @FaceQualityScore, @DeviceTimestamp, @ReceivedAt,
-                    @EventType, @IsVerified, @VerificationStatus,
-                    @IsProcessed, @ProcessingStatus,
-                    @CreatedAt
-                )";
+            // Check if BiometricLog already exists for this GuardId with EventType = REGISTRATION
+            var existingSql = @"
+                SELECT Id
+                FROM biometric_logs
+                WHERE GuardId = @GuardId
+                  AND EventType = 'REGISTRATION'
+                LIMIT 1";
 
-            await connection.ExecuteAsync(insertSql, new
+            var existingLogId = await connection.QueryFirstOrDefaultAsync<Guid?>(
+                existingSql,
+                new { GuardId = guardId });
+
+            if (existingLogId.HasValue && existingLogId.Value != Guid.Empty)
             {
-                Id = biometricLogId,
-                DeviceId = "REGISTRATION_SYSTEM",
-                DeviceType = "FACE_RECOGNITION",
-                GuardId = guardId,
-                BiometricUserId = guardId.ToString(),
-                AuthenticationMethod = "FACE",
-                RegisteredFaceTemplateUrl = registeredFaceDataJson, // JSON containing template + image URLs
-                FaceQualityScore = (decimal)averageQuality,
-                DeviceTimestamp = now,
-                ReceivedAt = now,
-                EventType = "REGISTRATION",
-                IsVerified = true,
-                VerificationStatus = "SUCCESS",
-                IsProcessed = true,
-                ProcessingStatus = "COMPLETED",
-                CreatedAt = now
-            });
+                // UPDATE existing log (user retry để improve quality score)
+                logger.LogInformation(
+                    "Updating existing BiometricLog for Guard={GuardId}, LogId={LogId}",
+                    guardId,
+                    existingLogId.Value);
 
-            return biometricLogId;
+                var updateSql = @"
+                    UPDATE biometric_logs
+                    SET RegisteredFaceTemplateUrl = @RegisteredFaceTemplateUrl,
+                        FaceQualityScore = @FaceQualityScore,
+                        DeviceTimestamp = @DeviceTimestamp,
+                        ReceivedAt = @ReceivedAt,
+                        IsVerified = @IsVerified,
+                        VerificationStatus = @VerificationStatus,
+                        IsProcessed = @IsProcessed,
+                        ProcessingStatus = @ProcessingStatus,
+                        UpdatedAt = @UpdatedAt
+                    WHERE Id = @Id";
+
+                await connection.ExecuteAsync(updateSql, new
+                {
+                    Id = existingLogId.Value,
+                    RegisteredFaceTemplateUrl = registeredFaceDataJson,
+                    FaceQualityScore = (decimal)averageQuality,
+                    DeviceTimestamp = now,
+                    ReceivedAt = now,
+                    IsVerified = true,
+                    VerificationStatus = "SUCCESS",
+                    IsProcessed = true,
+                    ProcessingStatus = "COMPLETED",
+                    UpdatedAt = now
+                });
+
+                return existingLogId.Value;
+            }
+            else
+            {
+                // CREATE new log (first time registration)
+                logger.LogInformation(
+                    "Creating new BiometricLog for Guard={GuardId}",
+                    guardId);
+
+                var biometricLogId = Guid.NewGuid();
+
+                var insertSql = @"
+                    INSERT INTO biometric_logs (
+                        Id, DeviceId, DeviceType, GuardId, BiometricUserId,
+                        AuthenticationMethod, RegisteredFaceTemplateUrl,
+                        FaceQualityScore, DeviceTimestamp, ReceivedAt,
+                        EventType, IsVerified, VerificationStatus,
+                        IsProcessed, ProcessingStatus,
+                        CreatedAt
+                    ) VALUES (
+                        @Id, @DeviceId, @DeviceType, @GuardId, @BiometricUserId,
+                        @AuthenticationMethod, @RegisteredFaceTemplateUrl,
+                        @FaceQualityScore, @DeviceTimestamp, @ReceivedAt,
+                        @EventType, @IsVerified, @VerificationStatus,
+                        @IsProcessed, @ProcessingStatus,
+                        @CreatedAt
+                    )";
+
+                await connection.ExecuteAsync(insertSql, new
+                {
+                    Id = biometricLogId,
+                    DeviceId = "REGISTRATION_SYSTEM",
+                    DeviceType = "FACE_RECOGNITION",
+                    GuardId = guardId,
+                    BiometricUserId = guardId.ToString(),
+                    AuthenticationMethod = "FACE",
+                    RegisteredFaceTemplateUrl = registeredFaceDataJson,
+                    FaceQualityScore = (decimal)averageQuality,
+                    DeviceTimestamp = now,
+                    ReceivedAt = now,
+                    EventType = "REGISTRATION",
+                    IsVerified = true,
+                    VerificationStatus = "SUCCESS",
+                    IsProcessed = true,
+                    ProcessingStatus = "COMPLETED",
+                    CreatedAt = now
+                });
+
+                return biometricLogId;
+            }
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error creating BiometricLog");
+            logger.LogError(ex, "Error creating/updating BiometricLog for Guard={GuardId}", guardId);
             return Guid.Empty;
         }
     }
