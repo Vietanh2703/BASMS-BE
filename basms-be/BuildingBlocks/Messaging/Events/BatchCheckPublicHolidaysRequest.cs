@@ -111,3 +111,36 @@ public record CustomerData
     public string Email { get; init; } = string.Empty;
     public string ContactPersonName { get; init; } = string.Empty;
 }
+
+// ================================================================
+// REQUEST/RESPONSE: LẤY SHIFT LOCATION INFO
+// ================================================================
+
+/// <summary>
+/// Request lấy thông tin location của shift từ Shifts.API
+/// </summary>
+public record GetShiftLocationRequest
+{
+    public Guid ShiftId { get; init; }
+}
+
+/// <summary>
+/// Response chứa shift location info
+/// </summary>
+public record GetShiftLocationResponse
+{
+    public bool Success { get; init; }
+    public ShiftLocationData? Location { get; init; }
+    public string? ErrorMessage { get; init; }
+}
+
+/// <summary>
+/// Shift location data transfer object
+/// </summary>
+public record ShiftLocationData
+{
+    public Guid ShiftId { get; init; }
+    public double LocationLatitude { get; init; }
+    public double LocationLongitude { get; init; }
+    public DateTime ScheduledStartTime { get; init; }
+}

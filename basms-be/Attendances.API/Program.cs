@@ -2,6 +2,7 @@ using Amazon;
 using Amazon.Extensions.NETCore.Setup;
 using Amazon.Runtime;
 using BuildingBlocks.Extensions;
+using BuildingBlocks.Messaging.Events;
 using Attendances.API.Consumers;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -120,9 +121,7 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<CancelAttendanceRecordConsumer>(); // 🆕 Consumer để sync khi assignment bị cancel
 
     // Request Clients for querying other services
-    // Example:
-    // x.AddRequestClient<GetGuardInfoRequest>();
-    // x.AddRequestClient<GetShiftInfoRequest>();
+    x.AddRequestClient<GetShiftLocationRequest>(); // Lấy shift location từ Shifts.API
 
     // Configure RabbitMQ
     x.UsingRabbitMq((context, cfg) =>

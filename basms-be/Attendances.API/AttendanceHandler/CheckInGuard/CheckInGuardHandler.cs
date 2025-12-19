@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json.Serialization;
 using Attendances.API.Helpers;
 using Attendances.API.Extensions;
+using BuildingBlocks.Messaging.Events;
 
 namespace Attendances.API.AttendanceHandler.CheckInGuard;
 
@@ -90,15 +91,13 @@ internal class CheckInGuardHandler(
     IConfiguration configuration,
     IHttpClientFactory httpClientFactory,
     IS3Service s3Service,
-    IPublishEndpoint publishEndpoint)
+    IPublishEndpoint publishEndpoint,
+    IRequestClient<GetShiftLocationRequest> shiftLocationClient)
     : ICommandHandler<CheckInGuardCommand, CheckInGuardResult>
 {
     private readonly string? _faceApiBaseUrl = configuration["FaceRecognitionApi:BaseUrl"]
                                               ?? configuration["FaceRecognitionApi__BaseUrl"]
                                               ?? configuration["FACEID_API_BASE_URL"];
-
-    private readonly string? _shiftsApiBaseUrl = configuration["ShiftsApi:BaseUrl"]
-                                                ?? configuration["ShiftsApi__BaseUrl"];
 
     private const double MaxDistanceMeters = 200.0;
     private const float MinFaceMatchScore = 70.0f;
@@ -279,9 +278,9 @@ internal class CheckInGuardHandler(
             logger.LogInformation("✓ Image uploaded: {ImageUrl}", checkInImageUrl);
 
             // ================================================================
-            // STEP 5: GET SHIFT LOCATION INFO FROM SHIFTS.API
+            // STEP 5: GET SHIFT LOCATION INFO FROM SHIFTS.API (via MassTransit)
             // ================================================================
-            logger.LogInformation("📍 Getting shift location from Shifts.API...");
+            logger.LogInformation("📍 Getting shift location from Shifts.API via MassTransit...");
 
             var shiftLocation = await GetShiftLocationAsync(
                 request.ShiftId,
@@ -622,29 +621,45 @@ internal class CheckInGuardHandler(
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(_shiftsApiBaseUrl))
+            logger.LogInformation("Requesting shift location from Shifts.API via MassTransit for ShiftId: {ShiftId}", shiftId);
+
+            // Gửi request tới Shifts.API qua MassTransit
+            var response = await shiftLocationClient.GetResponse<GetShiftLocationResponse>(
+                new GetShiftLocationRequest { ShiftId = shiftId },
+                cancellationToken,
+                timeout: RequestTimeout.After(s: 10));
+
+            var shiftLocationResponse = response.Message;
+
+            if (!shiftLocationResponse.Success || shiftLocationResponse.Location == null)
             {
-                logger.LogError("Shifts API URL not configured");
+                logger.LogError(
+                    "Failed to get shift location: {ErrorMessage}",
+                    shiftLocationResponse.ErrorMessage ?? "Unknown error");
                 return null;
             }
 
-            var httpClient = httpClientFactory.CreateClient();
-            httpClient.BaseAddress = new Uri(_shiftsApiBaseUrl);
+            logger.LogInformation(
+                "✓ Received shift location from Shifts.API: Lat={Lat}, Lon={Lon}",
+                shiftLocationResponse.Location.LocationLatitude,
+                shiftLocationResponse.Location.LocationLongitude);
 
-            var response = await httpClient.GetAsync($"/api/shifts/{shiftId}/location", cancellationToken);
-
-            if (!response.IsSuccessStatusCode)
+            // Map to ShiftLocationInfo
+            return new ShiftLocationInfo
             {
-                logger.LogError("Failed to get shift location: {StatusCode}", response.StatusCode);
-                return null;
-            }
-
-            var content = await response.Content.ReadAsStringAsync(cancellationToken);
-            return JsonSerializer.Deserialize<ShiftLocationInfo>(content);
+                LocationLatitude = shiftLocationResponse.Location.LocationLatitude,
+                LocationLongitude = shiftLocationResponse.Location.LocationLongitude,
+                ScheduledStartTime = shiftLocationResponse.Location.ScheduledStartTime
+            };
+        }
+        catch (RequestTimeoutException)
+        {
+            logger.LogError("Timeout getting shift location from Shifts.API for ShiftId: {ShiftId}", shiftId);
+            return null;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error getting shift location");
+            logger.LogError(ex, "Error getting shift location from Shifts.API for ShiftId: {ShiftId}", shiftId);
             return null;
         }
     }
