@@ -1,21 +1,15 @@
-// File cấu hình chính của ứng dụng
-// Thiết lập: DI Container, Database, Firebase, Email, JWT Authentication, Authorization
 using BuildingBlocks.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Đăng ký Carter - Library để tổ chức API endpoints theo module
+
 builder.Services.AddCarter();
 
-// Đăng ký MediatR - Library để implement CQRS pattern
-// Tự động scan và đăng ký tất cả handlers trong assembly
 builder.Services.AddMediatR(config =>
 {
     config.RegisterServicesFromAssembly(typeof(Program).Assembly);
 });
 
-// Đăng ký tất cả validators thủ công
-// FluentValidation để validate input data
 builder.Services.AddScoped<CreateUserValidator>();
 builder.Services.AddScoped<DeleteUserValidator>();
 builder.Services.AddScoped<UpdateUserValidator>();
@@ -28,11 +22,8 @@ builder.Services.AddScoped<RequestResetPasswordValidator>();
 builder.Services.AddScoped<VerifyResetPasswordOtpValidator>();
 builder.Services.AddScoped<CompleteResetPasswordValidator>();
 
-// Đăng ký Dapper connection factory cho MySQL
-// Singleton vì connection factory có thể tái sử dụng
 builder.Services.AddSingleton<IDbConnectionFactory>(sp =>
 {
-    // Ưu tiên đọc từ environment variable trực tiếp
     var connectionString = builder.Configuration["DB_CONNECTION_STRING_USERS"]
                         ?? builder.Configuration["ConnectionStrings__Database"]
                         ?? builder.Configuration.GetConnectionString("Database");
@@ -46,7 +37,6 @@ builder.Services.AddSingleton<IDbConnectionFactory>(sp =>
     return new MySqlConnectionFactory(connectionString);
 });
 
-// Helper method để extract server từ connection string cho logging
 static string ExtractServerFromConnectionString(string connStr)
 {
     try
@@ -78,7 +68,7 @@ try
             Credential = credential,
         });
 
-        Console.WriteLine("✅ Firebase initialized successfully");
+        Console.WriteLine("Firebase initialized successfully");
     }
     else
     {
@@ -87,18 +77,15 @@ try
 }
 catch (Exception ex)
 {
-    Console.WriteLine($"❌ ERROR initializing Firebase: {ex.Message}");
+    Console.WriteLine($"ERROR initializing Firebase: {ex.Message}");
     throw;
 }
 
-// Đăng ký MassTransit with RabbitMQ
 builder.Services.AddMassTransit(x =>
 {
-    // Register consumers
     x.AddConsumer<Users.API.Consumers.CreateUserRequestConsumer>();
     x.AddConsumer<Users.API.Consumers.GetUserByEmailRequestConsumer>();
-
-    // Configure RabbitMQ
+    
     x.UsingRabbitMq((context, cfg) =>
     {
         var rabbitMqHost = builder.Configuration["RABBITMQ_HOST"]
@@ -117,8 +104,7 @@ builder.Services.AddMassTransit(x =>
                             ?? "guest";
 
         Console.WriteLine($"RabbitMQ Config - Host: {rabbitMqHost}, Username: {rabbitMqUsername}");
-
-        // Validate host không empty
+        
         if (string.IsNullOrWhiteSpace(rabbitMqHost))
         {
             throw new InvalidOperationException("RabbitMQ Host is not configured properly");
@@ -129,37 +115,28 @@ builder.Services.AddMassTransit(x =>
             h.Username(rabbitMqUsername);
             h.Password(rabbitMqPassword);
         });
-
-        // Configure endpoint names and serialization
+        
         cfg.ConfigureEndpoints(context);
     });
 });
 
 
-// Đăng ký EmailSettings từ appsettings.json
-// Options pattern để inject cấu hình
 builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("EmailSettings"));
 
-// Đăng ký EmailHandler để gửi email
 builder.Services.AddScoped<EmailHandler>();
 
-// Đăng ký UserEventPublisher
 builder.Services.AddScoped<Users.API.Messaging.UserEventPublisher>();
 
-// Đăng ký JwtSettings từ appsettings.json
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
 
-// Cấu hình JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JwtSettings").Get<JwtSettings>();
 builder.Services.AddAuthentication(options =>
 {
-    // Sử dụng JWT Bearer làm scheme mặc định
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
     options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
 })
 .AddJwtBearer(options =>
 {
-    // Cấu hình validation parameters cho JWT token
     options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuer = true,              
@@ -168,16 +145,11 @@ builder.Services.AddAuthentication(options =>
         ValidateIssuerSigningKey = true,   
         ValidIssuer = jwtSettings?.Issuer,
         ValidAudience = jwtSettings?.Audience,
-        // Key để verify chữ ký token
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings?.SecretKey ?? ""))
     };
 });
 
-// Thêm Authorization service
 builder.Services.AddAuthorization();
-
-// Đăng ký HttpContextAccessor
-// Cho phép truy cập HttpContext (JWT claims) trong handlers
 builder.Services.AddHttpContextAccessor();
 
 var allowedOriginsString = builder.Configuration["ALLOWED_ORIGINS"]
@@ -185,7 +157,7 @@ var allowedOriginsString = builder.Configuration["ALLOWED_ORIGINS"]
                          ?? "";
 
 var allowedOrigins = string.IsNullOrWhiteSpace(allowedOriginsString)
-    ? new[] { "http://localhost:3000" } // Fallback cho development
+    ? new[] { "http://localhost:3000" }
     : allowedOriginsString.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
 Console.WriteLine($"CORS Allowed Origins: {string.Join(", ", allowedOrigins)}");
@@ -195,7 +167,6 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowFrontend",
         policy =>
         {
-            // Thay đổi địa chỉ cấu hình frontend để backend kết nối được tới frontend
             policy.WithOrigins(allowedOrigins)
                 .AllowAnyMethod()
                 .AllowAnyHeader()
@@ -204,7 +175,6 @@ builder.Services.AddCors(options =>
 });
 var app = builder.Build();
 
-// Initialize database tables
 using (var scope = app.Services.CreateScope())
 {
     var dbFactory = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>();

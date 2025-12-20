@@ -1,17 +1,14 @@
 ﻿namespace Users.API.UsersHandler.LoginUser;
 
-// Request DTO for email/password login
 public record LoginUserRequest(
     string Email,
     string Password
 );
 
-// Request DTO for Google login
 public record GoogleLoginRequest(
     string GoogleIdToken
 );
 
-// Response DTO to client
 public record LoginUserResponse(
     Guid UserId,
     string Email,

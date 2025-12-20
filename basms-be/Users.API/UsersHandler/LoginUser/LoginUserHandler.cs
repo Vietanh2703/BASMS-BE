@@ -2,43 +2,38 @@
 
 namespace Users.API.UsersHandler.LoginUser;
 
-// Command để đăng nhập - hỗ trợ cả email/password và Google
 public record LoginUserCommand(
-    string Email,                   // Email đăng nhập
-    string? Password = null,        // Password (cho email login)
-    string? GoogleIdToken = null    // Google ID Token (cho Google login)
+    string Email,                  
+    string? Password = null,      
+    string? GoogleIdToken = null   
 ) : ICommand<LoginUserResult>;
 
-// Result trả về sau khi đăng nhập thành công
-// Chứa tokens và thông tin user cơ bản
+
 public record LoginUserResult(
-    Guid UserId,                    // ID user trong database
-    string Email,                   // Email của user
-    string FullName,                // Tên đầy đủ
-    Guid RoleId,                    // ID vai trò
-    string AccessToken,             // JWT access token (dùng cho API requests)
-    string RefreshToken,            // Refresh token (dùng để lấy access token mới)
-    DateTime AccessTokenExpiry,     // Thời điểm access token hết hạn
-    DateTime RefreshTokenExpiry,    // Thời điểm refresh token hết hạn
-    DateTime SessionExpiry          // Thời điểm session hết hạn
+    Guid UserId,                    
+    string Email,                 
+    string FullName,               
+    Guid RoleId,                   
+    string AccessToken,             
+    string RefreshToken,            
+    DateTime AccessTokenExpiry,    
+    DateTime RefreshTokenExpiry,   
+    DateTime SessionExpiry         
 );
 
 public class LoginUserHandler(
     IDbConnectionFactory connectionFactory,
     ILogger<LoginUserHandler> logger,
-    LoginUserValidator validator,              // Validator để kiểm tra input
-    IOptions<JwtSettings> jwtSettings)          // JWT settings từ appsettings.json
+    LoginUserValidator validator,       
+    IOptions<JwtSettings> jwtSettings)       
     : ICommandHandler<LoginUserCommand, LoginUserResult>
 {
     private readonly JwtSettings _jwtSettings = jwtSettings.Value;
 
     public async Task<LoginUserResult> Handle(LoginUserCommand command, CancellationToken cancellationToken)
     {
-        // Bước 1: Validate JWT settings từ appsettings.json
-        // Đảm bảo SecretKey, Issuer, Audience đều được cấu hình đúng
         ValidateJwtSettings();
-
-        // Bước 2: Validate command input
+        
         var validationResult = await validator.ValidateAsync(command, cancellationToken);
         if (!validationResult.IsValid)
         {
@@ -53,68 +48,48 @@ public class LoginUserHandler(
 
         try
         {
-            // Bước 3: Tạo kết nối database và transaction
             using var connection = await connectionFactory.CreateConnectionAsync();
             using var transaction = connection.BeginTransaction();
 
             try
             {
                 Models.Users user;
-
-                // Bước 4: Xác định phương thức đăng nhập (Google hoặc Email/Password)
                 if (!string.IsNullOrEmpty(command.GoogleIdToken))
                 {
-                    // Đăng nhập bằng Google
-                    // Verify Google token, tìm hoặc tạo user mới
                     user = await AuthenticateWithGoogleAsync(connection, transaction, command.GoogleIdToken);
                 }
                 else
                 {
-                    // Đăng nhập bằng Email/Password
-                    // Tìm user và verify password với BCrypt
                     user = await AuthenticateWithEmailPasswordAsync(connection, transaction, command.Email, command.Password!);
                 }
-
-                // Bước 5: Verify user trên Firebase Authentication
-                // Đảm bảo tài khoản Firebase không bị disabled
+                
                 await VerifyFirebaseUserAsync(user.FirebaseUid);
-
-                // Bước 6: Tạo JWT tokens
-                // Access Token: Chứa userId, email, roleId - dùng cho API requests
+                
                 var accessToken = GenerateAccessToken(user);
-                // Refresh Token: Random string - dùng để lấy access token mới
                 var refreshToken = GenerateRefreshToken();
                 
-                // Tính toán thời gian hết hạn
                 var accessTokenExpiry = DateTime.UtcNow.AddMinutes(_jwtSettings.AccessTokenExpirationMinutes);
                 var refreshTokenExpiry = DateTime.UtcNow.AddDays(_jwtSettings.RefreshTokenExpirationDays);
                 var sessionExpiry = DateTime.UtcNow.AddDays(30);
-
-                // Bước 7: Lưu Access Token vào bảng user_tokens
-                // XÓA tất cả access tokens cũ, chỉ giữ token mới nhất
+                
                 await SaveUserTokenAsync(connection, transaction, user.Id, accessToken, accessTokenExpiry);
 
-                // Bước 8: Lưu Refresh Token vào bảng refresh_tokens
-                // XÓA tất cả refresh tokens cũ, chỉ giữ token mới nhất
+
                 await SaveRefreshTokenAsync(connection, transaction, user.Id, refreshToken, refreshTokenExpiry);
 
-                // Bước 9: Tạo hoặc cập nhật Session trong bảng user_sessions
-                // Reactivate session nếu đã tồn tại
+
                 await SaveUserSessionAsync(connection, transaction, user.Id, sessionExpiry);
-
-                // Bước 10: Cập nhật thông tin đăng nhập cuối
-                // Update LastLoginAt và tăng LoginCount
+                
+                
                 await UpdateLastLoginAsync(connection, transaction, user.Id);
-
-                // Bước 11: Ghi log audit trail
+                
                 await LogAuditAsync(connection, transaction, user.Id, "LOGIN");
-
-                // Bước 12: Commit transaction
+                
                 transaction.Commit();
 
                 logger.LogInformation("User logged in successfully: {Email}, UserId: {UserId}", user.Email, user.Id);
 
-                // Bước 13: Trả về kết quả với tokens và thông tin user
+
                 return new LoginUserResult(
                     UserId: user.Id,
                     Email: user.Email,
@@ -129,7 +104,6 @@ public class LoginUserHandler(
             }
             catch
             {
-                // Rollback nếu có lỗi
                 transaction.Rollback();
                 logger.LogWarning("Transaction rolled back due to error");
                 throw;
@@ -142,8 +116,7 @@ public class LoginUserHandler(
         }
     }
 
-    // Hàm validate cấu hình JWT từ appsettings.json
-    // Kiểm tra SecretKey, Issuer, Audience đều có giá trị hợp lệ
+
     private void ValidateJwtSettings()
     {
         if (_jwtSettings == null)
@@ -155,8 +128,7 @@ public class LoginUserHandler(
         {
             throw new InvalidOperationException("JWT SecretKey is not configured in appsettings.json");
         }
-
-        // SecretKey phải ít nhất 32 ký tự (256 bits) để đảm bảo bảo mật
+        
         if (_jwtSettings.SecretKey.Length < 32)
         {
             throw new InvalidOperationException("JWT SecretKey must be at least 32 characters long (256 bits)");

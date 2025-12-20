@@ -18,3 +18,6 @@ global using Microsoft.IdentityModel.Tokens;
 global using Amazon.S3;
 global using Amazon.S3.Model;
 global using BuildingBlocks.Extensions;
+global using Microsoft.AspNetCore.SignalR;
+global using Chats.API.Hubs;
+global using Chats.API.Services;

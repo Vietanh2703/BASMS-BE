@@ -1,5 +1,3 @@
-using FluentValidation;
-
 namespace Users.API.UsersHandler.ConfirmPasswordChange;
 
 public class ConfirmPasswordChangeValidator : AbstractValidator<ConfirmPasswordChangeCommand>

@@ -9,6 +9,18 @@ builder.Services.AddMediatR(config =>
     config.RegisterServicesFromAssembly(typeof(Program).Assembly);
 });
 
+// Đăng ký SignalR
+builder.Services.AddSignalR(options =>
+{
+    options.EnableDetailedErrors = true; // Enable for development
+    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
+});
+
+// Đăng ký SignalR-related services
+builder.Services.AddSingleton<IUserConnectionManager, UserConnectionManager>();
+builder.Services.AddScoped<IPresenceService, PresenceService>();
+
 // Đăng ký Dapper connection factory
 builder.Services.AddSingleton<IDbConnectionFactory>(sp =>
 {
@@ -137,5 +149,9 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapCarter();
+app.MapHub<ChatHub>("/chathub");
 app.MapGet("/", () => "Chats.API is running.");
+
+Console.WriteLine("✓ SignalR ChatHub mapped at /chathub");
+
 app.Run();
