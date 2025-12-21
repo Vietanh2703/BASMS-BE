@@ -3,10 +3,10 @@ using Dapper;
 namespace Chats.API.ChatHandler.GetAllConversations;
 
 /// <summary>
-/// Query để lấy danh sách tất cả conversations
+/// Query để lấy danh sách conversations mà user hiện tại tham gia
 /// Sắp xếp theo: LastMessageAt giảm dần (cuộc trò chuyện có tin nhắn mới nhất ở đầu)
 /// </summary>
-public record GetAllConversationsQuery() : IQuery<GetAllConversationsResult>;
+public record GetAllConversationsQuery(Guid UserId) : IQuery<GetAllConversationsResult>;
 
 /// <summary>
 /// Result chứa danh sách conversations
@@ -64,30 +64,34 @@ internal class GetAllConversationsHandler(
     {
         try
         {
-            logger.LogInformation("Getting all conversations");
+            logger.LogInformation("Getting conversations for UserId: {UserId}", request.UserId);
 
             using var connection = await dbFactory.CreateConnectionAsync();
 
             // ================================================================
-            // COUNT TOTAL RECORDS
+            // COUNT TOTAL RECORDS WHERE USER IS PARTICIPANT
             // ================================================================
             var countSql = @"
-                SELECT COUNT(*)
-                FROM conversations
-                WHERE IsDeleted = 0";
+                SELECT COUNT(DISTINCT c.Id)
+                FROM conversations c
+                INNER JOIN conversation_participants cp ON c.Id = cp.ConversationId
+                WHERE c.IsDeleted = 0
+                  AND cp.UserId = @UserId
+                  AND cp.IsActive = 1";
 
-            var totalCount = await connection.ExecuteScalarAsync<int>(countSql);
+            var totalCount = await connection.ExecuteScalarAsync<int>(countSql, new { request.UserId });
 
             logger.LogInformation(
-                "Total conversations found: {TotalCount}",
+                "Total conversations found for user: {TotalCount}",
                 totalCount);
 
             // ================================================================
-            // GET ALL DATA - SORTED BY LAST MESSAGE TIME DESCENDING
+            // GET CONVERSATIONS WHERE USER IS PARTICIPANT
+            // SORTED BY LAST MESSAGE TIME DESCENDING
             // ================================================================
 
             var sql = @"
-                SELECT
+                SELECT DISTINCT
                     c.Id,
                     c.ConversationType,
                     c.ConversationName,
@@ -105,18 +109,22 @@ internal class GetAllConversationsHandler(
                     c.UpdatedAt,
                     c.CreatedBy
                 FROM conversations c
+                INNER JOIN conversation_participants cp ON c.Id = cp.ConversationId
                 WHERE c.IsDeleted = 0
+                  AND cp.UserId = @UserId
+                  AND cp.IsActive = 1
                 ORDER BY
                     CASE WHEN c.LastMessageAt IS NULL THEN 1 ELSE 0 END,
                     c.LastMessageAt DESC,
                     c.CreatedAt DESC";
 
-            var conversations = await connection.QueryAsync<ConversationDto>(sql);
+            var conversations = await connection.QueryAsync<ConversationDto>(sql, new { request.UserId });
             var conversationsList = conversations.ToList();
 
             logger.LogInformation(
-                "Retrieved {Count} conversations sorted by last message time (newest first)",
-                conversationsList.Count);
+                "Retrieved {Count} conversations for user {UserId} sorted by last message time",
+                conversationsList.Count,
+                request.UserId);
 
             return new GetAllConversationsResult
             {

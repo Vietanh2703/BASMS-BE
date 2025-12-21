@@ -8,14 +8,26 @@ public class GetAllConversationsEndpoint : ICarterModule
     public void AddRoutes(IEndpointRouteBuilder app)
     {
         app.MapGet("/api/chats/conversations/get-all", async (
+    HttpContext httpContext,
     ISender sender,
     ILogger<GetAllConversationsEndpoint> logger,
     CancellationToken cancellationToken) =>
 {
     logger.LogInformation(
-        "GET /api/chats/conversations/get-all - Getting all conversations");
+        "GET /api/chats/conversations/get-all - Getting conversations for current user");
 
-    var query = new GetAllConversationsQuery();
+    // Get userId from JWT claims
+    var userId = httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+              ?? httpContext.User.FindFirst("sub")?.Value
+              ?? httpContext.User.FindFirst("userId")?.Value;
+
+    if (string.IsNullOrWhiteSpace(userId) || !Guid.TryParse(userId, out var userGuid))
+    {
+        logger.LogWarning("Unauthorized: Invalid or missing userId in token");
+        return Results.Unauthorized();
+    }
+
+    var query = new GetAllConversationsQuery(userGuid);
 
     var result = await sender.Send(query, cancellationToken);
 
@@ -44,7 +56,7 @@ public class GetAllConversationsEndpoint : ICarterModule
         message = "Conversations sorted by last message time (newest first)"
     });
 })
-        // .RequireAuthorization()
+        .RequireAuthorization()
         .WithName("GetAllConversations")
         .WithTags("Chats")
         .Produces(200)
