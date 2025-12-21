@@ -99,7 +99,7 @@ internal class CheckInGuardHandler(
                                               ?? configuration["FaceRecognitionApi__BaseUrl"]
                                               ?? configuration["FACEID_API_BASE_URL"];
 
-    private const double MaxDistanceMeters = 200.0;
+    private const double MaxDistanceMeters = 500.0;
     private const float MinFaceMatchScore = 70.0f;
 
     public async Task<CheckInGuardResult> Handle(
