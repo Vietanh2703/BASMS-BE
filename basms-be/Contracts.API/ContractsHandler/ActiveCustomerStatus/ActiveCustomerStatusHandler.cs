@@ -31,6 +31,7 @@ public record ActiveCustomerStatusResult
 /// </summary>
 internal class ActiveCustomerStatusHandler(
     IDbConnectionFactory connectionFactory,
+    IRequestClient<BuildingBlocks.Messaging.Events.ActivateUserRequest> activateUserClient,
     ILogger<ActiveCustomerStatusHandler> logger)
     : ICommandHandler<ActiveCustomerStatusCommand, ActiveCustomerStatusResult>
 {
@@ -48,6 +49,7 @@ internal class ActiveCustomerStatusHandler(
             var getCustomerQuery = @"
                 SELECT
                     Id,
+                    UserId,
                     CustomerCode,
                     CompanyName,
                     Status
@@ -124,6 +126,61 @@ internal class ActiveCustomerStatusHandler(
                 "Successfully activated customer {CustomerCode} (ID: {CustomerId}) from 'in-active' to 'active'",
                 customer.CustomerCode,
                 request.CustomerId);
+
+            // ================================================================
+            // ACTIVATE USER (Set IsActive = true)
+            // ================================================================
+            if (customer.UserId.HasValue)
+            {
+                try
+                {
+                    logger.LogInformation(
+                        "Activating user {UserId} for customer {CustomerCode}",
+                        customer.UserId.Value,
+                        customer.CustomerCode);
+
+                    var activateUserRequest = new BuildingBlocks.Messaging.Events.ActivateUserRequest
+                    {
+                        UserId = customer.UserId.Value,
+                        ActivatedBy = null
+                    };
+
+                    var activateUserResponse = await activateUserClient.GetResponse<BuildingBlocks.Messaging.Events.ActivateUserResponse>(
+                        activateUserRequest,
+                        cancellationToken);
+
+                    if (activateUserResponse.Message.Success)
+                    {
+                        logger.LogInformation(
+                            "✓ Successfully activated user {UserId} ({Email}) for customer {CustomerCode}",
+                            activateUserResponse.Message.UserId,
+                            activateUserResponse.Message.Email,
+                            customer.CustomerCode);
+                    }
+                    else
+                    {
+                        logger.LogWarning(
+                            "Failed to activate user {UserId} for customer {CustomerCode}: {Error}",
+                            customer.UserId.Value,
+                            customer.CustomerCode,
+                            activateUserResponse.Message.Message);
+                    }
+                }
+                catch (Exception userEx)
+                {
+                    logger.LogError(userEx,
+                        "Error activating user {UserId} for customer {CustomerCode}. Customer was activated but user activation failed.",
+                        customer.UserId.Value,
+                        customer.CustomerCode);
+                    // Don't fail the whole operation - customer was already activated
+                }
+            }
+            else
+            {
+                logger.LogWarning(
+                    "Customer {CustomerCode} does not have a UserId. Skipping user activation.",
+                    customer.CustomerCode);
+            }
 
             return new ActiveCustomerStatusResult
             {

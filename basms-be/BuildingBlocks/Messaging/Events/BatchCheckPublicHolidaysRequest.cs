@@ -145,3 +145,28 @@ public record ShiftLocationData
     public DateTime ScheduledStartTime { get; init; }
     public DateTime ScheduledEndTime { get; init; }
 }
+
+// ================================================================
+// REQUEST/RESPONSE: ACTIVATE USER
+// ================================================================
+
+/// <summary>
+/// Request để kích hoạt user (set IsActive = true)
+/// </summary>
+public record ActivateUserRequest
+{
+    public Guid UserId { get; init; }
+    public Guid? ActivatedBy { get; init; }
+}
+
+/// <summary>
+/// Response sau khi activate user
+/// </summary>
+public record ActivateUserResponse
+{
+    public bool Success { get; init; }
+    public string? Message { get; init; }
+    public Guid? UserId { get; init; }
+    public string? Email { get; init; }
+    public string? FullName { get; init; }
+}
