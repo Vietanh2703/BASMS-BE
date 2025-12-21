@@ -85,7 +85,8 @@ builder.Services.AddMassTransit(x =>
 {
     x.AddConsumer<Users.API.Consumers.CreateUserRequestConsumer>();
     x.AddConsumer<Users.API.Consumers.GetUserByEmailRequestConsumer>();
-    
+    x.AddConsumer<Users.API.Consumers.ActivateUserRequestConsumer>();
+
     x.UsingRabbitMq((context, cfg) =>
     {
         var rabbitMqHost = builder.Configuration["RABBITMQ_HOST"]
