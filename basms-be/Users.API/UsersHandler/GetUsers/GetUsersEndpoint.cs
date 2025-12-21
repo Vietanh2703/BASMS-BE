@@ -15,7 +15,6 @@ public class GetUsersEndpoint : ICarterModule
             return Results.Ok(result);
         })
         .RequireAuthorization()
-        .AddEndpointFilter(new RoleAuthorizationFilter("ddbd5fad-ba6e-11f0-bcac-00155dca8f48"))
         .WithTags("Users")
         .WithName("GetUsers")
         .Produces<GetUsersResult>(StatusCodes.Status200OK)
