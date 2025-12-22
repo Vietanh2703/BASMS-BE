@@ -119,22 +119,29 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization();
 
-// CORS
-var allowedOrigins = (builder.Configuration["ALLOWED_ORIGINS"] ?? builder.Configuration["AllowedOrigins"] ?? "http://localhost:3000,http://localhost:5173")
-    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+// Cấu hình CORS cho frontend (giống Shifts.API)
+// Đọc từ ALLOWED_ORIGINS env var (string phân cách bằng dấu phẩy) hoặc AllowedOrigins section
+var allowedOriginsString = builder.Configuration["ALLOWED_ORIGINS"]
+                         ?? builder.Configuration["AllowedOrigins"]
+                         ?? "";
+
+var allowedOrigins = string.IsNullOrWhiteSpace(allowedOriginsString)
+    ? new[] { "http://localhost:3000", "http://localhost:5173" } // Fallback cho development
+    : allowedOriginsString.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+Console.WriteLine($"CORS Allowed Origins: {string.Join(", ", allowedOrigins)}");
 
 builder.Services.AddCors(options =>
 {
-    options.AddDefaultPolicy(policy =>
-    {
-        policy.WithOrigins(allowedOrigins)
-              .AllowAnyMethod()
-              .AllowAnyHeader()
-              .AllowCredentials();
-    });
+    options.AddPolicy("AllowFrontend",
+        policy =>
+        {
+            policy.WithOrigins(allowedOrigins)
+                .AllowAnyMethod()
+                .AllowAnyHeader()
+                .AllowCredentials();
+        });
 });
-
-Console.WriteLine($"CORS Allowed Origins: {string.Join(", ", allowedOrigins)}");
 
 // Swagger/OpenAPI
 builder.Services.AddEndpointsApiExplorer();
@@ -160,15 +167,20 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+// Thêm Global Exception Handler Middleware
+// Middleware này phải đặt đầu tiên để catch tất cả exceptions
 app.UseGlobalExceptionHandler();
-app.UseCors();
+
+app.MapCarter();
+app.UseCors("AllowFrontend");  // ✅ Apply named policy explicitly
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapCarter();
-app.MapHub<ChatHub>("/api/chathub");  // ✅ Match frontend path
+app.MapHub<ChatHub>("/api/chathub")
+    .RequireCors("AllowFrontend");  // ✅ Explicitly apply CORS to SignalR Hub
+
 app.MapGet("/", () => "Chats.API is running.");
 
-Console.WriteLine("✓ SignalR ChatHub mapped at /api/chathub");
+Console.WriteLine("✓ SignalR ChatHub mapped at /api/chathub with CORS policy: AllowFrontend");
 
 app.Run();
