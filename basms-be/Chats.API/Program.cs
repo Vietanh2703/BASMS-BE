@@ -105,7 +105,8 @@ builder.Services.AddAuthentication(options =>
 
                 // If the request is for our SignalR hub...
                 var path = context.HttpContext.Request.Path;
-                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/chathub"))
+                if (!string.IsNullOrEmpty(accessToken) &&
+                    (path.StartsWithSegments("/chathub") || path.StartsWithSegments("/api/chathub")))
                 {
                     // Read the token out of the query string
                     context.Token = accessToken;
@@ -165,9 +166,9 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapCarter();
-app.MapHub<ChatHub>("/chathub");
+app.MapHub<ChatHub>("/api/chathub");  // ✅ Match frontend path
 app.MapGet("/", () => "Chats.API is running.");
 
-Console.WriteLine("✓ SignalR ChatHub mapped at /chathub");
+Console.WriteLine("✓ SignalR ChatHub mapped at /api/chathub");
 
 app.Run();
