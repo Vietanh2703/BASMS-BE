@@ -1,13 +1,9 @@
 namespace Contracts.API.ContractsHandler.DeleteShiftSchedules;
 
-/// <summary>
-/// Endpoint để xóa shift schedule
-/// </summary>
 public class DeleteShiftSchedulesEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        // Route: DELETE /api/contracts/shift-schedules/{shiftScheduleId}
         app.MapDelete("/api/contracts/shift-schedules/{shiftScheduleId}", async (
             Guid shiftScheduleId,
             ISender sender,

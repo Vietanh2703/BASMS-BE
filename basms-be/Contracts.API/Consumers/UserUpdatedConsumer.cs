@@ -1,11 +1,5 @@
-using BuildingBlocks.Messaging.Events;
-
 namespace Contracts.API.Consumers;
 
-/// <summary>
-/// Consumer nhận UserUpdatedEvent từ Users Service
-/// Log customer update sync
-/// </summary>
 public class UserUpdatedConsumer : IConsumer<UserUpdatedEvent>
 {
     private readonly IDbConnectionFactory _dbFactory;
@@ -32,8 +26,7 @@ public class UserUpdatedConsumer : IConsumer<UserUpdatedEvent>
         try
         {
             using var connection = await _dbFactory.CreateConnectionAsync();
-
-            // Check if customer exists
+            
             var existingCustomer = await connection.QueryFirstOrDefaultAsync<Customer>(
                 "SELECT * FROM customers WHERE UserId = @UserId AND IsDeleted = 0 LIMIT 1",
                 new { UserId = @event.UserId });
@@ -46,7 +39,6 @@ public class UserUpdatedConsumer : IConsumer<UserUpdatedEvent>
                 return;
             }
 
-            // Update customer record if needed
             bool customerUpdated = false;
             var oldValues = new Dictionary<string, object?>();
             var newValues = new Dictionary<string, object?>();
@@ -81,20 +73,19 @@ public class UserUpdatedConsumer : IConsumer<UserUpdatedEvent>
                 existingCustomer.UpdatedAt = DateTime.UtcNow;
                 await connection.UpdateAsync(existingCustomer);
                 _logger.LogInformation(
-                    "✓ Updated customer record for User {UserId}",
+                    "Updated customer record for User {UserId}",
                     @event.UserId);
             }
 
-            // Log sync
             var log = new CustomerSyncLog
             {
                 Id = Guid.NewGuid(),
                 UserId = @event.UserId,
                 SyncType = "UPDATE",
                 SyncStatus = "SUCCESS",
-                FieldsChanged = System.Text.Json.JsonSerializer.Serialize(@event.ChangedFields),
-                OldValues = oldValues.Count > 0 ? System.Text.Json.JsonSerializer.Serialize(oldValues) : null,
-                NewValues = newValues.Count > 0 ? System.Text.Json.JsonSerializer.Serialize(newValues) : null,
+                FieldsChanged = JsonSerializer.Serialize(@event.ChangedFields),
+                OldValues = oldValues.Count > 0 ? JsonSerializer.Serialize(oldValues) : null,
+                NewValues = newValues.Count > 0 ? JsonSerializer.Serialize(newValues) : null,
                 SyncInitiatedBy = "WEBHOOK",
                 RetryCount = 0,
                 UserServiceVersionAfter = @event.Version,
@@ -107,7 +98,7 @@ public class UserUpdatedConsumer : IConsumer<UserUpdatedEvent>
             await connection.InsertAsync(log);
 
             _logger.LogInformation(
-                "✓ Successfully logged customer update for User {UserId}",
+                "Successfully logged customer update for User {UserId}",
                 @event.UserId);
         }
         catch (Exception ex)
@@ -116,7 +107,7 @@ public class UserUpdatedConsumer : IConsumer<UserUpdatedEvent>
                 "Failed to process UserUpdatedEvent for User {UserId}",
                 @event.UserId);
 
-            throw; // Re-throw to trigger MassTransit retry
+            throw;
         }
     }
 }

@@ -16,7 +16,6 @@ public class CheckPublicHolidayEndpoint : ICarterModule
         .WithName("CheckPublicHoliday")
         .Produces<CheckPublicHolidayResult>(StatusCodes.Status200OK)
         .ProducesProblem(StatusCodes.Status500InternalServerError)
-        .WithSummary("Check if date is public holiday")
-        .WithDescription("Returns holiday information if the date is a public holiday");
+        .WithSummary("Check if date is public holiday");
     }
 }

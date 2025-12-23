@@ -1,17 +1,7 @@
 namespace Contracts.API.ContractsHandler.GetAllContractDocuments;
 
-// ================================================================
-// QUERY & RESULT
-// ================================================================
-
-/// <summary>
-/// Query để lấy tất cả contract documents từ S3
-/// </summary>
 public record GetAllContractDocumentsQuery : IQuery<GetAllContractDocumentsResult>;
 
-/// <summary>
-/// DTO cho Contract Document
-/// </summary>
 public record ContractDocumentDto
 {
     public Guid Id { get; init; }
@@ -26,16 +16,10 @@ public record ContractDocumentDto
     public Guid? UploadedBy { get; init; }
     public DateTime CreatedAt { get; init; }
 
-    /// <summary>
-    /// Kích thước file dạng human-readable (e.g., "2.5 MB")
-    /// </summary>
     public string FileSizeFormatted => FileSize.HasValue
         ? FormatFileSize(FileSize.Value)
         : "Unknown";
 
-    /// <summary>
-    /// Download URL
-    /// </summary>
     public string DownloadUrl => $"/api/contracts/documents/{Id}/download";
 
     private static string FormatFileSize(long bytes)
@@ -52,9 +36,6 @@ public record ContractDocumentDto
     }
 }
 
-/// <summary>
-/// Kết quả query
-/// </summary>
 public record GetAllContractDocumentsResult
 {
     public bool Success { get; init; }
@@ -63,9 +44,7 @@ public record GetAllContractDocumentsResult
     public int TotalCount { get; init; }
 }
 
-/// <summary>
-/// Handler để lấy tất cả contract documents từ database (files lưu trên S3)
-/// </summary>
+
 internal class GetAllContractDocumentsHandler(
     IDbConnectionFactory connectionFactory,
     ILogger<GetAllContractDocumentsHandler> logger)
@@ -80,10 +59,7 @@ internal class GetAllContractDocumentsHandler(
             logger.LogInformation("Getting all contract documents from S3");
 
             using var connection = await connectionFactory.CreateConnectionAsync();
-
-            // ================================================================
-            // GET ALL DOCUMENTS FROM DATABASE
-            // ================================================================
+            
             var query = @"
                 SELECT
                     Id,
@@ -106,10 +82,7 @@ internal class GetAllContractDocumentsHandler(
             var documentsList = documents.ToList();
 
             logger.LogInformation("Found {Count} documents on S3", documentsList.Count);
-
-            // ================================================================
-            // MAP TO DTOs
-            // ================================================================
+            
             var documentDtos = documentsList.Select(d => new ContractDocumentDto
             {
                 Id = d.Id,

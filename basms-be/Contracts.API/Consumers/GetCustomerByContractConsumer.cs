@@ -1,12 +1,5 @@
-using BuildingBlocks.Messaging.Events;
-using Dapper;
-
 namespace Contracts.API.Consumers;
 
-/// <summary>
-/// Consumer trả về thông tin customer từ contractId
-/// Used by: Shifts.API để gửi email thông báo hủy ca cho customer
-/// </summary>
 public class GetCustomerByContractConsumer : IConsumer<GetCustomerByContractRequest>
 {
     private readonly IDbConnectionFactory _dbFactory;
@@ -31,8 +24,7 @@ public class GetCustomerByContractConsumer : IConsumer<GetCustomerByContractRequ
         try
         {
             using var connection = await _dbFactory.CreateConnectionAsync();
-
-            // Query contract and join with customers table to get customer info
+            
             var result = await connection.QueryFirstOrDefaultAsync<dynamic>(@"
                 SELECT
                     c.Id AS ContractId,
@@ -52,8 +44,7 @@ public class GetCustomerByContractConsumer : IConsumer<GetCustomerByContractRequ
                 _logger.LogWarning(
                     "Contract {ContractId} or associated customer not found",
                     request.ContractId);
-
-                // Return error response
+                
                 await context.RespondAsync(new GetCustomerByContractResponse
                 {
                     Success = false,
@@ -89,7 +80,7 @@ public class GetCustomerByContractConsumer : IConsumer<GetCustomerByContractRequ
                 "Failed to get customer info for ContractId: {ContractId}",
                 request.ContractId);
 
-            throw; // Re-throw to trigger MassTransit retry
+            throw;
         }
     }
 }

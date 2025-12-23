@@ -1,22 +1,15 @@
 namespace Contracts.API.ContractsHandler.ImportWorkingContract;
 
-/// <summary>
-///     Command để import working contract từ Word document đã ký
-///     Chỉ cần DocumentId - sẽ tự động extract thông tin và tạo user
-/// </summary>
 public record ImportWorkingContractCommand(
     Guid DocumentId
 ) : ICommand<ImportWorkingContractResult>;
 
-/// <summary>
-///     Result của việc import working contract
-/// </summary>
 public record ImportWorkingContractResult
 {
     public bool Success { get; init; }
     public string? ErrorMessage { get; init; }
     public Guid? ContractId { get; init; }
-    public Guid? UserId { get; init; } // User ID của người lao động đã tạo
+    public Guid? UserId { get; init; } 
     public string? ContractNumber { get; init; }
     public string? ContractTitle { get; init; }
     public string? EmployeeName { get; init; }
@@ -44,10 +37,6 @@ internal class ImportWorkingContractHandler(
                 "Importing working contract from DocumentId: {DocumentId}",
                 request.DocumentId);
 
-            // ================================================================
-            // KIỂM TRA DOCUMENT TỒN TẠI
-            // ================================================================
-
             using var connection = await connectionFactory.CreateConnectionAsync();
 
             var document = await connection.QueryFirstOrDefaultAsync<ContractDocument>(
@@ -60,10 +49,6 @@ internal class ImportWorkingContractHandler(
                     Success = false,
                     ErrorMessage = $"Document with ID {request.DocumentId} not found"
                 };
-
-            // ================================================================
-            // EXTRACT TEXT TỪ WORD DOCUMENT
-            // ================================================================
 
             var (downloadSuccess2, fileStream2, downloadError2) = await s3Service.DownloadFileAsync(
                 document.FileUrl,
@@ -87,11 +72,7 @@ internal class ImportWorkingContractHandler(
                     ErrorMessage = extractError ?? "Failed to extract text from Word document"
                 };
 
-            logger.LogInformation("✓ Extracted {Length} characters from document", text.Length);
-
-            // ================================================================
-            // PARSE THÔNG TIN HỢP ĐỒNG VÀ NGƯỜI LAO ĐỘNG
-            // ================================================================
+            logger.LogInformation("Extracted {Length} characters from document", text.Length);
 
             var contractData = ParseContractData(text);
             if (contractData == null)
@@ -110,32 +91,24 @@ internal class ImportWorkingContractHandler(
                 };
 
             logger.LogInformation(
-                "✓ Parsed contract data: Number={Number}, StartDate={Start}, EndDate={End}",
+                "Parsed contract data: Number={Number}, StartDate={Start}, EndDate={End}",
                 contractData.ContractNumber,
                 contractData.StartDate,
                 contractData.EndDate);
 
             logger.LogInformation(
-                "✓ Parsed employee data: Name={Name}, Email={Email}, IdentityNumber={Identity}",
+                "Parsed employee data: Name={Name}, Email={Email}, IdentityNumber={Identity}",
                 employeeData.FullName,
                 employeeData.Email,
                 employeeData.IdentityNumber);
-
-            // ================================================================
-            // PARSE CẤP BẬC VÀ LƯƠNG TỪ DOCUMENT
-            // ================================================================
 
             var certificationLevel = ParseCertificationLevel(text);
             var standardWage = ParseStandardWage(text);
 
             logger.LogInformation(
-                "✓ Parsed certification & wage: Level={Level}, Wage={Wage}",
+                "Parsed certification & wage: Level={Level}, Wage={Wage}",
                 certificationLevel,
                 standardWage);
-
-            // ================================================================
-            // KIỂM TRA USER ĐÃ TỒN TẠI (email, phone, identityNumber)
-            // ================================================================
 
             if (string.IsNullOrEmpty(employeeData.Email))
                 return new ImportWorkingContractResult
@@ -144,7 +117,6 @@ internal class ImportWorkingContractHandler(
                     ErrorMessage = "Employee email is required but not found in document"
                 };
 
-            // Check email đã tồn tại chưa
             var getUserResponse = await getUserByEmailClient.GetResponse<GetUserByEmailResponse>(
                 new GetUserByEmailRequest { Email = employeeData.Email },
                 cancellationToken);
@@ -156,25 +128,18 @@ internal class ImportWorkingContractHandler(
             string? randomPassword = null;
             string documentType;
 
-            // ================================================================
-            // TẠO USER MỚI hoặc SỬ DỤNG USER CŨ
-            // ================================================================
-
             if (userExists && existingUserId.HasValue)
             {
-                // User đã tồn tại - KHÔNG tạo user mới
+
                 userId = existingUserId.Value;
-                documentType = "extended_document"; // Document gia hạn/mở rộng
+                documentType = "extended_document"; 
 
                 logger.LogInformation(
-                    "✓ User already exists: UserId={UserId}, Email={Email}. " +
+                    "User already exists: UserId={UserId}, Email={Email}. " +
                     "Will create extended_document and update existing contract.",
                     userId,
                     employeeData.Email);
-
-                // ================================================================
-                // PUBLISH EVENT ĐỂ UPDATE GUARD INFO
-                // ================================================================
+                
                 await publishEndpoint.Publish(new UpdateGuardInfoEvent
                 {
                     GuardId = userId,
@@ -185,16 +150,15 @@ internal class ImportWorkingContractHandler(
                 }, cancellationToken);
 
                 logger.LogInformation(
-                    "✓ Published UpdateGuardInfoEvent for existing Guard {GuardId}: Level={Level}, Wage={Wage}",
+                    "Published UpdateGuardInfoEvent for existing Guard {GuardId}: Level={Level}, Wage={Wage}",
                     userId,
                     certificationLevel,
                     standardWage);
             }
             else
             {
-                // User chưa tồn tại - TẠO MỚI
                 randomPassword = GenerateRandomPassword();
-                documentType = "working_contract"; // Document hợp đồng lao động ban đầu
+                documentType = "working_contract";
 
                 logger.LogInformation("User does not exist. Creating new user...");
 
@@ -233,15 +197,11 @@ internal class ImportWorkingContractHandler(
 
                 userId = createUserResponse.Message.UserId;
                 logger.LogInformation(
-                    "✓ Created new user (Guard): UserId={UserId}, Email={Email}. " +
+                    "Created new user (Guard): UserId={UserId}, Email={Email}. " +
                     "UserCreatedConsumer in Shifts.API will automatically create Guard record.",
                     userId,
                     employeeData.Email);
 
-                // ================================================================
-                // PUBLISH EVENT ĐỂ UPDATE GUARD INFO
-                // ================================================================
-                // Wait a bit for UserCreatedConsumer to create Guard record
                 await Task.Delay(2000, cancellationToken);
 
                 await publishEndpoint.Publish(new UpdateGuardInfoEvent
@@ -254,14 +214,11 @@ internal class ImportWorkingContractHandler(
                 }, cancellationToken);
 
                 logger.LogInformation(
-                    "✓ Published UpdateGuardInfoEvent for Guard {GuardId}: Level={Level}, Wage={Wage}",
+                    "Published UpdateGuardInfoEvent for Guard {GuardId}: Level={Level}, Wage={Wage}",
                     userId,
                     certificationLevel,
                     standardWage);
-
-                // ================================================================
-                // GỬI EMAIL THÔNG TIN ĐĂNG NHẬP CHO GUARD MỚI
-                // ================================================================
+                
                 if (!string.IsNullOrEmpty(employeeData.Email) && !string.IsNullOrEmpty(randomPassword))
                 {
                     try
@@ -285,16 +242,11 @@ internal class ImportWorkingContractHandler(
                     }
                 }
             }
-            // ================================================================
-            // TẠO hoặc CẬP NHẬT CONTRACT
-            // ================================================================
 
             Guid contractId;
 
             if (userExists && existingUserId.HasValue)
             {
-                // User đã tồn tại - Tìm contract hiện tại và update DocumentId
-                // Lấy contract có cùng email (từ document_email matching)
                 var existingContract = await connection.QueryFirstOrDefaultAsync<Contract>(@"
                     SELECT c.*
                     FROM contracts c
@@ -308,7 +260,6 @@ internal class ImportWorkingContractHandler(
 
                 if (existingContract != null)
                 {
-                    // Update contract với DocumentId mới (document extended)
                     contractId = existingContract.Id;
 
                     await connection.ExecuteAsync(@"
@@ -328,13 +279,12 @@ internal class ImportWorkingContractHandler(
                         });
 
                     logger.LogInformation(
-                        "✓ Updated existing contract with new document: ContractId={ContractId}, NewDocumentId={DocumentId}",
+                        "Updated existing contract with new document: ContractId={ContractId}, NewDocumentId={DocumentId}",
                         contractId,
                         request.DocumentId);
                 }
                 else
                 {
-                    // Không tìm thấy contract cũ - tạo mới (trường hợp hiếm)
                     var newContract = new Contract
                     {
                         Id = Guid.NewGuid(),
@@ -364,27 +314,26 @@ internal class ImportWorkingContractHandler(
                     contractId = newContract.Id;
 
                     logger.LogInformation(
-                        "✓ Created new contract for existing user: ContractId={ContractId}",
+                        "Created new contract for existing user: ContractId={ContractId}",
                         contractId);
                 }
             }
             else
             {
-                // User mới - Tạo contract mới
                 var contract = new Contract
                 {
                     Id = Guid.NewGuid(),
-                    CustomerId = null, // Working contract không có CustomerId
-                    DocumentId = request.DocumentId, // Link đến document
+                    CustomerId = null, 
+                    DocumentId = request.DocumentId, 
                     ContractNumber = contractData.ContractNumber,
                     ContractTitle = contractData.ContractTitle,
-                    ContractType = "working_contract", // Loại hợp đồng lao động
+                    ContractType = "working_contract", 
                     ServiceScope = "shift_based",
                     CoverageModel = "fixed_schedule",
                     StartDate = contractData.StartDate,
                     EndDate = contractData.EndDate ?? contractData.StartDate.AddMonths(36), // Max 36 tháng
                     DurationMonths = contractData.DurationMonths,
-                    Status = "signed", // Đã ký
+                    Status = "signed", 
                     SignedDate = DateTime.UtcNow,
                     ContractFileUrl = document.FileUrl,
                     AutoGenerateShifts = true,
@@ -400,7 +349,7 @@ internal class ImportWorkingContractHandler(
                 contractId = contract.Id;
 
                 logger.LogInformation(
-                    "✓ Created working contract: ContractId={ContractId}, Number={Number}, UserId={UserId}",
+                    "Created working contract: ContractId={ContractId}, Number={Number}, UserId={UserId}",
                     contractId,
                     contract.ContractNumber,
                     userId);
@@ -432,34 +381,25 @@ internal class ImportWorkingContractHandler(
     {
         if (string.IsNullOrEmpty(phone))
             return null;
-
-        // Remove spaces và non-digit characters
+        
         var cleanPhone = Regex.Replace(phone, @"[^\d]", "");
-
-        // Nếu bắt đầu bằng 0, thay bằng +84
+        
         if (cleanPhone.StartsWith("0")) return "+84" + cleanPhone.Substring(1);
 
-        // Nếu đã có +84, giữ nguyên
         if (cleanPhone.StartsWith("84")) return "+" + cleanPhone;
 
-        // Trường hợp khác, giữ nguyên
         return cleanPhone;
     }
 
-    /// <summary>
-    ///     Parse thông tin từ text của Word document
-    /// </summary>
     private ContractDataParsed? ParseContractData(string text)
     {
         try
         {
-            // Extract Contract Number: Số: ………./HĐLĐ
             var contractNumberMatch = Regex.Match(text, @"Số:\s*([^\n]+)/HĐLĐ");
             var contractNumber = contractNumberMatch.Success
                 ? contractNumberMatch.Groups[1].Value.Trim()
                 : Guid.NewGuid().ToString("N").Substring(0, 8).ToUpper();
-
-            // Extract Sign Date: Hôm nay, ngày ……… tháng …… năm ……
+            
             var signDateMatch = Regex.Match(text, @"Hôm nay,\s*ngày\s+(\d+)\s+tháng\s+(\d+)\s+năm\s+(\d+)");
             var signDate = DateTime.UtcNow;
             if (signDateMatch.Success)
@@ -470,19 +410,14 @@ internal class ImportWorkingContractHandler(
                 signDate = new DateTime(year, month, day);
             }
 
-            // Extract Employee Name từ "Bên B" section
             var employeeNameMatch = Regex.Match(text, @"–\s*Họ và tên:\s*([^\n]+?)(?:\s*–|\s*\n)");
             var employeeName = employeeNameMatch.Success
                 ? employeeNameMatch.Groups[1].Value.Trim()
                 : "Unknown Employee";
-
-            // Create Title: "Hợp đồng lao động - [Tên NLĐ] - [dd/MM/yyyy]"
-            // Limit to 255 characters to fit database column
+            
             var contractTitle = $"Hợp đồng lao động - {employeeName} - {signDate:dd/MM/yyyy}";
             if (contractTitle.Length > 255) contractTitle = contractTitle.Substring(0, 252) + "...";
 
-            // Extract Start Date and End Date
-            // Pattern: thời hạn từ ngày …./…./…… đến ngày …./…./……
             var dateRangeMatch = Regex.Match(
                 text,
                 @"thời hạn từ ngày\s+(\d{1,2})/(\d{1,2})/(\d{4})\s+đến ngày\s+(\d{1,2})/(\d{1,2})/(\d{4})");
@@ -506,7 +441,6 @@ internal class ImportWorkingContractHandler(
                 durationMonths = (endDate.Value.Year - startDate.Year) * 12 +
                     endDate.Value.Month - startDate.Month;
 
-                // Đảm bảo không vượt quá 36 tháng
                 if (durationMonths > 36)
                 {
                     durationMonths = 36;
@@ -530,14 +464,11 @@ internal class ImportWorkingContractHandler(
         }
     }
 
-    /// <summary>
-    ///     Parse thông tin người lao động (Bên B) từ text
-    /// </summary>
+  
     private EmployeeDataParsed? ParseEmployeeData(string text)
     {
         try
         {
-            // Tìm phần "Bên B" trong text
             var benBMatch = Regex.Match(text, @"BÊN B\s*\(Người lao động\):(.*?)(?=ĐIỀU\s+\d+|Điều\s+\d+|$)",
                 RegexOptions.Singleline | RegexOptions.IgnoreCase);
             if (!benBMatch.Success)
@@ -546,12 +477,8 @@ internal class ImportWorkingContractHandler(
 
             var benBText = benBMatch.Success ? benBMatch.Groups[1].Value : text;
 
-            // ================================================================
-            // ✅ IMPROVED: Email extraction với nhiều pattern và validation
-            // ================================================================
             string? email = null;
 
-            // Log Bên B text để debug
             logger.LogInformation("Extracting email from Bên B text (length: {Length})", benBText.Length);
             var emailSection = ExtractEmailSection(benBText);
             if (!string.IsNullOrEmpty(emailSection))
@@ -559,16 +486,14 @@ internal class ImportWorkingContractHandler(
                 logger.LogInformation("Email section found: '{EmailSection}'", emailSection);
             }
 
-            // Pattern 1: "– Email: xxx@xxx.xxx" (có dấu gạch ngang, chặt chẽ)
             var emailMatch1 = Regex.Match(benBText, @"–\s*Email:\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})",
                 RegexOptions.IgnoreCase);
             if (emailMatch1.Success)
             {
                 email = emailMatch1.Groups[1].Value.Trim().ToLower();
-                logger.LogInformation("✓ Extracted email (pattern 1 - với dấu gạch ngang): {Email}", email);
+                logger.LogInformation("Extracted email (pattern 1 - với dấu gạch ngang): {Email}", email);
             }
 
-            // Pattern 2: "Email: xxx@xxx.xxx" (không có dấu gạch ngang)
             if (string.IsNullOrEmpty(email))
             {
                 var emailMatch2 = Regex.Match(benBText, @"Email:\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})",
@@ -576,11 +501,10 @@ internal class ImportWorkingContractHandler(
                 if (emailMatch2.Success)
                 {
                     email = emailMatch2.Groups[1].Value.Trim().ToLower();
-                    logger.LogInformation("✓ Extracted email (pattern 2 - không dấu gạch ngang): {Email}", email);
+                    logger.LogInformation("Extracted email (pattern 2 - không dấu gạch ngang): {Email}", email);
                 }
             }
-
-            // Pattern 3: Tìm email bất kỳ trong section Email
+            
             if (string.IsNullOrEmpty(email))
             {
                 var allEmails = Regex.Matches(benBText, @"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}",
@@ -588,52 +512,48 @@ internal class ImportWorkingContractHandler(
 
                 if (allEmails.Count > 0)
                 {
-                    // Tìm email gần nhất với "Email:" label
-                    var emailLabelIndex = benBText.IndexOf("Email:", StringComparison.OrdinalIgnoreCase);
 
+                    var emailLabelIndex = benBText.IndexOf("Email:", StringComparison.OrdinalIgnoreCase);
                     if (emailLabelIndex >= 0)
                     {
-                        // Lấy email đầu tiên SAU vị trí "Email:"
                         foreach (Match match in allEmails)
                         {
                             if (match.Index > emailLabelIndex)
                             {
                                 email = match.Value.Trim().ToLower();
-                                logger.LogInformation("✓ Extracted email (pattern 3 - tìm sau Email:): {Email}", email);
+                                logger.LogInformation("Extracted email (pattern 3 - tìm sau Email:): {Email}", email);
                                 break;
                             }
                         }
                     }
-
-                    // Nếu vẫn chưa có, lấy email đầu tiên tìm được
+                    
                     if (string.IsNullOrEmpty(email))
                     {
                         email = allEmails[0].Value.Trim().ToLower();
-                        logger.LogInformation("✓ Extracted email (pattern 3 - email đầu tiên): {Email}", email);
+                        logger.LogInformation("Extracted email (pattern 3 - email đầu tiên): {Email}", email);
                     }
                 }
             }
-
-            // ✅ Validate và cleanup email
+            
             if (!string.IsNullOrEmpty(email))
             {
                 email = CleanupEmail(email);
 
                 if (!IsValidEmail(email))
                 {
-                    logger.LogWarning("⚠ Invalid email format after extraction: {Email}", email);
+                    logger.LogWarning("Invalid email format after extraction: {Email}", email);
                     email = null;
                 }
                 else
                 {
-                    logger.LogInformation("✓ Final validated email: {Email}", email);
+                    logger.LogInformation("Final validated email: {Email}", email);
                 }
             }
 
             if (string.IsNullOrEmpty(email))
-                logger.LogWarning("⚠ Failed to extract valid email from Bên B text");
+                logger.LogWarning("Failed to extract valid email from Bên B text");
 
-            // Extract các trường khác (giữ nguyên logic cũ)
+
             var nameMatch = Regex.Match(benBText, @"–\s*Họ và tên:\s*([^\n]+?)(?:\s*–|\s*\n)");
             var fullName = nameMatch.Success ? nameMatch.Groups[1].Value.Trim() : null;
 
@@ -693,9 +613,6 @@ internal class ImportWorkingContractHandler(
     }
 
 
-    /// <summary>
-    ///     Generate random password (9 characters)
-    /// </summary>
     private string GenerateRandomPassword()
     {
         const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -704,39 +621,28 @@ internal class ImportWorkingContractHandler(
             .Select(s => s[random.Next(s.Length)]).ToArray());
     }
 
-    /// <summary>
-    ///     Extract email section từ text để debug
-    /// </summary>
     private string? ExtractEmailSection(string text)
     {
-        // Tìm section từ "Email:" đến ký tự xuống dòng hoặc dấu gạch ngang
         var match = Regex.Match(text, @"Email:([^\n–]+)", RegexOptions.IgnoreCase);
         return match.Success ? match.Groups[1].Value.Trim() : null;
     }
 
-    /// <summary>
-    ///     Cleanup email: loại bỏ khoảng trắng, ký tự đặc biệt thừa
-    /// </summary>
+
     private string CleanupEmail(string email)
     {
         if (string.IsNullOrEmpty(email))
             return email;
 
-        // Remove all whitespace
+
         email = Regex.Replace(email, @"\s+", "");
 
-        // Remove any trailing/leading special characters (ngoại trừ @ và .)
         email = email.Trim('.', ',', ';', ':', '!', '?', '-', '_');
 
-        // Remove any control characters
         email = Regex.Replace(email, @"[\x00-\x1F\x7F]", "");
 
         return email.ToLower();
     }
 
-    /// <summary>
-    ///     Validate email format theo RFC 5322
-    /// </summary>
     private bool IsValidEmail(string? email)
     {
         if (string.IsNullOrWhiteSpace(email))
@@ -744,12 +650,8 @@ internal class ImportWorkingContractHandler(
 
         try
         {
-            // RFC 5322 compliant regex
             var pattern = @"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$";
             var isMatch = Regex.IsMatch(email, pattern, RegexOptions.IgnoreCase);
-
-            // Additional validation: must have at least one char before @
-            // and must have valid domain (at least one dot after @)
             if (isMatch)
             {
                 var parts = email.Split('@');
@@ -767,24 +669,19 @@ internal class ImportWorkingContractHandler(
         }
     }
 
-    /// <summary>
-    ///     Parse Cấp bậc từ document text
-    ///     Pattern: "Cấp bậc: IV" or "Cấp bậc : IV" (with optional space before colon)
-    /// </summary>
     private string? ParseCertificationLevel(string text)
     {
         try
         {
-            // Pattern: "Cấp bậc" + optional space + ":" + optional space + Roman numerals
             var match = Regex.Match(text, @"Cấp bậc\s*:\s*([IVX]+)", RegexOptions.IgnoreCase);
             if (match.Success)
             {
                 var level = match.Groups[1].Value.Trim().ToUpper();
-                logger.LogInformation("✓ Extracted CertificationLevel: {Level}", level);
+                logger.LogInformation("Extracted CertificationLevel: {Level}", level);
                 return level;
             }
 
-            logger.LogWarning("⚠ Failed to extract CertificationLevel from document");
+            logger.LogWarning("Failed to extract CertificationLevel from document");
             return null;
         }
         catch (Exception ex)
@@ -794,17 +691,10 @@ internal class ImportWorkingContractHandler(
         }
     }
 
-    /// <summary>
-    ///     Parse Mức lương cơ bản từ document text
-    ///     Pattern: "Mức lương cơ bản: {{StandardWage}}VNĐ/tháng"
-    /// </summary>
     private decimal? ParseStandardWage(string text)
     {
         try
         {
-            // Pattern 1: "Mức lương cơ bản: 6000000VNĐ/tháng"
-            // Pattern 2: "Mức lương cơ bản: 6.000.000VNĐ/tháng"
-            // Pattern 3: "Mức lương cơ bản: 6,000,000VNĐ/tháng"
             var match = Regex.Match(text, @"Mức lương cơ bản:\s*([\d.,]+)\s*VNĐ", RegexOptions.IgnoreCase);
             if (match.Success)
             {
@@ -815,12 +705,12 @@ internal class ImportWorkingContractHandler(
 
                 if (decimal.TryParse(wageString, out var wage))
                 {
-                    logger.LogInformation("✓ Extracted StandardWage: {Wage} VNĐ", wage);
+                    logger.LogInformation("Extracted StandardWage: {Wage} VNĐ", wage);
                     return wage;
                 }
             }
 
-            logger.LogWarning("⚠ Failed to extract StandardWage from document");
+            logger.LogWarning("Failed to extract StandardWage from document");
             return null;
         }
         catch (Exception ex)
@@ -830,9 +720,6 @@ internal class ImportWorkingContractHandler(
         }
     }
 
-    /// <summary>
-    ///     Helper class để hold parsed contract data
-    /// </summary>
     private class ContractDataParsed
     {
         public string ContractNumber { get; set; } = string.Empty;
@@ -842,9 +729,6 @@ internal class ImportWorkingContractHandler(
         public int DurationMonths { get; set; }
     }
 
-    /// <summary>
-    ///     Helper class để hold parsed employee data
-    /// </summary>
     private class EmployeeDataParsed
     {
         public string? FullName { get; set; }

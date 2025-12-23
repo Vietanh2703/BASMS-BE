@@ -1,17 +1,7 @@
 namespace Contracts.API.ContractsHandler.DeletePublicHoliday;
 
-// ================================================================
-// COMMAND & RESULT
-// ================================================================
-
-/// <summary>
-/// Command để xóa public holiday
-/// </summary>
 public record DeletePublicHolidayCommand(Guid HolidayId) : ICommand<DeletePublicHolidayResult>;
 
-/// <summary>
-/// Kết quả delete holiday
-/// </summary>
 public record DeletePublicHolidayResult
 {
     public bool Success { get; init; }
@@ -20,13 +10,6 @@ public record DeletePublicHolidayResult
     public string? HolidayName { get; init; }
 }
 
-// ================================================================
-// HANDLER
-// ================================================================
-
-/// <summary>
-/// Handler để xóa public holiday
-/// </summary>
 internal class DeletePublicHolidayHandler(
     IDbConnectionFactory connectionFactory,
     ILogger<DeletePublicHolidayHandler> logger)
@@ -42,9 +25,6 @@ internal class DeletePublicHolidayHandler(
 
             using var connection = await connectionFactory.CreateConnectionAsync();
 
-            // ================================================================
-            // 1. CHECK IF HOLIDAY EXISTS
-            // ================================================================
             var checkQuery = @"
                 SELECT HolidayName
                 FROM public_holidays
@@ -65,9 +45,6 @@ internal class DeletePublicHolidayHandler(
                 };
             }
 
-            // ================================================================
-            // 2. DELETE PUBLIC HOLIDAY (Hard delete)
-            // ================================================================
             var deleteQuery = @"
                 DELETE FROM public_holidays
                 WHERE Id = @HolidayId

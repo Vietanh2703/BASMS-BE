@@ -21,12 +21,6 @@ public class CheckExpiredContractsEndpoint : ICarterModule
         .ProducesProblem(StatusCodes.Status400BadRequest)
         .ProducesProblem(StatusCodes.Status401Unauthorized)
         .ProducesProblem(StatusCodes.Status500InternalServerError)
-        .WithSummary("Check and update expired contracts")
-        .WithDescription(@"
-Background job để check và update trạng thái contracts:
-- Near expired: Còn 7 ngày đến EndDate
-- Expired: Đã đến EndDate
-- Tự động deactivate users (managers, guards, customers) khi contract hết hạn
-        ");
+        .WithSummary("Check and update expired contracts");
     }
 }

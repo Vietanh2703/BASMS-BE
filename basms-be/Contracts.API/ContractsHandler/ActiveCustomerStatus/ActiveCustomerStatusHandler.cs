@@ -1,17 +1,7 @@
 namespace Contracts.API.ContractsHandler.ActiveCustomerStatus;
 
-// ================================================================
-// COMMAND & RESULT
-// ================================================================
-
-/// <summary>
-/// Command để update customer status từ "in_active" sang "active"
-/// </summary>
 public record ActiveCustomerStatusCommand(Guid CustomerId) : ICommand<ActiveCustomerStatusResult>;
 
-/// <summary>
-/// Kết quả command
-/// </summary>
 public record ActiveCustomerStatusResult
 {
     public bool Success { get; init; }
@@ -22,13 +12,6 @@ public record ActiveCustomerStatusResult
     public DateTime? UpdatedAt { get; init; }
 }
 
-// ================================================================
-// HANDLER
-// ================================================================
-
-/// <summary>
-/// Handler để update customer status từ "in_active" sang "active"
-/// </summary>
 internal class ActiveCustomerStatusHandler(
     IDbConnectionFactory connectionFactory,
     IRequestClient<BuildingBlocks.Messaging.Events.ActivateUserRequest> activateUserClient,
@@ -127,9 +110,6 @@ internal class ActiveCustomerStatusHandler(
                 customer.CustomerCode,
                 request.CustomerId);
 
-            // ================================================================
-            // ACTIVATE USER (Set IsActive = true)
-            // ================================================================
             if (customer.UserId.HasValue)
             {
                 try
@@ -172,7 +152,6 @@ internal class ActiveCustomerStatusHandler(
                         "Error activating user {UserId} for customer {CustomerCode}. Customer was activated but user activation failed.",
                         customer.UserId.Value,
                         customer.CustomerCode);
-                    // Don't fail the whole operation - customer was already activated
                 }
             }
             else

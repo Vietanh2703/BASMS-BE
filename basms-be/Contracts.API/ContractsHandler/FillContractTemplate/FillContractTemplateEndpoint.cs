@@ -1,11 +1,5 @@
-using Contracts.API.Extensions;
-using Dapper;
-
 namespace Contracts.API.ContractsHandler.FillContractTemplate;
 
-/// <summary>
-/// Request DTO để điền template từ S3
-/// </summary>
 public record FillContractFromS3Request(
     Guid TemplateDocumentId,
     Dictionary<string, object>? Data,
@@ -18,7 +12,6 @@ public class FillContractTemplateEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        // Route: POST /api/contracts/template/fill-from-s3
         app.MapPost("/api/contracts/template/fill-from-s3",
                 async (FillContractFromS3Request request, ISender sender, EmailHandler emailHandler, IDbConnectionFactory connectionFactory, ILogger<FillContractTemplateEndpoint> logger) =>
                 {
@@ -41,15 +34,13 @@ public class FillContractTemplateEndpoint : ICarterModule
                                 error = result.ErrorMessage
                             });
                         }
-
-                        // BƯỚC 2: SAU KHI LƯU DOCUMENT VÀO DATABASE, LẤY THÔNG TIN TỪ DATABASE ĐỂ GỬI EMAIL
+                        
                         if (result.FilledDocumentId.HasValue)
                         {
                             try
                             {
                                 using var connection = await connectionFactory.CreateConnectionAsync();
 
-                                // Query document từ database để lấy thông tin chính xác
                                 var savedDocument = await connection.QueryFirstOrDefaultAsync<ContractDocument>(
                                     "SELECT * FROM contract_documents WHERE Id = @Id AND IsDeleted = 0",
                                     new { Id = result.FilledDocumentId.Value });
@@ -58,13 +49,11 @@ public class FillContractTemplateEndpoint : ICarterModule
                                 {
                                     logger.LogInformation("Retrieved saved document from database: {DocumentId}, Email: {Email}",
                                         savedDocument.Id, savedDocument.DocumentEmail ?? "N/A");
-
-                                    // Gửi email nếu có DocumentEmail và SecurityToken
+                                    
                                     if (!string.IsNullOrEmpty(savedDocument.DocumentEmail) &&
                                         !string.IsNullOrEmpty(savedDocument.Tokens) &&
                                         savedDocument.TokenExpiredDay.HasValue)
                                     {
-                                        // Trích xuất contractNumber từ request hoặc data
                                         var contractNumber = request.ContractNumber ??
                                             ExtractFromData(request.Data, "SoHopDong", "ContractNumber", "MaHopDong") ??
                                             "N/A";
@@ -81,7 +70,7 @@ public class FillContractTemplateEndpoint : ICarterModule
                                             tokenExpiredDay: savedDocument.TokenExpiredDay.Value
                                         );
 
-                                        logger.LogInformation("✓ Successfully sent contract signing email to {Email}", savedDocument.DocumentEmail);
+                                        logger.LogInformation("Successfully sent contract signing email to {Email}", savedDocument.DocumentEmail);
                                     }
                                     else
                                     {
@@ -99,7 +88,6 @@ public class FillContractTemplateEndpoint : ICarterModule
                             }
                             catch (Exception emailEx)
                             {
-                                // Không fail toàn bộ request nếu email gửi thất bại
                                 logger.LogError(emailEx,
                                     "Failed to send contract signing email for document {DocumentId}. Contract was filled successfully but customer will not receive email notification.",
                                     result.FilledDocumentId);
@@ -140,9 +128,7 @@ public class FillContractTemplateEndpoint : ICarterModule
             .WithSummary("Điền template từ S3 và tạo token bảo mật cho ký điện tử");
     }
 
-    /// <summary>
-    /// Trích xuất giá trị từ data dictionary theo nhiều key có thể có
-    /// </summary>
+
     private static string? ExtractFromData(Dictionary<string, object>? data, params string[] possibleKeys)
     {
         if (data == null || data.Count == 0)
@@ -150,7 +136,6 @@ public class FillContractTemplateEndpoint : ICarterModule
 
         foreach (var key in possibleKeys)
         {
-            // Tìm key trong dictionary (case-insensitive)
             var foundKey = data.Keys.FirstOrDefault(k =>
                 k.Equals(key, StringComparison.OrdinalIgnoreCase) ||
                 k.Replace("{{", "").Replace("}}", "").Trim().Equals(key, StringComparison.OrdinalIgnoreCase));
@@ -160,7 +145,7 @@ public class FillContractTemplateEndpoint : ICarterModule
                 if (value is string strValue && !string.IsNullOrWhiteSpace(strValue))
                     return strValue;
 
-                if (value is System.Text.Json.JsonElement jsonElement && jsonElement.ValueKind == System.Text.Json.JsonValueKind.String)
+                if (value is JsonElement jsonElement && jsonElement.ValueKind == JsonValueKind.String)
                 {
                     var extracted = jsonElement.GetString();
                     if (!string.IsNullOrWhiteSpace(extracted))
@@ -172,59 +157,52 @@ public class FillContractTemplateEndpoint : ICarterModule
         return null;
     }
 
-    /// <summary>
-    /// Clean JSON string by escaping unescaped newlines and other special characters
-    /// This fixes the '0x0A' is invalid within a JSON string error
-    /// </summary>
+
     private static string CleanJsonString(string json)
     {
         if (string.IsNullOrEmpty(json))
             return json;
 
-        var result = new System.Text.StringBuilder(json.Length + 100);
+        var result = new StringBuilder(json.Length + 100);
         var insideString = false;
         var escaping = false;
 
         for (int i = 0; i < json.Length; i++)
         {
             var c = json[i];
-
-            // Track if we're inside a string (between quotes)
+            
             if (c == '"' && !escaping)
             {
                 insideString = !insideString;
                 result.Append(c);
                 continue;
             }
-
-            // Track escaping
+            
             if (c == '\\' && insideString && !escaping)
             {
                 escaping = true;
                 result.Append(c);
                 continue;
             }
-
-            // If we're escaping, just append the character as-is
+            
             if (escaping)
             {
                 escaping = false;
                 result.Append(c);
                 continue;
             }
-
-            // If we're inside a string and encounter a newline, escape it
+            
             if (insideString)
             {
                 switch (c)
                 {
-                    case '\n': // Line feed (0x0A)
+                    case '\n':
                         result.Append("\\n");
                         break;
-                    case '\r': // Carriage return (0x0D)
+                    case '\r':
                         result.Append("\\r");
                         break;
-                    case '\t': // Tab (0x09)
+                    case '\t': 
                         result.Append("\\t");
                         break;
                     default:
@@ -234,7 +212,6 @@ public class FillContractTemplateEndpoint : ICarterModule
             }
             else
             {
-                // Outside string, append as-is
                 result.Append(c);
             }
         }

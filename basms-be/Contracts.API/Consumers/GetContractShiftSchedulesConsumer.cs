@@ -1,12 +1,5 @@
-using BuildingBlocks.Messaging.Events;
-using Dapper;
-
 namespace Contracts.API.Consumers;
 
-/// <summary>
-/// Consumer xử lý request lấy shift schedules từ contract
-/// Được gọi bởi Shifts.API khi generate shifts
-/// </summary>
 public class GetContractShiftSchedulesConsumer : IConsumer<GetContractShiftSchedulesRequest>
 {
     private readonly IDbConnectionFactory _connectionFactory;
@@ -29,10 +22,7 @@ public class GetContractShiftSchedulesConsumer : IConsumer<GetContractShiftSched
                 context.Message.ContractId);
 
             using var connection = await _connectionFactory.CreateConnectionAsync();
-
-            // ================================================================
-            // 1. LẤY THÔNG TIN CONTRACT
-            // ================================================================
+            
             var contract = await connection.QueryFirstOrDefaultAsync<Models.Contract>(
                 @"SELECT Id, ContractNumber, StartDate, EndDate, WorkOnPublicHolidays
                   FROM contracts
@@ -45,7 +35,6 @@ public class GetContractShiftSchedulesConsumer : IConsumer<GetContractShiftSched
                     "Contract {ContractId} not found",
                     context.Message.ContractId);
 
-                // Respond with empty result
                 await context.RespondAsync(new GetContractShiftSchedulesResponse
                 {
                     ContractId = context.Message.ContractId,
@@ -55,10 +44,7 @@ public class GetContractShiftSchedulesConsumer : IConsumer<GetContractShiftSched
                 });
                 return;
             }
-
-            // ================================================================
-            // 2. LẤY SHIFT SCHEDULES
-            // ================================================================
+            
             var schedules = (await connection.QueryAsync<dynamic>(
                 @"SELECT
                     Id as ScheduleId,
@@ -96,10 +82,7 @@ public class GetContractShiftSchedulesConsumer : IConsumer<GetContractShiftSched
                 "Found {ScheduleCount} shift schedules for contract {ContractId}",
                 schedules.Count,
                 contract.Id);
-
-            // ================================================================
-            // 3. LẤY LOCATIONS VỚI THÔNG TIN ĐẦY ĐỦ
-            // ================================================================
+            
             var locations = (await connection.QueryAsync<dynamic>(
                 @"SELECT
                     cl.LocationId as LocationId,
@@ -121,10 +104,7 @@ public class GetContractShiftSchedulesConsumer : IConsumer<GetContractShiftSched
                 "Found {LocationCount} locations for contract {ContractId}",
                 locations.Count,
                 contract.Id);
-
-            // ================================================================
-            // 4. MAP DATA VÀ RESPOND
-            // ================================================================
+            
             var response = new GetContractShiftSchedulesResponse
             {
                 ContractId = contract.Id,
@@ -183,8 +163,7 @@ public class GetContractShiftSchedulesConsumer : IConsumer<GetContractShiftSched
             _logger.LogError(ex,
                 "Error handling GetContractShiftSchedulesRequest for Contract {ContractId}",
                 context.Message.ContractId);
-
-            // Respond with error
+            
             await context.RespondAsync(new GetContractShiftSchedulesResponse
             {
                 ContractId = context.Message.ContractId,

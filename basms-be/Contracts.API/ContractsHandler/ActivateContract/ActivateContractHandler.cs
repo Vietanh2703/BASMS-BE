@@ -1,17 +1,5 @@
-using BuildingBlocks.CQRS;
-using BuildingBlocks.Messaging.Events;
-using Contracts.API.Data;
-using Contracts.API.Models;
-using Dapper;
-using Dapper.Contrib.Extensions;
-using MassTransit;
-
 namespace Contracts.API.ContractsHandler.ActivateContract;
 
-/// <summary>
-/// Handler để activate contract và publish event cho Shifts.API
-/// CRITICAL: Đây là điểm kích hoạt toàn bộ workflow tạo shifts
-/// </summary>
 public class ActivateContractHandler(
     IDbConnectionFactory connectionFactory,
     IPublishEndpoint publishEndpoint,
@@ -31,9 +19,6 @@ public class ActivateContractHandler(
 
         try
         {
-            // ================================================================
-            // BƯỚC 1: LẤY CONTRACT VÀ VALIDATE
-            // ================================================================
             var contract = await connection.QueryFirstOrDefaultAsync<Contract>(
                 "SELECT * FROM contracts WHERE Id = @Id AND IsDeleted = 0",
                 new { Id = request.ContractId },
@@ -48,7 +33,6 @@ public class ActivateContractHandler(
                 };
             }
 
-            // Check current status
             if (contract.Status == "active")
             {
                 return new ActivateContractResult
@@ -72,11 +56,7 @@ public class ActivateContractHandler(
                 contract.ContractNumber,
                 contract.Status);
 
-            // ================================================================
-            // BƯỚC 2: LẤY THÔNG TIN LIÊN QUAN (CUSTOMER, LOCATIONS, SCHEDULES)
-            // ================================================================
 
-            // 2.1: Get Customer
             Customer? customer = null;
             if (contract.CustomerId.HasValue)
             {
@@ -86,7 +66,6 @@ public class ActivateContractHandler(
                     transaction);
             }
 
-            // 2.2: Get Contract Locations
             var contractLocations = await connection.QueryAsync<ContractLocation>(
                 @"SELECT * FROM contract_locations
                   WHERE ContractId = @ContractId AND IsDeleted = 0",
@@ -95,7 +74,6 @@ public class ActivateContractHandler(
 
             var contractLocationsList = contractLocations.ToList();
 
-            // 2.3: Get Location Details
             var locationDtos = new List<ContractLocationDto>();
             foreach (var contractLocation in contractLocationsList)
             {
@@ -110,7 +88,7 @@ public class ActivateContractHandler(
                     {
                         LocationId = location.Id,
                         LocationName = location.LocationName,
-                        LocationAddress = location.Address ?? string.Empty,
+                        LocationAddress = location.Address,
                         LocationCode = location.LocationCode,
                         GuardsRequired = contractLocation.GuardsRequired,
                         CoverageType = contractLocation.CoverageType,
@@ -122,8 +100,7 @@ public class ActivateContractHandler(
                     });
                 }
             }
-
-            // 2.4: Get Shift Schedules
+            
             var schedules = await connection.QueryAsync<ContractShiftSchedule>(
                 @"SELECT * FROM contract_shift_schedules
                   WHERE ContractId = @ContractId AND IsDeleted = 0 AND IsActive = 1",
@@ -170,10 +147,7 @@ public class ActivateContractHandler(
                 locationDtos.Count,
                 scheduleDtos.Count,
                 contract.AutoGenerateShifts);
-
-            // ================================================================
-            // BƯỚC 3: VALIDATE TRƯỚC KHI ACTIVATE
-            // ================================================================
+            
             var validationErrors = new List<string>();
 
             if (locationDtos.Count == 0)
@@ -203,16 +177,12 @@ public class ActivateContractHandler(
                     ErrorMessage = $"Validation failed: {string.Join(", ", validationErrors)}"
                 };
             }
-
-            // ================================================================
-            // BƯỚC 4: UPDATE CONTRACT STATUS → SCHEDULE_SHIFTS
-            // ================================================================
+            
             contract.Status = "schedule_shifts";
             contract.ActivatedAt = DateTime.UtcNow;
             contract.UpdatedAt = DateTime.UtcNow;
             contract.UpdatedBy = request.ActivatedBy;
-
-            // Nếu chưa có approved, set luôn
+            
             if (!contract.ApprovedAt.HasValue)
             {
                 contract.ApprovedAt = DateTime.UtcNow;
@@ -222,12 +192,9 @@ public class ActivateContractHandler(
             await connection.UpdateAsync(contract, transaction);
 
             logger.LogInformation(
-                "✓ Contract {ContractNumber} status updated to SCHEDULE_SHIFTS",
+                "Contract {ContractNumber} status updated to SCHEDULE_SHIFTS",
                 contract.ContractNumber);
 
-            // ================================================================
-            // BƯỚC 5: PUBLISH ContractActivatedEvent → SHIFTS.API
-            // ================================================================
             var activatedEvent = new ContractActivatedEvent
             {
                 ContractId = contract.Id,
@@ -251,7 +218,7 @@ public class ActivateContractHandler(
             await publishEndpoint.Publish(activatedEvent, cancellationToken);
 
             logger.LogInformation(
-                @"✓ ContractActivatedEvent published for {ContractNumber}:
+                @"ContractActivatedEvent published for {ContractNumber}:
                   - Event sent to Shifts.API via RabbitMQ
                   - Locations: {LocationCount}
                   - Schedules: {ScheduleCount}
@@ -260,14 +227,11 @@ public class ActivateContractHandler(
                 locationDtos.Count,
                 scheduleDtos.Count,
                 contract.AutoGenerateShifts);
-
-            // ================================================================
-            // BƯỚC 6: COMMIT TRANSACTION
-            // ================================================================
+            
             transaction.Commit();
 
             logger.LogInformation(
-                "✓✓✓ Contract {ContractNumber} activated successfully!",
+                "Contract {ContractNumber} activated successfully!",
                 contract.ContractNumber);
 
             return new ActivateContractResult

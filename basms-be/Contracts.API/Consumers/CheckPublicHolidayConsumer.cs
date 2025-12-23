@@ -1,11 +1,5 @@
-using BuildingBlocks.Messaging.Events;
-
 namespace Contracts.API.Consumers;
 
-/// <summary>
-/// Consumer kiểm tra xem một ngày có phải là ngày lễ không
-/// Được gọi bởi Shifts.API khi generate shifts
-/// </summary>
 public class CheckPublicHolidayConsumer : IConsumer<CheckPublicHolidayRequest>
 {
     private readonly IDbConnectionFactory _connectionFactory;
@@ -28,10 +22,6 @@ public class CheckPublicHolidayConsumer : IConsumer<CheckPublicHolidayRequest>
                 context.Message.Date);
 
             using var connection = await _connectionFactory.CreateConnectionAsync();
-
-            // ================================================================
-            // KIỂM TRA NGÀY LỄ TRONG DATABASE
-            // ================================================================
             var holiday = await connection.QueryFirstOrDefaultAsync<dynamic>(
                 @"SELECT
                     HolidayName,
@@ -71,8 +61,7 @@ public class CheckPublicHolidayConsumer : IConsumer<CheckPublicHolidayRequest>
             _logger.LogError(ex,
                 "Error checking public holiday for date {Date:yyyy-MM-dd}",
                 context.Message.Date);
-
-            // Respond with safe default (not a holiday)
+            
             await context.RespondAsync(new CheckPublicHolidayResponse
             {
                 IsHoliday = false,

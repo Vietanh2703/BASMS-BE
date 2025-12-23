@@ -1,14 +1,7 @@
 namespace Contracts.API.ContractsHandler.CheckExpiredContracts;
 
-/// <summary>
-/// Command để check và update expired contracts
-/// Chạy định kỳ hoặc manual trigger
-/// </summary>
 public record CheckExpiredContractsCommand() : ICommand<CheckExpiredContractsResult>;
 
-/// <summary>
-/// Result của việc check expired contracts
-/// </summary>
 public record CheckExpiredContractsResult
 {
     public bool Success { get; init; }
@@ -22,9 +15,6 @@ public record CheckExpiredContractsResult
     public List<ContractExpirationDetail> ExpiredContracts { get; init; } = new();
 }
 
-/// <summary>
-/// Chi tiết hợp đồng hết hạn hoặc gần hết hạn
-/// </summary>
 public record ContractExpirationDetail
 {
     public Guid ContractId { get; init; }
@@ -50,8 +40,7 @@ internal class CheckExpiredContractsHandler(
         try
         {
             logger.LogInformation("Starting expired contracts check job...");
-
-            // Get Vietnam timezone (UTC+7)
+            
             var vietnamTimeZone = TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time");
             var nowVietnam = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, vietnamTimeZone);
             var sevenDaysFromNow = nowVietnam.AddDays(7);
@@ -67,11 +56,6 @@ internal class CheckExpiredContractsHandler(
             int customersDeactivated = 0;
             var nearExpiredContracts = new List<ContractExpirationDetail>();
             var expiredContracts = new List<ContractExpirationDetail>();
-
-            // ================================================================
-            // GET ALL ACTIVE CONTRACT DOCUMENTS THAT NEED CHECKING
-            // Chỉ lấy documents có EndDate <= 7 ngày nữa (giảm số lượng cần xử lý)
-            // ================================================================
 
             var documents = await connection.QueryAsync<ContractDocument>(@"
                 SELECT * FROM contract_documents
@@ -89,10 +73,7 @@ internal class CheckExpiredContractsHandler(
                 if (document.EndDate == null) continue;
 
                 var endDateVietnam = TimeZoneInfo.ConvertTimeFromUtc(document.EndDate.Value, vietnamTimeZone);
-
-                // ================================================================
-                // CHECK EXPIRED (EndDate đã qua)
-                // ================================================================
+                
                 if (endDateVietnam <= nowVietnam)
                 {
                     var daysRemaining = (int)(endDateVietnam - nowVietnam).TotalDays;
@@ -102,8 +83,7 @@ internal class CheckExpiredContractsHandler(
                         document.Id,
                         endDateVietnam,
                         daysRemaining);
-
-                    // Get related contract trước
+                    
                     var contract = await connection.QueryFirstOrDefaultAsync<Contract>(@"
                         SELECT * FROM contracts
                         WHERE DocumentId = @DocumentId
@@ -112,17 +92,10 @@ internal class CheckExpiredContractsHandler(
 
                     if (contract != null)
                     {
-                        // Check xem contract đã expired trước đó chưa
                         bool wasAlreadyExpired = contract.Status == "expired";
-
-                        // ================================================================
-                        // BEGIN TRANSACTION để đảm bảo data consistency
-                        // Update document và contract phải thành công cùng nhau
-                        // ================================================================
                         using var transaction = connection.BeginTransaction();
                         try
                         {
-                            // Update document type to expired
                             await connection.ExecuteAsync(@"
                                 UPDATE contract_documents
                                 SET DocumentType = 'expired_document',
@@ -133,11 +106,9 @@ internal class CheckExpiredContractsHandler(
                                     UpdatedAt = DateTime.UtcNow
                                 },
                                 transaction);
-
-                            // Chỉ update nếu contract chưa expired (tránh duplicate processing)
+                            
                             if (!wasAlreadyExpired)
                             {
-                                // Update contract to expired
                                 await connection.ExecuteAsync(@"
                                     UPDATE contracts
                                     SET Status = 'expired',
@@ -155,8 +126,7 @@ internal class CheckExpiredContractsHandler(
                                     contract.Id,
                                     contract.ContractType);
                             }
-
-                            // Commit transaction - đảm bảo cả 2 updates thành công
+                            
                             transaction.Commit();
 
                             logger.LogInformation(
@@ -165,15 +135,13 @@ internal class CheckExpiredContractsHandler(
                         }
                         catch (Exception ex)
                         {
-                            // Rollback nếu có lỗi
                             transaction.Rollback();
                             logger.LogError(ex,
                                 "Failed to update expired status for document {DocumentId}, transaction rolled back",
                                 document.Id);
                             throw;
                         }
-
-                        // Thêm vào danh sách chi tiết
+                        
                         expiredContracts.Add(new ContractExpirationDetail
                         {
                             ContractId = contract.Id,
@@ -184,21 +152,15 @@ internal class CheckExpiredContractsHandler(
                             DaysRemaining = daysRemaining,
                             Status = "expired"
                         });
-
-                        // ================================================================
-                        // DEACTIVATE RELATED USERS BASED ON CONTRACT TYPE
-                        // Chỉ deactivate nếu contract vừa mới được expired (tránh duplicate events)
-                        // ================================================================
+                        
 
                         if (!wasAlreadyExpired)
                         {
                             if (contract.ContractType == "manager_working_contract" ||
                                 contract.ContractType == "extended_working_contract")
                             {
-                                // Manager working contract - deactivate manager
                                 if (!string.IsNullOrEmpty(document.DocumentEmail))
                                 {
-                                    // Publish event to deactivate User in Users.API
                                     await publishEndpoint.Publish(new DeactivateUserEvent
                                     {
                                         Email = document.DocumentEmail,
@@ -206,11 +168,10 @@ internal class CheckExpiredContractsHandler(
                                         Reason = "Contract expired",
                                         DeactivatedAt = DateTime.UtcNow
                                     }, cancellationToken);
-
-                                    // Publish event to deactivate Manager in Shifts.API
+                                    
                                     await publishEndpoint.Publish(new DeactivateManagerEvent
                                     {
-                                        ManagerId = Guid.Empty, // Will be found by email
+                                        ManagerId = Guid.Empty, 
                                         Email = document.DocumentEmail,
                                         Reason = "Contract expired",
                                         DeactivatedAt = DateTime.UtcNow
@@ -225,10 +186,8 @@ internal class CheckExpiredContractsHandler(
                             }
                             else if (contract.ContractType == "working_contract")
                             {
-                                // Guard working contract - deactivate guard
                                 if (!string.IsNullOrEmpty(document.DocumentEmail))
                                 {
-                                    // Publish event to deactivate User in Users.API
                                     await publishEndpoint.Publish(new DeactivateUserEvent
                                     {
                                         Email = document.DocumentEmail,
@@ -236,11 +195,10 @@ internal class CheckExpiredContractsHandler(
                                         Reason = "Contract expired",
                                         DeactivatedAt = DateTime.UtcNow
                                     }, cancellationToken);
-
-                                    // Publish event to deactivate Guard in Shifts.API
+                                    
                                     await publishEndpoint.Publish(new DeactivateGuardEvent
                                     {
-                                        GuardId = Guid.Empty, // Will be found by email
+                                        GuardId = Guid.Empty,
                                         Email = document.DocumentEmail,
                                         Reason = "Contract expired",
                                         DeactivatedAt = DateTime.UtcNow
@@ -255,7 +213,6 @@ internal class CheckExpiredContractsHandler(
                             }
                             else if (contract.ContractType.Contains("service"))
                             {
-                                // Service contract - deactivate customer
                                 if (!string.IsNullOrEmpty(document.DocumentEmail))
                                 {
                                     await publishEndpoint.Publish(new DeactivateUserEvent
@@ -284,9 +241,6 @@ internal class CheckExpiredContractsHandler(
 
                     expiredCount++;
                 }
-                // ================================================================
-                // CHECK NEAR EXPIRED (còn 7 ngày)
-                // ================================================================
                 else if (endDateVietnam <= sevenDaysFromNow && endDateVietnam > nowVietnam)
                 {
                     var daysRemaining = (int)(endDateVietnam - nowVietnam).TotalDays;
@@ -297,20 +251,15 @@ internal class CheckExpiredContractsHandler(
                         endDateVietnam,
                         daysRemaining);
 
-                    // Get related contract trước
                     var contract = await connection.QueryFirstOrDefaultAsync<Contract>(@"
                         SELECT * FROM contracts
                         WHERE DocumentId = @DocumentId
                         AND IsDeleted = 0",
                         new { DocumentId = document.Id });
-
-                    // ================================================================
-                    // BEGIN TRANSACTION để đảm bảo data consistency
-                    // ================================================================
+                    
                     using var transaction = connection.BeginTransaction();
                     try
                     {
-                        // Update document type to near_expired
                         await connection.ExecuteAsync(@"
                             UPDATE contract_documents
                             SET DocumentType = 'near_expired',
@@ -321,8 +270,7 @@ internal class CheckExpiredContractsHandler(
                                 UpdatedAt = DateTime.UtcNow
                             },
                             transaction);
-
-                        // Commit transaction
+                        
                         transaction.Commit();
                     }
                     catch (Exception ex)
@@ -336,7 +284,6 @@ internal class CheckExpiredContractsHandler(
 
                     if (contract != null)
                     {
-                        // Thêm vào danh sách chi tiết
                         nearExpiredContracts.Add(new ContractExpirationDetail
                         {
                             ContractId = contract.Id,
@@ -348,18 +295,13 @@ internal class CheckExpiredContractsHandler(
                             Status = "near_expired"
                         });
 
-                        // ================================================================
-                        // GỬI EMAIL THÔNG BÁO TIẾNG VIỆT CHO USER
-                        // ================================================================
                         if (!string.IsNullOrEmpty(document.DocumentEmail))
                         {
                             try
                             {
-                                // Lấy tên người nhận từ DocumentEmail (phần trước @)
                                 var recipientName = document.DocumentEmail.Split('@')[0];
-
-                                // Lấy contract number (nếu có)
-                                var contractNumber = contract.ContractNumber ?? $"HD-{contract.Id.ToString().Substring(0, 8)}";
+                                
+                                var contractNumber = contract.ContractNumber;
 
                                 await emailHandler.SendContractNearExpiryNotificationAsync(
                                     recipientName,
@@ -376,7 +318,6 @@ internal class CheckExpiredContractsHandler(
                             }
                             catch (Exception ex)
                             {
-                                // Log lỗi nhưng không throw để tiếp tục xử lý các contract khác
                                 logger.LogWarning(ex,
                                     "Failed to send near expiry email to {Email} for contract {ContractId}",
                                     document.DocumentEmail,

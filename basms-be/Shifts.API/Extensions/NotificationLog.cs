@@ -16,13 +16,7 @@ public class NotificationLog
     public string DeliveryMethod { get; set; } = "IN_APP";
     public string Status { get; set; } = "PENDING";
     public string Priority { get; set; } = "NORMAL";
-    
     public DateTime? ExpiresAt { get; set; }
-
-    /// <summary>
-    /// Đã hết hạn
-    /// </summary>
-
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     [Write(false)]

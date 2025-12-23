@@ -1,13 +1,7 @@
 namespace Contracts.API.ContractsHandler.CheckExpiredContractById;
 
-/// <summary>
-/// Query để check số ngày còn lại của một contract cụ thể
-/// </summary>
 public record CheckExpiredContractByIdQuery(Guid ContractId) : IQuery<CheckExpiredContractByIdResult>;
 
-/// <summary>
-/// Result chứa thông tin số ngày còn lại của contract
-/// </summary>
 public record CheckExpiredContractByIdResult
 {
     public bool Success { get; init; }
@@ -32,14 +26,11 @@ internal class CheckExpiredContractByIdHandler(
         try
         {
             logger.LogInformation("Checking expired status for contract {ContractId}", request.ContractId);
-
-            // Get Vietnam timezone (UTC+7)
             var vietnamTimeZone = TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time");
             var nowVietnam = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, vietnamTimeZone);
 
             using var connection = await connectionFactory.CreateConnectionAsync();
 
-            // Lấy contract và document liên quan
             var contract = await connection.QueryFirstOrDefaultAsync<Contract>(@"
                 SELECT * FROM contracts
                 WHERE Id = @ContractId
@@ -55,8 +46,7 @@ internal class CheckExpiredContractByIdHandler(
                     Message = "Không tìm thấy hợp đồng hoặc hợp đồng đã bị xóa"
                 };
             }
-
-            // Lấy document để có EndDate
+            
             var document = await connection.QueryFirstOrDefaultAsync<ContractDocument>(@"
                 SELECT * FROM contract_documents
                 WHERE Id = @DocumentId
@@ -75,14 +65,9 @@ internal class CheckExpiredContractByIdHandler(
                     Message = "Hợp đồng không có ngày hết hạn"
                 };
             }
-
-            // Convert EndDate sang Vietnam timezone
+            
             var endDateVietnam = TimeZoneInfo.ConvertTimeFromUtc(document.EndDate.Value, vietnamTimeZone);
-
-            // Tính số ngày còn lại (có thể âm nếu đã quá hạn)
             var daysRemaining = (int)(endDateVietnam - nowVietnam).TotalDays;
-
-            // Xác định status
             string status;
             string message;
 

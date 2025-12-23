@@ -1,8 +1,6 @@
 namespace Contracts.API.ContractsHandler.GetAllContracts;
 
-/// <summary>
-/// Query để lấy danh sách tất cả contracts với filtering
-/// </summary>
+
 public record GetAllContractsQuery : IQuery<GetAllContractsResult>
 {
     public string? Status { get; init; }
@@ -10,9 +8,6 @@ public record GetAllContractsQuery : IQuery<GetAllContractsResult>
     public string? SearchKeyword { get; init; }
 }
 
-/// <summary>
-/// Result chứa danh sách contracts
-/// </summary>
 public record GetAllContractsResult
 {
     public bool Success { get; init; }
@@ -21,9 +16,7 @@ public record GetAllContractsResult
     public string? ErrorMessage { get; init; }
 }
 
-/// <summary>
-/// DTO cho contract với thông tin chi tiết
-/// </summary>
+
 public record ContractDto
 {
     public Guid Id { get; init; }
@@ -58,14 +51,12 @@ internal class GetAllContractsHandler(
                 "Getting all contracts: Status={Status}, Type={Type}",
                 request.Status,
                 request.ContractType);
-
-            // Get Vietnam timezone (UTC+7)
+            
             var vietnamTimeZone = TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time");
             var nowVietnam = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, vietnamTimeZone);
 
             using var connection = await connectionFactory.CreateConnectionAsync();
-
-            // Build dynamic WHERE clause
+            
             var whereConditions = new List<string> { "c.IsDeleted = 0" };
             var parameters = new DynamicParameters();
 
@@ -93,8 +84,7 @@ internal class GetAllContractsHandler(
             }
 
             var whereClause = string.Join(" AND ", whereConditions);
-
-            // Get total count
+            
             var countQuery = $@"
                 SELECT COUNT(*)
                 FROM contracts c
@@ -135,8 +125,7 @@ internal class GetAllContractsHandler(
                 ORDER BY c.CreatedAt DESC";
 
             var contracts = await connection.QueryAsync<ContractDto>(query, parameters);
-
-            // Calculate days remaining for each contract
+            
             var contractDtos = contracts.Select(c => CalculateDaysRemaining(c, nowVietnam, vietnamTimeZone)).ToList();
 
             logger.LogInformation(
@@ -161,9 +150,6 @@ internal class GetAllContractsHandler(
         }
     }
 
-    /// <summary>
-    /// Tính số ngày còn lại và xác định expiry status
-    /// </summary>
     private ContractDto CalculateDaysRemaining(ContractDto contract, DateTime nowVietnam, TimeZoneInfo vietnamTimeZone)
     {
         if (contract.EndDate == null)
@@ -174,8 +160,7 @@ internal class GetAllContractsHandler(
                 ExpiryStatus = "no_end_date"
             };
         }
-
-        // Convert EndDate to Vietnam timezone
+        
         var endDateVietnam = TimeZoneInfo.ConvertTimeFromUtc(contract.EndDate.Value, vietnamTimeZone);
         var daysRemaining = (int)(endDateVietnam - nowVietnam).TotalDays;
 

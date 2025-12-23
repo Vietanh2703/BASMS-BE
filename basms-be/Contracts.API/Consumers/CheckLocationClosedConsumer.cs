@@ -1,11 +1,5 @@
-using BuildingBlocks.Messaging.Events;
-
 namespace Contracts.API.Consumers;
 
-/// <summary>
-/// Consumer kiểm tra xem location có đóng cửa vào ngày cụ thể không
-/// Được gọi bởi Shifts.API khi generate shifts
-/// </summary>
 public class CheckLocationClosedConsumer : IConsumer<CheckLocationClosedRequest>
 {
     private readonly IDbConnectionFactory _connectionFactory;
@@ -29,10 +23,6 @@ public class CheckLocationClosedConsumer : IConsumer<CheckLocationClosedRequest>
                 context.Message.Date);
 
             using var connection = await _connectionFactory.CreateConnectionAsync();
-
-            // ================================================================
-            // KIỂM TRA LOCATION SPECIAL DAYS (ĐÓNG CỬA)
-            // ================================================================
             var specialDay = await connection.QueryFirstOrDefaultAsync<dynamic>(
                 @"SELECT
                     DayType,
@@ -60,8 +50,7 @@ public class CheckLocationClosedConsumer : IConsumer<CheckLocationClosedRequest>
             }
             else
             {
-                // Kiểm tra operating schedule (lịch mở cửa thường xuyên)
-                var dayOfWeek = (int)context.Message.Date.DayOfWeek; // 0=Sunday, 1=Monday...
+                var dayOfWeek = (int)context.Message.Date.DayOfWeek; 
 
                 var operating = await connection.QueryFirstOrDefaultAsync<dynamic>(
                     @"SELECT
@@ -80,7 +69,6 @@ public class CheckLocationClosedConsumer : IConsumer<CheckLocationClosedRequest>
 
                 if (operating != null)
                 {
-                    // Kiểm tra theo ngày trong tuần
                     bool isOpen = dayOfWeek switch
                     {
                         0 => operating.IsSundayOpen ?? true,
@@ -133,8 +121,7 @@ public class CheckLocationClosedConsumer : IConsumer<CheckLocationClosedRequest>
                 "Error checking if location {LocationId} is closed on {Date:yyyy-MM-dd}",
                 context.Message.LocationId,
                 context.Message.Date);
-
-            // Respond with safe default (not closed)
+            
             await context.RespondAsync(new CheckLocationClosedResponse
             {
                 IsClosed = false,

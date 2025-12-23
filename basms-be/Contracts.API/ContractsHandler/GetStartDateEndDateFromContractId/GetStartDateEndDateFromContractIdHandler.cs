@@ -1,20 +1,8 @@
-using Dapper;
-
 namespace Contracts.API.ContractsHandler.GetStartDateEndDateFromContractId;
 
-// ================================================================
-// QUERY & RESULT
-// ================================================================
-
-/// <summary>
-/// Query để lấy StartDate và EndDate của Contract
-/// </summary>
 public record GetStartDateEndDateFromContractIdQuery(Guid ContractId)
     : IQuery<GetStartDateEndDateFromContractIdResult>;
 
-/// <summary>
-/// Kết quả chứa StartDate và EndDate
-/// </summary>
 public record GetStartDateEndDateFromContractIdResult
 {
     public bool Success { get; init; }
@@ -22,10 +10,6 @@ public record GetStartDateEndDateFromContractIdResult
     public DateTime? StartDate { get; init; }
     public DateTime? EndDate { get; init; }
 }
-
-// ================================================================
-// HANDLER
-// ================================================================
 
 internal class GetStartDateEndDateFromContractIdHandler(
     IDbConnectionFactory dbFactory,
@@ -50,7 +34,7 @@ internal class GetStartDateEndDateFromContractIdHandler(
 
             var result = await connection.QueryFirstOrDefaultAsync<(DateTime StartDate, DateTime EndDate)?>(
                 sql,
-                new { ContractId = request.ContractId });
+                new { request.ContractId });
 
             if (result == null)
             {
@@ -65,7 +49,7 @@ internal class GetStartDateEndDateFromContractIdHandler(
             }
 
             logger.LogInformation(
-                "✓ Found contract dates: StartDate={StartDate:yyyy-MM-dd}, EndDate={EndDate:yyyy-MM-dd}",
+                "Found contract dates: StartDate={StartDate:yyyy-MM-dd}, EndDate={EndDate:yyyy-MM-dd}",
                 result.Value.StartDate,
                 result.Value.EndDate);
 

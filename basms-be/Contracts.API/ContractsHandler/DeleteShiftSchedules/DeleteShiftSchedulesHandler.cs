@@ -1,17 +1,7 @@
 namespace Contracts.API.ContractsHandler.DeleteShiftSchedules;
 
-// ================================================================
-// COMMAND & RESULT
-// ================================================================
-
-/// <summary>
-/// Command để xóa shift schedule
-/// </summary>
 public record DeleteShiftSchedulesCommand(Guid ShiftScheduleId) : ICommand<DeleteShiftSchedulesResult>;
 
-/// <summary>
-/// Kết quả xóa shift schedule
-/// </summary>
 public record DeleteShiftSchedulesResult
 {
     public bool Success { get; init; }
@@ -19,22 +9,12 @@ public record DeleteShiftSchedulesResult
     public Guid? ShiftScheduleId { get; init; }
 }
 
-// ================================================================
-// HANDLER
-// ================================================================
-
-/// <summary>
-/// DTO cho query result
-/// </summary>
 internal record ShiftScheduleInfo
 {
     public Guid Id { get; init; }
     public string ScheduleName { get; init; } = string.Empty;
 }
 
-/// <summary>
-/// Handler để xóa shift schedule (hard delete)
-/// </summary>
 internal class DeleteShiftSchedulesHandler(
     IDbConnectionFactory connectionFactory,
     ILogger<DeleteShiftSchedulesHandler> logger)
@@ -50,9 +30,6 @@ internal class DeleteShiftSchedulesHandler(
 
             using var connection = await connectionFactory.CreateConnectionAsync();
 
-            // ================================================================
-            // 1. CHECK IF SHIFT SCHEDULE EXISTS
-            // ================================================================
             var existingSchedule = await connection.QuerySingleOrDefaultAsync<ShiftScheduleInfo>(
                 "SELECT Id, ScheduleName FROM contract_shift_schedules WHERE Id = @Id AND IsDeleted = 0",
                 new { Id = request.ShiftScheduleId });
@@ -67,9 +44,6 @@ internal class DeleteShiftSchedulesHandler(
                 };
             }
 
-            // ================================================================
-            // 2. DELETE SHIFT SCHEDULE (HARD DELETE)
-            // ================================================================
             var deleteQuery = @"
                 DELETE FROM contract_shift_schedules
                 WHERE Id = @ShiftScheduleId
