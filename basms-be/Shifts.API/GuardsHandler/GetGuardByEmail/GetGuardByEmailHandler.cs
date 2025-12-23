@@ -1,13 +1,9 @@
-// Handler xử lý logic lấy thông tin guard theo Email
-// Query từ cache database
 using Shifts.API.GuardsHandler.GetGuardById;
 
 namespace Shifts.API.GuardsHandler.GetGuardByEmail;
 
-// Query chứa Email guard cần lấy
 public record GetGuardByEmailQuery(string Email) : IQuery<GetGuardByEmailResult>;
 
-// Result chứa guard detail DTO
 public record GetGuardByEmailResult(GuardDetailDto Guard);
 
 internal class GetGuardByEmailHandler(
@@ -20,11 +16,8 @@ internal class GetGuardByEmailHandler(
         try
         {
             logger.LogInformation("Getting guard by Email: {Email}", request.Email);
-
-            // Bước 1: Tạo kết nối database
             using var connection = await connectionFactory.CreateConnectionAsync();
-
-            // Bước 2: Lấy guard theo Email từ cache (sử dụng index trên Email column)
+            
             var guards = await connection.GetAllAsync<Guards>();
             var guard = guards.FirstOrDefault(g =>
                 !string.IsNullOrEmpty(g.Email) &&
@@ -36,8 +29,6 @@ internal class GetGuardByEmailHandler(
                 logger.LogWarning("Guard not found with Email: {Email}", request.Email);
                 throw new InvalidOperationException($"Guard with Email {request.Email} not found");
             }
-
-            // Bước 3: Map entity sang DTO
             var guardDetailDto = new GuardDetailDto(
                 Id: guard.Id,
                 IdentityNumber: guard.IdentityNumber,
@@ -70,8 +61,7 @@ internal class GetGuardByEmailHandler(
 
             logger.LogInformation("Successfully retrieved guard: {EmployeeCode} with email {Email}",
                 guard.EmployeeCode, guard.Email);
-
-            // Bước 4: Trả về kết quả
+            
             return new GetGuardByEmailResult(guardDetailDto);
         }
         catch (Exception ex)

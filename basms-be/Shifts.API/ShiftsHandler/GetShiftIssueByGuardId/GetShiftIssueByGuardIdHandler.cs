@@ -1,17 +1,7 @@
-using Dapper;
-using Shifts.API.Data;
-using Shifts.API.Extensions;
-
 namespace Shifts.API.ShiftsHandler.GetShiftIssueByGuardId;
 
-/// <summary>
-/// Query để lấy danh sách shift issues của một guard
-/// </summary>
 public record GetShiftIssueByGuardIdQuery(Guid GuardId) : IQuery<GetShiftIssueByGuardIdResult>;
 
-/// <summary>
-/// Result chứa danh sách shift issues của guard
-/// </summary>
 public record GetShiftIssueByGuardIdResult
 {
     public bool Success { get; init; }
@@ -21,9 +11,7 @@ public record GetShiftIssueByGuardIdResult
     public string? ErrorMessage { get; init; }
 }
 
-/// <summary>
-/// DTO cho shift issue
-/// </summary>
+
 public record ShiftIssueDto
 {
     public Guid Id { get; init; }
@@ -42,11 +30,7 @@ public record ShiftIssueDto
     public Guid CreatedBy { get; init; }
 }
 
-/// <summary>
-/// Handler để lấy danh sách shift issues của một guard cụ thể
-/// Sắp xếp theo IssueDate giảm dần (mới nhất trước)
-/// Tự động tạo presigned URL cho evidence files
-/// </summary>
+
 internal class GetShiftIssueByGuardIdHandler(
     IDbConnectionFactory dbFactory,
     IS3Service s3Service,
@@ -65,9 +49,6 @@ internal class GetShiftIssueByGuardIdHandler(
 
             using var connection = await dbFactory.CreateConnectionAsync();
 
-            // ================================================================
-            // KIỂM TRA GUARD CÓ TỒN TẠI KHÔNG
-            // ================================================================
             var guardExists = await connection.ExecuteScalarAsync<bool>(
                 "SELECT COUNT(*) > 0 FROM guards WHERE Id = @GuardId AND IsDeleted = 0",
                 new { GuardId = request.GuardId });
@@ -83,13 +64,6 @@ internal class GetShiftIssueByGuardIdHandler(
                 };
             }
 
-            // ================================================================
-            // SQL QUERY - LẤY DANH SÁCH SHIFT ISSUES
-            // ================================================================
-            // Logic:
-            // 1. Lấy tất cả shift_issues có GuardId khớp
-            // 2. Sắp xếp theo IssueDate giảm dần (mới nhất trước)
-            // ================================================================
 
             var sql = @"
                 SELECT
@@ -122,9 +96,6 @@ internal class GetShiftIssueByGuardIdHandler(
                 rawIssues.Count,
                 request.GuardId);
 
-            // ================================================================
-            // TẠO PRESIGNED URL CHO EVIDENCE FILES
-            // ================================================================
             var issuesWithPresignedUrls = new List<ShiftIssueDto>();
 
             foreach (dynamic issue in rawIssues)
@@ -133,14 +104,13 @@ internal class GetShiftIssueByGuardIdHandler(
                 string? evidenceFileUrl = issue.EvidenceFileUrl;
                 Guid issueId = issue.Id;
 
-                // Nếu có EvidenceFileUrl, tạo presigned URL
                 if (!string.IsNullOrEmpty(evidenceFileUrl))
                 {
                     try
                     {
                         presignedUrl = s3Service.GetPresignedUrl(evidenceFileUrl, expirationMinutes: 15);
                         logger.LogInformation(
-                            "✓ Generated presigned URL for issue {IssueId}",
+                            "Generated presigned URL for issue {IssueId}",
                             issueId);
                     }
                     catch (Exception ex)
@@ -149,7 +119,6 @@ internal class GetShiftIssueByGuardIdHandler(
                             "Failed to generate presigned URL for issue {IssueId}, file: {FileUrl}",
                             issueId,
                             evidenceFileUrl);
-                        // Không throw exception, chỉ để presignedUrl = null
                     }
                 }
 

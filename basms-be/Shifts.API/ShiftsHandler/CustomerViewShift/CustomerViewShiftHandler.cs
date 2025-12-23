@@ -1,21 +1,13 @@
-using Dapper;
-
 namespace Shifts.API.ShiftsHandler.CustomerViewShift;
 
-/// <summary>
-/// Query để Customer xem các ca trực của contract
-/// </summary>
 public record CustomerViewShiftQuery(
     Guid ContractId,
     DateTime? FromDate = null,
     DateTime? ToDate = null,
-    string? Status = null,      // DRAFT, SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED
-    string? ShiftType = null    // REGULAR, OVERTIME, EMERGENCY, REPLACEMENT, TRAINING
+    string? Status = null,      
+    string? ShiftType = null    
 ) : IQuery<CustomerViewShiftResult>;
 
-/// <summary>
-/// Result chứa danh sách ca trực của contract
-/// </summary>
 public record CustomerViewShiftResult
 {
     public bool Success { get; init; }
@@ -25,30 +17,20 @@ public record CustomerViewShiftResult
     public string? ErrorMessage { get; init; }
 }
 
-/// <summary>
-/// DTO thông tin ca trực cho Customer xem
-/// </summary>
 public record CustomerShiftDto
 {
-    // Shift Basic Info
     public Guid ShiftId { get; init; }
     public DateTime ShiftDate { get; init; }
     public DateTime ShiftStart { get; init; }
     public DateTime ShiftEnd { get; init; }
-
-    // Duration
     public int TotalDurationMinutes { get; init; }
     public decimal WorkDurationHours { get; init; }
     public int BreakDurationMinutes { get; init; }
-
-    // Location
     public Guid LocationId { get; init; }
     public string? LocationName { get; init; }
     public string? LocationAddress { get; init; }
     public decimal? LocationLatitude { get; init; }
     public decimal? LocationLongitude { get; init; }
-
-    // Shift Type & Classification
     public string ShiftType { get; init; } = string.Empty;
     public bool IsNightShift { get; init; }
     public decimal NightHours { get; init; }
@@ -57,8 +39,6 @@ public record CustomerShiftDto
     public bool IsTetHoliday { get; init; }
     public bool IsSaturday { get; init; }
     public bool IsSunday { get; init; }
-
-    // Staffing Info
     public int RequiredGuards { get; init; }
     public int AssignedGuardsCount { get; init; }
     public int ConfirmedGuardsCount { get; init; }
@@ -67,23 +47,15 @@ public record CustomerShiftDto
     public bool IsFullyStaffed { get; init; }
     public bool IsUnderstaffed { get; init; }
     public decimal? StaffingPercentage { get; init; }
-
-    // Status
     public string Status { get; init; } = string.Empty;
-
-    // Flags
     public bool IsMandatory { get; init; }
     public bool IsCritical { get; init; }
     public bool RequiresArmedGuard { get; init; }
-
-    // Description
     public string? Description { get; init; }
     public string? SpecialInstructions { get; init; }
 }
 
-/// <summary>
-/// Tóm tắt thông tin ca trực của contract
-/// </summary>
+
 public record ContractShiftSummary
 {
     public int TotalShifts { get; init; }
@@ -103,9 +75,6 @@ public record ContractShiftSummary
     public int HolidayShifts { get; init; }
 }
 
-/// <summary>
-/// Handler để Customer xem các ca trực của contract
-/// </summary>
 internal class CustomerViewShiftHandler(
     IDbConnectionFactory dbFactory,
     ILogger<CustomerViewShiftHandler> logger)
@@ -126,9 +95,6 @@ internal class CustomerViewShiftHandler(
 
             using var connection = await dbFactory.CreateConnectionAsync();
 
-            // ================================================================
-            // BƯỚC 1: BUILD DYNAMIC SQL QUERY
-            // ================================================================
             var whereClauses = new List<string>
             {
                 "ContractId = @ContractId",
@@ -163,9 +129,6 @@ internal class CustomerViewShiftHandler(
 
             var whereClause = string.Join(" AND ", whereClauses);
 
-            // ================================================================
-            // BƯỚC 2: COUNT TOTAL
-            // ================================================================
             var countSql = $@"
                 SELECT COUNT(*)
                 FROM shifts
@@ -174,31 +137,21 @@ internal class CustomerViewShiftHandler(
             var totalCount = await connection.ExecuteScalarAsync<int>(countSql, parameters);
 
             logger.LogInformation("Found {TotalCount} shifts for contract", totalCount);
-
-            // ================================================================
-            // BƯỚC 3: GET SHIFTS
-            // ================================================================
+            
             var sql = $@"
                 SELECT
-                    -- Shift Basic Info
                     Id AS ShiftId,
                     ShiftDate,
                     ShiftStart,
                     ShiftEnd,
-
-                    -- Duration
                     TotalDurationMinutes,
                     WorkDurationHours,
                     BreakDurationMinutes,
-
-                    -- Location
                     LocationId,
                     LocationName,
                     LocationAddress,
                     LocationLatitude,
                     LocationLongitude,
-
-                    -- Shift Type & Classification
                     ShiftType,
                     IsNightShift,
                     NightHours,
@@ -207,8 +160,6 @@ internal class CustomerViewShiftHandler(
                     IsTetHoliday,
                     IsSaturday,
                     IsSunday,
-
-                    -- Staffing Info
                     RequiredGuards,
                     AssignedGuardsCount,
                     ConfirmedGuardsCount,
@@ -217,16 +168,10 @@ internal class CustomerViewShiftHandler(
                     IsFullyStaffed,
                     IsUnderstaffed,
                     StaffingPercentage,
-
-                    -- Status
                     Status,
-
-                    -- Flags
                     IsMandatory,
                     IsCritical,
                     RequiresArmedGuard,
-
-                    -- Description
                     Description,
                     SpecialInstructions
 
@@ -244,9 +189,6 @@ internal class CustomerViewShiftHandler(
                 shiftsList.Count,
                 request.ContractId);
 
-            // ================================================================
-            // BƯỚC 4: CALCULATE SUMMARY
-            // ================================================================
             var summary = CalculateSummary(shiftsList);
 
             return new CustomerViewShiftResult
@@ -272,10 +214,7 @@ internal class CustomerViewShiftHandler(
             };
         }
     }
-
-    /// <summary>
-    /// Tính toán tóm tắt thông tin ca trực
-    /// </summary>
+    
     private ContractShiftSummary CalculateSummary(List<CustomerShiftDto> shifts)
     {
         return new ContractShiftSummary

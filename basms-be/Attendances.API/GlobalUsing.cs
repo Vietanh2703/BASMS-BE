@@ -22,3 +22,4 @@ global using Amazon;
 global using Amazon.Extensions.NETCore.Setup;
 global using Amazon.Runtime;
 global using BuildingBlocks.Extensions;
+global using Attendances.API.Helpers;

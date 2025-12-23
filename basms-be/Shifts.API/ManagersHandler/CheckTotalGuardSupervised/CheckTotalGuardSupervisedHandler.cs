@@ -1,27 +1,19 @@
-using Dapper;
-
 namespace Shifts.API.ManagersHandler.CheckTotalGuardSupervised;
 
-/// <summary>
-/// Query để kiểm tra số guards thực tế của manager so với TotalGuardsSupervised
-/// </summary>
 public record CheckTotalGuardSupervisedQuery(
     Guid ManagerId
 ) : IQuery<CheckTotalGuardSupervisedResult>;
 
-/// <summary>
-/// Result trả về thông tin so sánh guards
-/// </summary>
 public record CheckTotalGuardSupervisedResult
 {
     public bool Success { get; init; }
     public string? ErrorMessage { get; init; }
     public Guid ManagerId { get; init; }
     public string? ManagerName { get; init; }
-    public int ActualGuardsCount { get; init; } // Số guards thực tế đang có DirectManagerId = ManagerId
-    public int TotalGuardsSupervised { get; init; } // Số từ managers.TotalGuardsSupervised
-    public int AvailableSlots { get; init; } // Số slot còn lại = TotalGuardsSupervised - ActualGuardsCount
-    public bool IsOverLimit { get; init; } // Có vượt quá giới hạn không (ActualGuardsCount > TotalGuardsSupervised)
+    public int ActualGuardsCount { get; init; }
+    public int TotalGuardsSupervised { get; init; }
+    public int AvailableSlots { get; init; }
+    public bool IsOverLimit { get; init; }
     public string Message { get; init; } = string.Empty;
 };
 
@@ -41,10 +33,7 @@ internal class CheckTotalGuardSupervisedHandler(
                 query.ManagerId);
 
             using var connection = await connectionFactory.CreateConnectionAsync();
-
-            // ================================================================
-            // BƯỚC 1: LẤY THÔNG TIN MANAGER
-            // ================================================================
+            
             var manager = await connection.QueryFirstOrDefaultAsync<Managers>(
                 @"SELECT * FROM managers
                   WHERE Id = @ManagerId
@@ -61,10 +50,7 @@ internal class CheckTotalGuardSupervisedHandler(
                     ManagerId = query.ManagerId
                 };
             }
-
-            // ================================================================
-            // BƯỚC 2: ĐẾM SỐ GUARDS THỰC TẾ
-            // ================================================================
+            
             var actualGuardsCount = await connection.QuerySingleAsync<int>(
                 @"SELECT COUNT(*)
                   FROM guards
@@ -79,9 +65,6 @@ internal class CheckTotalGuardSupervisedHandler(
                 actualGuardsCount,
                 manager.TotalGuardsSupervised);
 
-            // ================================================================
-            // BƯỚC 3: SO SÁNH VÀ TÍNH TOÁN
-            // ================================================================
             var totalGuardsSupervised = manager.TotalGuardsSupervised;
             var availableSlots = totalGuardsSupervised - actualGuardsCount;
             var isLimit = actualGuardsCount == totalGuardsSupervised;

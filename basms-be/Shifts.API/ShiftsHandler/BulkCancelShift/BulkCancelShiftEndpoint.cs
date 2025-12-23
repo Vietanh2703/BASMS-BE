@@ -1,29 +1,5 @@
-using Carter;
-using MediatR;
-using Microsoft.AspNetCore.Mvc;
-using Shifts.API.Extensions;
-using System.Text.Json;
-
 namespace Shifts.API.ShiftsHandler.BulkCancelShift;
 
-/// <summary>
-/// Endpoint để hủy nhiều ca trực cùng lúc (ốm dài ngày, thai sản, nghỉ phép dài hạn)
-///
-/// HỖ TRỢ 2 FORMATS:
-/// 1. JSON (application/json): Không có file, chỉ URL
-/// 2. MULTIPART (multipart/form-data): JSON data + file upload
-///
-/// USE CASE:
-/// - Guard nghỉ ốm dài ngày → Hủy tất cả ca trong khoảng thời gian
-/// - Guard nghỉ thai sản 3 tháng → Hủy tất cả ca trong 3 tháng
-/// - Guard nghỉ phép dài hạn → Hủy tất cả ca trong khoảng thời gian
-///
-/// FEATURES:
-/// - Upload file chứng từ (ảnh/PDF/Word/video) lên AWS S3
-/// - Lưu thông tin vào shift_issues table
-/// - Sync với Attendances.API qua events
-/// - Send email cho guard và director
-/// </summary>
 public class BulkCancelShiftEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
@@ -41,22 +17,16 @@ public class BulkCancelShiftEndpoint : ICarterModule
                     Stream? fileStream = null;
                     string? fileName = null;
                     string? contentType = null;
-
-                    // ================================================================
-                    // BƯỚC 1: PARSE REQUEST (JSON hoặc MULTIPART)
-                    // ================================================================
+                    
                     if (request.HasFormContentType)
                     {
-                        // MULTIPART/FORM-DATA với file upload
-                        logger.LogInformation("📦 Parsing multipart/form-data request");
+                        logger.LogInformation("Parsing multipart/form-data request");
 
                         var form = await request.ReadFormAsync(cancellationToken);
-
-                        // Log tất cả các keys trong form để debug
+                        
                         logger.LogInformation("Form keys: {Keys}", string.Join(", ", form.Keys));
                         logger.LogInformation("Form files count: {Count}", form.Files.Count);
-
-                        // Parse JSON data từ form field "data" (case-insensitive)
+                        
                         var dataKey = form.Keys.FirstOrDefault(k => k.Equals("data", StringComparison.OrdinalIgnoreCase));
 
                         if (dataKey == null)
@@ -83,13 +53,11 @@ public class BulkCancelShiftEndpoint : ICarterModule
                                 message = $"JSON data không hợp lệ: {ex.Message}"
                             });
                         }
-
-                        // Validate và lưu file info (nếu có)
+                        
                         if (form.Files.Count > 0)
                         {
                             var file = form.Files[0];
-
-                            // Validation: File size (max 100MB)
+                            
                             const long maxFileSize = 100 * 1024 * 1024;
                             if (file.Length > maxFileSize)
                             {
@@ -99,8 +67,7 @@ public class BulkCancelShiftEndpoint : ICarterModule
                                     message = $"File quá lớn. Kích thước tối đa: 100MB"
                                 });
                             }
-
-                            // Validation: File type
+                            
                             var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".pdf", ".doc", ".docx", ".mp4", ".avi", ".mov" };
                             var fileExtension = Path.GetExtension(file.FileName).ToLowerInvariant();
 
@@ -114,23 +81,19 @@ public class BulkCancelShiftEndpoint : ICarterModule
                             }
 
                             logger.LogInformation(
-                                "📁 Received evidence file: {FileName} ({Size}MB)",
+                                "Received evidence file: {FileName} ({Size}MB)",
                                 file.FileName,
                                 file.Length / 1024.0 / 1024.0);
-
-                            // Lưu file info để pass vào handler (handler sẽ upload lên S3)
+                            
                             fileStream = file.OpenReadStream();
                             fileName = file.FileName;
-                            contentType = file.ContentType ?? GetContentType(fileExtension);
+                            contentType = file.ContentType;
                         }
                     }
                     else if (request.ContentType?.Contains("application/json") == true)
                     {
-                        // JSON REQUEST (không hỗ trợ file upload, chỉ dùng form-data)
-                        logger.LogInformation("📄 Parsing JSON request");
-
+                        logger.LogInformation("Parsing JSON request");
                         requestData = await request.ReadFromJsonAsync<BulkCancelShiftRequest>(cancellationToken);
-                        // JSON không có file, fileStream sẽ là null
                     }
                     else
                     {
@@ -150,9 +113,6 @@ public class BulkCancelShiftEndpoint : ICarterModule
                         });
                     }
 
-                    // ================================================================
-                    // BƯỚC 2: VALIDATE REQUEST DATA
-                    // ================================================================
                     if (requestData.GuardId == Guid.Empty)
                     {
                         return Results.BadRequest(new { success = false, message = "GuardId không hợp lệ" });
@@ -182,10 +142,7 @@ public class BulkCancelShiftEndpoint : ICarterModule
                             message = "LeaveType không hợp lệ. Chỉ chấp nhận: SICK_LEAVE, MATERNITY_LEAVE, LONG_TERM_LEAVE, OTHER"
                         });
                     }
-
-                    // ================================================================
-                    // BƯỚC 3: TẠO COMMAND VÀ EXECUTE BULK CANCEL
-                    // ================================================================
+                    
                     var command = new BulkCancelShiftCommand(
                         GuardId: requestData.GuardId,
                         FromDate: requestData.FromDate,
@@ -209,10 +166,7 @@ public class BulkCancelShiftEndpoint : ICarterModule
                             errors = result.Errors
                         });
                     }
-
-                    // ================================================================
-                    // SUCCESS RESPONSE
-                    // ================================================================
+                    
                     return Results.Ok(new
                     {
                         success = true,
@@ -223,7 +177,7 @@ public class BulkCancelShiftEndpoint : ICarterModule
                             shiftsCancelled = result.ShiftsCancelled,
                             assignmentsCancelled = result.AssignmentsCancelled,
                             guardsAffected = result.GuardsAffected,
-                            evidenceFileUrl = result.EvidenceFileUrl, // URL của file đã upload lên S3
+                            evidenceFileUrl = result.EvidenceFileUrl, 
                             details = result.Details.Select(d => new
                             {
                                 shiftId = d.ShiftId,
@@ -241,7 +195,7 @@ public class BulkCancelShiftEndpoint : ICarterModule
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "❌ Error in bulk cancel shift");
+                    logger.LogError(ex, "Error in bulk cancel shift");
                     return Results.StatusCode(500);
                 }
             })
@@ -250,13 +204,11 @@ public class BulkCancelShiftEndpoint : ICarterModule
             .WithDescription("Hủy nhiều ca trực cùng lúc với tùy chọn upload file chứng từ (hỗ trợ JSON và multipart/form-data)")
             .Produces<object>(StatusCodes.Status200OK)
             .Produces<object>(StatusCodes.Status400BadRequest)
-            .DisableAntiforgery() // Disable antiforgery cho multipart upload
+            .DisableAntiforgery() 
             .RequireAuthorization();
     }
 
-    /// <summary>
-    /// Xác định content type dựa trên file extension
-    /// </summary>
+
     private static string GetContentType(string extension)
     {
         return extension.ToLowerInvariant() switch

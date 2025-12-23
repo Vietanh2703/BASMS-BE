@@ -1,11 +1,10 @@
 namespace Users.API.UsersHandler.RefreshAccessToken;
 
-// Request DTO
 public record RefreshAccessTokenRequest(
     string RefreshToken
 );
 
-// Response DTO
+
 public record RefreshAccessTokenResponse(
     Guid UserId,
     string Email,

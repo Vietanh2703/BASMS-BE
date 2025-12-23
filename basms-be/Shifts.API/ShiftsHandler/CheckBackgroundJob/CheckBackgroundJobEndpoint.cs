@@ -1,18 +1,9 @@
-using Dapper;
-using MassTransit;
-using Microsoft.AspNetCore.Mvc;
-using Shifts.API.Data;
-using BuildingBlocks.Messaging.Events;
-
 namespace Shifts.API.ShiftsHandler.CheckBackgroundJob;
 
 public class CheckBackgroundJobEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        // ====================================================================
-        // 1. CHECK STATUS - Kiểm tra trạng thái background job
-        // ====================================================================
         app.MapGet("/api/shifts/background-job/status", async (
             [FromServices] IDbConnectionFactory dbFactory) =>
         {
@@ -21,8 +12,6 @@ public class CheckBackgroundJobEndpoint : ICarterModule
             var response = new
             {
                 ServerTime = DateTime.UtcNow,
-
-                // Check contracts có auto-generate enabled
                 TotalContractsWithAutoGenerate = await connection.ExecuteScalarAsync<int>(@"
                     SELECT COUNT(DISTINCT st.ContractId)
                     FROM shift_templates st
@@ -30,8 +19,7 @@ public class CheckBackgroundJobEndpoint : ICarterModule
                       AND st.IsDeleted = 0
                       AND st.ContractId IS NOT NULL
                 "),
-
-                // Check contracts cần generate (còn <= 7 ngày)
+                
                 ContractsNeedingGeneration = await connection.QueryAsync<dynamic>(@"
                     SELECT
                         st.ContractId,
@@ -48,8 +36,7 @@ public class CheckBackgroundJobEndpoint : ICarterModule
                     HAVING MAX(s.ShiftDate) IS NULL
                        OR MAX(s.ShiftDate) <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)
                 "),
-
-                // Statistics
+                
                 Stats = new
                 {
                     TotalShiftTemplates = await connection.ExecuteScalarAsync<int>(
@@ -76,8 +63,7 @@ public class CheckBackgroundJobEndpoint : ICarterModule
                           AND ShiftDate >= CURDATE()
                     ")
                 },
-
-                // Check managers có quyền tạo shift
+                
                 ManagersWithPermission = await connection.ExecuteScalarAsync<int>(@"
                     SELECT COUNT(*) FROM managers
                     WHERE CanCreateShifts = 1
@@ -101,10 +87,7 @@ public class CheckBackgroundJobEndpoint : ICarterModule
         .WithTags("Shifts - Background Jobs")
         .WithSummary("Check background job status and diagnostics")
         .WithDescription("Returns information about auto-generate shifts background job");
-
-        // ====================================================================
-        // 2. TRIGGER MANUAL - Chạy thủ công để test
-        // ====================================================================
+        
         app.MapPost("/api/shifts/background-job/trigger-manual", async (
             [FromServices] IDbConnectionFactory dbFactory,
             [FromServices] IRequestClient<GetContractRequest> contractClient,
@@ -113,8 +96,7 @@ public class CheckBackgroundJobEndpoint : ICarterModule
             using var connection = await dbFactory.CreateConnectionAsync();
 
             logger.LogInformation("=== MANUAL TRIGGER: Background Job Simulation ===");
-
-            // Find contracts needing generation
+            
             var contractsQuery = @"
                 SELECT
                     st.ContractId,
@@ -151,8 +133,6 @@ public class CheckBackgroundJobEndpoint : ICarterModule
                 try
                 {
                     var contractId = (Guid)candidate.ContractId;
-
-                    // Query contract from Contracts.API
                     var response = await contractClient.GetResponse<GetContractResponse>(
                         new GetContractRequest { ContractId = contractId },
                         timeout: RequestTimeout.After(s: 10));
@@ -172,8 +152,6 @@ public class CheckBackgroundJobEndpoint : ICarterModule
                     }
 
                     var contract = contractResponse.Contract;
-
-                    // Get template IDs
                     var templateIds = await connection.QueryAsync<Guid>(
                         @"SELECT Id FROM shift_templates
                           WHERE ContractId = @ContractId
@@ -224,12 +202,9 @@ public class CheckBackgroundJobEndpoint : ICarterModule
         })
         .WithName("TriggerBackgroundJobManual")
         .WithTags("Shifts - Background Jobs")
-        .WithSummary("Manually trigger background job check (for testing)")
-        .WithDescription("Simulates the background job execution to test the logic");
+        .WithSummary("Manually trigger background job check (for testing)");
 
-        // ====================================================================
-        // 3. CHECK SPECIFIC CONTRACT - Kiểm tra contract cụ thể
-        // ====================================================================
+
         app.MapGet("/api/shifts/background-job/check-contract/{contractId:guid}", async (
             [FromRoute] Guid contractId,
             [FromServices] IDbConnectionFactory dbFactory,
@@ -237,7 +212,6 @@ public class CheckBackgroundJobEndpoint : ICarterModule
         {
             using var connection = await dbFactory.CreateConnectionAsync();
 
-            // Get contract info from Contracts.API
             var response = await contractClient.GetResponse<GetContractResponse>(
                 new GetContractRequest { ContractId = contractId },
                 timeout: RequestTimeout.After(s: 10));
@@ -255,8 +229,7 @@ public class CheckBackgroundJobEndpoint : ICarterModule
             }
 
             var contract = contractResponse.Contract;
-
-            // Get templates
+            
             var templates = await connection.QueryAsync<dynamic>(@"
                 SELECT
                     Id,
@@ -270,8 +243,7 @@ public class CheckBackgroundJobEndpoint : ICarterModule
                   AND IsDeleted = 0
                 ORDER BY IsActive DESC, TemplateName
             ", new { ContractId = contractId });
-
-            // Get shift statistics
+            
             var shiftStats = await connection.QueryFirstOrDefaultAsync<dynamic>(@"
                 SELECT
                     COUNT(*) AS TotalShifts,
@@ -326,7 +298,6 @@ public class CheckBackgroundJobEndpoint : ICarterModule
         })
         .WithName("CheckContractBackgroundJob")
         .WithTags("Shifts - Background Jobs")
-        .WithSummary("Check if specific contract will trigger background job")
-        .WithDescription("Analyze a specific contract to see if it meets auto-generation criteria");
+        .WithSummary("Check if specific contract will trigger background job");
     }
 }

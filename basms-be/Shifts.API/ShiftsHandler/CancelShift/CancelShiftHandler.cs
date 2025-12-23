@@ -1,19 +1,12 @@
-using Dapper;
-using MassTransit;
-using BuildingBlocks.Messaging.Events;
-using Shifts.API.Handlers.SendNotification;
-using Shifts.API.Handlers.SendEmailNotification;
-
 namespace Shifts.API.ShiftsHandler.CancelShift;
 
-// Command để hủy shift
+
 public record CancelShiftCommand(
     Guid ShiftId,
-    string CancellationReason,      // Lý do hủy ca
-    Guid CancelledBy                // Manager hủy ca
+    string CancellationReason,      
+    Guid CancelledBy              
 ) : ICommand<CancelShiftResult>;
 
-// Result
 public record CancelShiftResult(
     bool Success,
     string Message,
@@ -38,9 +31,6 @@ internal class CancelShiftHandler(
 
             using var connection = await dbFactory.CreateConnectionAsync();
 
-            // ================================================================
-            // BƯỚC 1: LẤY SHIFT HIỆN TẠI
-            // ================================================================
             var shift = await connection.GetAsync<Models.Shifts>(request.ShiftId);
 
             if (shift == null || shift.IsDeleted)
@@ -48,8 +38,7 @@ internal class CancelShiftHandler(
                 logger.LogWarning("Shift {ShiftId} not found", request.ShiftId);
                 throw new InvalidOperationException($"Shift {request.ShiftId} not found");
             }
-
-            // Kiểm tra shift đã bị hủy chưa
+            
             if (shift.Status == "CANCELLED")
             {
                 logger.LogWarning("Shift {ShiftId} is already cancelled", request.ShiftId);
@@ -58,8 +47,7 @@ internal class CancelShiftHandler(
                     "Shift đã bị hủy trước đó",
                     0);
             }
-
-            // Kiểm tra shift đã hoàn thành chưa
+            
             if (shift.Status == "COMPLETED")
             {
                 logger.LogWarning("Cannot cancel completed shift {ShiftId}", request.ShiftId);
@@ -71,10 +59,7 @@ internal class CancelShiftHandler(
                 shift.Id,
                 shift.Status,
                 shift.ShiftDate);
-
-            // ================================================================
-            // BƯỚC 2: LẤY DANH SÁCH GUARDS ĐƯỢC ASSIGN VÀO CA NÀY
-            // ================================================================
+            
             var sql = @"
                 SELECT sa.*, g.Email, g.FullName, g.PhoneNumber
                 FROM shift_assignments sa
@@ -94,9 +79,6 @@ internal class CancelShiftHandler(
                 assignmentsList.Count,
                 request.ShiftId);
 
-            // ================================================================
-            // BƯỚC 3: CẬP NHẬT SHIFT STATUS = CANCELLED
-            // ================================================================
             shift.Status = "CANCELLED";
             shift.CancelledAt = DateTime.UtcNow;
             shift.CancellationReason = request.CancellationReason;
@@ -106,11 +88,8 @@ internal class CancelShiftHandler(
 
             await connection.UpdateAsync(shift);
 
-            logger.LogInformation("✓ Shift {ShiftId} status updated to CANCELLED", shift.Id);
+            logger.LogInformation("Shift {ShiftId} status updated to CANCELLED", shift.Id);
 
-            // ================================================================
-            // BƯỚC 4: CẬP NHẬT TẤT CẢ ASSIGNMENTS = CANCELLED
-            // ================================================================
             var updateAssignmentsSql = @"
                 UPDATE shift_assignments
                 SET
@@ -133,13 +112,10 @@ internal class CancelShiftHandler(
                 });
 
             logger.LogInformation(
-                "✓ Updated {Count} shift assignments to CANCELLED",
+                "Updated {Count} shift assignments to CANCELLED",
                 affectedRows);
 
-            // ================================================================
-            // 🆕 BƯỚC 4.5: PUBLISH EVENTS ĐỂ SYNC VỚI ATTENDANCES.API
-            // ================================================================
-            logger.LogInformation("📤 Publishing ShiftAssignmentCancelledEvent...");
+            logger.LogInformation("Publishing ShiftAssignmentCancelledEvent...");
 
             foreach (var assignment in assignmentsList)
             {
@@ -149,7 +125,7 @@ internal class CancelShiftHandler(
                     ShiftId = assignment.ShiftId,
                     GuardId = assignment.GuardId,
                     CancellationReason = request.CancellationReason,
-                    LeaveType = "OTHER", // Single cancel thường là hủy đơn lẻ
+                    LeaveType = "OTHER", 
                     CancelledAt = DateTime.UtcNow,
                     CancelledBy = request.CancelledBy,
                     EvidenceImageUrl = null
@@ -157,12 +133,9 @@ internal class CancelShiftHandler(
             }
 
             logger.LogInformation(
-                "✓ Published {Count} events to sync with Attendances.API",
+                "Published {Count} events to sync with Attendances.API",
                 assignmentsList.Count);
-
-            // ================================================================
-            // 🆕 BƯỚC 4.6: LƯU SHIFT ISSUE RECORD
-            // ================================================================
+            
             var vietnamNow = TimeZoneInfo.ConvertTimeFromUtc(
                 DateTime.UtcNow,
                 TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time"));
@@ -171,7 +144,7 @@ internal class CancelShiftHandler(
             {
                 Id = Guid.NewGuid(),
                 ShiftId = shift.Id,
-                GuardId = (Guid?)null, // Single cancel không liên quan đến guard cụ thể
+                GuardId = (Guid?)null, 
                 IssueType = "CANCEL_SHIFT",
                 Reason = request.CancellationReason,
                 StartDate = (DateTime?)null,
@@ -205,19 +178,15 @@ internal class CancelShiftHandler(
                 )", issueRecord);
 
             logger.LogInformation(
-                "✓ Saved shift issue record: {IssueId}, Type: {IssueType}",
+                "Saved shift issue record: {IssueId}, Type: {IssueType}",
                 issueRecord.Id,
                 issueRecord.IssueType);
-
-            // ================================================================
-            // BƯỚC 5: GỬI IN-APP NOTIFICATIONS VÀ EMAILS CHO GUARDS
-            // ================================================================
+            
             logger.LogInformation("Sending notifications and emails to guards");
 
             var emailsSent = 0;
             foreach (var assignment in assignmentsList)
             {
-                // Gửi in-app notification cho guard
                 var notificationCommand = new SendNotificationCommand(
                     ShiftId: shift.Id,
                     ContractId: shift.ContractId,
@@ -231,8 +200,7 @@ internal class CancelShiftHandler(
                 );
 
                 await sender.Send(notificationCommand, cancellationToken);
-
-                // Gửi email nếu guard có email
+                
                 if (!string.IsNullOrEmpty(assignment.Email))
                 {
                     var emailCommand = new SendEmailNotificationCommand(
@@ -252,30 +220,21 @@ internal class CancelShiftHandler(
             }
 
             logger.LogInformation(
-                "✓ Sent notifications to {Count} guards ({EmailCount} emails)",
+                "Sent notifications to {Count} guards ({EmailCount} emails)",
                 assignmentsList.Count,
                 emailsSent);
-
-            // ================================================================
-            // BƯỚC 6: GỬI EMAIL CHO CUSTOMER VÀ DIRECTOR (nếu có contract)
-            // ================================================================
+            
             if (shift.ContractId.HasValue)
             {
                 logger.LogInformation("Sending emails to customer and director for shift cancellation");
 
                 try
                 {
-                    // Lấy thông tin manager
                     var manager = await connection.GetAsync<Managers>(shift.ManagerId);
                     var managerName = manager?.FullName ?? "Unknown Manager";
                     var managerEmail = manager?.Email ?? "Unknown";
-
-                    // Tạo danh sách guards bị ảnh hưởng
                     var guardsList = string.Join(", ", assignmentsList.Select(a => a.FullName));
-
-                    // ============================================================
-                    // GỬI EMAIL CHO DIRECTOR
-                    // ============================================================
+                    
                     await sender.Send(new SendEmailNotificationCommand(
                         GuardName: "Director",
                         GuardEmail: "director@basms.com",
@@ -288,31 +247,27 @@ internal class CancelShiftHandler(
                     ), cancellationToken);
 
                     logger.LogInformation(
-                        "✓ Director cancellation email sent to director@basms.com for shift {ShiftId}",
+                        "Director cancellation email sent to director@basms.com for shift {ShiftId}",
                         shift.Id);
 
-                    // ============================================================
-                    // GỬI EMAIL CHO CUSTOMER
-                    // ============================================================
+   
                     try
                     {
                         logger.LogInformation(
                             "Querying customer info from Contracts.API for ContractId: {ContractId}",
                             shift.ContractId);
-
-                        // Query customer info từ Contracts.API qua RabbitMQ
+                        
                         var customerResponse = await customerClient.GetResponse<GetCustomerByContractResponse>(
                             new GetCustomerByContractRequest { ContractId = shift.ContractId.Value },
                             cancellationToken,
-                            timeout: RequestTimeout.After(s: 10)); // 10-second timeout
+                            timeout: RequestTimeout.After(s: 10));
 
                         var customerData = customerResponse.Message;
 
                         if (customerData.Success && customerData.Customer != null)
                         {
                             var customer = customerData.Customer;
-
-                            // Gửi email cho customer
+                            
                             await sender.Send(new SendEmailNotificationCommand(
                                 GuardName: customer.CompanyName,
                                 GuardEmail: customer.Email,
@@ -325,7 +280,7 @@ internal class CancelShiftHandler(
                             ), cancellationToken);
 
                             logger.LogInformation(
-                                "✓ Customer cancellation email sent to {CompanyName} ({Email})",
+                                "Customer cancellation email sent to {CompanyName} ({Email})",
                                 customer.CompanyName,
                                 customer.Email);
                         }
@@ -343,7 +298,6 @@ internal class CancelShiftHandler(
                             customerEx,
                             "Failed to query customer info or send customer email for ContractId {ContractId}",
                             shift.ContractId);
-                        // Không throw exception vì customer email là optional
                     }
                 }
                 catch (Exception emailEx)
@@ -352,15 +306,11 @@ internal class CancelShiftHandler(
                         emailEx,
                         "Failed to send emails to customer/director for shift {ShiftId}",
                         shift.Id);
-                    // Không throw exception vì email là optional, shift đã được cancel thành công
                 }
             }
-
-            // ================================================================
-            // HOÀN THÀNH
-            // ================================================================
+            
             logger.LogInformation(
-                "✓ Successfully cancelled shift {ShiftId}, affected {Count} guards",
+                "Successfully cancelled shift {ShiftId}, affected {Count} guards",
                 shift.Id,
                 assignmentsList.Count);
 
@@ -377,9 +327,6 @@ internal class CancelShiftHandler(
     }
 }
 
-/// <summary>
-/// DTO chứa thông tin assignment kèm guard info
-/// </summary>
 internal class AssignmentWithGuardInfo
 {
     public Guid Id { get; set; }

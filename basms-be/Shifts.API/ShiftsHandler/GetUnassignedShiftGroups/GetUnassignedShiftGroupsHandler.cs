@@ -1,11 +1,5 @@
-using Dapper;
-
 namespace Shifts.API.ShiftsHandler.GetUnassignedShiftGroups;
 
-/// <summary>
-/// Handler để lấy danh sách ca trực chưa được phân công, nhóm theo TemplateId và ContractId
-/// Chỉ hiện 1 đại diện cho mỗi nhóm
-/// </summary>
 internal class GetUnassignedShiftGroupsHandler(
     IDbConnectionFactory dbFactory,
     ILogger<GetUnassignedShiftGroupsHandler> logger)
@@ -23,30 +17,9 @@ internal class GetUnassignedShiftGroupsHandler(
                 request.ContractId?.ToString() ?? "ALL");
 
             using var connection = await dbFactory.CreateConnectionAsync();
-
-            // ================================================================
-            // BUILD DYNAMIC WHERE CLAUSE
-            // ================================================================
             var contractFilter = request.ContractId.HasValue
                 ? "AND s.ContractId = @ContractId"
                 : "";
-
-            // ================================================================
-            // SQL QUERY - GROUP BY TemplateId và ContractId
-            // ================================================================
-            // Logic:
-            // 1. Join shifts với shift_templates để lấy thông tin template
-            // 2. Filter: AssignedGuardsCount = 0 (không có guards hiện tại)
-            // 3. Filter: CHƯA BAO GIỜ có shift_assignments (NOT EXISTS)
-            //    → Chỉ hiển thị shifts chưa bao giờ assign
-            //    → KHÔNG hiển thị shifts đã assign nhưng bị cancel tạm thời (giữ lại để reassign sau)
-            // 4. Filter: Status IN ('DRAFT', 'SCHEDULED', 'PARTIAL') - shifts cần phân công
-            //    → Loại trừ 'CANCELLED' (shift đã hủy) và 'COMPLETED' (đã hoàn thành)
-            // 5. Filter: ManagerId từ shift_templates
-            // 6. Filter: ContractId (optional)
-            // 7. Group by ShiftTemplateId, ContractId
-            // 8. Lấy thông tin từ một shift đại diện (shift gần nhất)
-            // ================================================================
 
             var sql = $@"
                 WITH UnassignedShifts AS (
@@ -154,8 +127,7 @@ internal class GetUnassignedShiftGroupsHandler(
                 "Found {Count} unassigned shift groups for Manager {ManagerId}",
                 groupsList.Count,
                 request.ManagerId);
-
-            // Calculate total unassigned shifts
+            
             var totalUnassigned = groupsList.Sum(g => g.UnassignedShiftCount);
 
             logger.LogInformation(

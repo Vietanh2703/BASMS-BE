@@ -1,9 +1,3 @@
-using MailKit.Net.Smtp;
-using MailKit.Security;
-using Microsoft.Extensions.Options;
-using MimeKit;
-using Shifts.API.ExtendModels;
-
 namespace Shifts.API.Extensions;
 
 public class EmailHandler

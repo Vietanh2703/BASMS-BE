@@ -1,17 +1,13 @@
-using Dapper;
 using Shifts.API.Extensions;
 
 namespace Shifts.API.Handlers.SendNotification;
 
-/// <summary>
-/// Command để gửi in-app notification
-/// </summary>
 public record SendNotificationCommand(
     Guid ShiftId,
     Guid? ContractId,
     Guid RecipientId,
-    string RecipientType,       // GUARD | DIRECTOR | CUSTOMER | MANAGER
-    string Action,              // SHIFT_CREATED | SHIFT_UPDATED | SHIFT_CANCELLED
+    string RecipientType,    
+    string Action,              
     string Title,
     string Message,
     string? Metadata = null,

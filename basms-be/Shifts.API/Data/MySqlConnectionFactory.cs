@@ -1,13 +1,5 @@
-using MySql.Data.MySqlClient;
-using System.Data;
-using Dapper;
-
 namespace Shifts.API.Data;
 
-/// <summary>
-/// MySQL connection factory for Shifts service
-/// Creates tables based on Models/*.cs files
-/// </summary>
 public class MySqlConnectionFactory : IDbConnectionFactory
 {
     private readonly string _connectionString;
@@ -35,7 +27,6 @@ public class MySqlConnectionFactory : IDbConnectionFactory
         {
             if (_tablesCreated) return;
 
-            // Create database if not exists
             var connectionStringBuilder = new MySqlConnectionStringBuilder(_connectionString);
             var databaseName = connectionStringBuilder.Database;
             connectionStringBuilder.Database = null;
@@ -52,15 +43,10 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             }
 
             using var connection = await CreateConnectionAsync();
-
-            // ============================================================================
-            // 1. MANAGERS TABLE
-            // ============================================================================
+            
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `managers` (
                     `Id` CHAR(36) PRIMARY KEY,
-
-                    -- Basic info
                     `IdentityNumber` VARCHAR(12) NOT NULL,
                     `IdentityIssueDate` DATETIME NULL,
                     `IdentityIssuePlace` VARCHAR(255) NULL,
@@ -72,43 +58,27 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     `CurrentAddress` VARCHAR(200) NULL,
                     `Gender` VARCHAR(10) NULL,
                     `DateOfBirth` DATETIME NULL,
-
-                    -- Role & Position
                     `Role` VARCHAR(50) NOT NULL DEFAULT 'MANAGER',
                     `ReportsToManagerId` CHAR(36) NULL,
-
-                    -- Certification Level & Wage
                     `CertificationLevel` VARCHAR(10) NULL COMMENT 'Hạng chứng chỉ: I, II, III, IV, V, VI',
                     `StandardWage` DECIMAL(15,2) NULL COMMENT 'Mức lương cơ bản (VNĐ/tháng) import từ hợp đồng',
-
-                    -- Documents & Images (S3 URLs)
                     `CertificationFileUrl` TEXT NULL COMMENT 'URL file chứng chỉ (PDF/image)',
                     `IdentityCardFrontUrl` TEXT NULL COMMENT 'URL ảnh CCCD mặt trước',
                     `IdentityCardBackUrl` TEXT NULL COMMENT 'URL ảnh CCCD mặt sau',
-
-                    -- Employment status
                     `EmploymentStatus` VARCHAR(50) NOT NULL DEFAULT 'ACTIVE',
-
-                    -- Permissions
                     `CanCreateShifts` BOOLEAN NOT NULL DEFAULT TRUE,
                     `CanApproveShifts` BOOLEAN NOT NULL DEFAULT TRUE,
                     `CanAssignGuards` BOOLEAN NOT NULL DEFAULT TRUE,
                     `CanApproveOvertime` BOOLEAN NOT NULL DEFAULT TRUE,
                     `CanManageTeams` BOOLEAN NOT NULL DEFAULT TRUE,
                     `MaxTeamSize` INT NULL,
-
-                    -- Statistics
                     `TotalTeamsManaged` INT NOT NULL DEFAULT 0,
                     `TotalGuardsSupervised` INT NOT NULL DEFAULT 0,
                     `TotalShiftsCreated` INT NOT NULL DEFAULT 0,
-
-                    -- Sync metadata
                     `LastSyncedAt` DATETIME NULL,
                     `SyncStatus` VARCHAR(50) NOT NULL DEFAULT 'SYNCED',
                     `UserServiceVersion` INT NULL,
                     `IsActive` BOOLEAN NOT NULL DEFAULT TRUE,
-
-                    -- Audit
                     `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     `UpdatedAt` DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
                     `IsDeleted` BOOLEAN NOT NULL DEFAULT FALSE,
@@ -120,15 +90,10 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     INDEX `idx_managers_active` (`IsActive`, `IsDeleted`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
             ");
-
-            // ============================================================================
-            // 2. GUARDS TABLE
-            // ============================================================================
+            
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `guards` (
                     `Id` CHAR(36) PRIMARY KEY,
-
-                    -- Basic info
                     `IdentityNumber` VARCHAR(12) NOT NULL,
                     `IdentityIssueDate` DATETIME NULL,
                     `IdentityIssuePlace` VARCHAR(255) NULL,
@@ -137,41 +102,27 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     `AvatarUrl` TEXT NULL,
                     `Email` VARCHAR(255) NULL,
                     `PhoneNumber` VARCHAR(20) NOT NULL,
-
-                    -- Personal info
                     `DateOfBirth` DATETIME NULL,
                     `Gender` VARCHAR(10) NULL,
-                    `CurrentAddress` TEXT NULL,
-
-                    -- Employment
+                    `CurrentAddress` TEXT NULL, 
                     `EmploymentStatus` VARCHAR(50) NOT NULL DEFAULT 'ACTIVE',
                     `HireDate` DATETIME NOT NULL,
                     `ProbationEndDate` DATETIME NULL,
                     `ContractType` VARCHAR(50) NULL,
                     `TerminationDate` DATETIME NULL,
                     `TerminationReason` TEXT NULL,
-
-                    -- Management
                     `DirectManagerId` CHAR(36) NULL,
-
-                    -- Certification & Professional Level
                     `CertificationLevel` VARCHAR(10) NULL COMMENT 'Hạng chứng chỉ: I, II, III, IV, V, VI',
                     `StandardWage` DECIMAL(15,2) NULL COMMENT 'Mức lương cơ bản (VNĐ/tháng) import từ hợp đồng',
-
-                    -- Documents & Images (S3 URLs)
                     `CertificationFileUrl` TEXT NULL COMMENT 'URL file chứng chỉ (PDF/image)',
                     `IdentityCardFrontUrl` TEXT NULL COMMENT 'URL ảnh CCCD mặt trước',
                     `IdentityCardBackUrl` TEXT NULL COMMENT 'URL ảnh CCCD mặt sau',
-
-                    -- Preferences
                     `PreferredShiftType` VARCHAR(50) NULL,
                     `PreferredLocations` TEXT NULL,
                     `MaxWeeklyHours` INT NOT NULL DEFAULT 48,
                     `CanWorkOvertime` BOOLEAN NOT NULL DEFAULT TRUE,
                     `CanWorkWeekends` BOOLEAN NOT NULL DEFAULT TRUE,
                     `CanWorkHolidays` BOOLEAN NOT NULL DEFAULT TRUE,
-
-                    -- Performance metrics
                     `TotalShiftsWorked` INT NOT NULL DEFAULT 0,
                     `TotalHoursWorked` DECIMAL(10,2) NOT NULL DEFAULT 0,
                     `AttendanceRate` DECIMAL(5,2) NULL,
@@ -179,24 +130,16 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     `NoShowCount` INT NOT NULL DEFAULT 0,
                     `ViolationCount` INT NOT NULL DEFAULT 0,
                     `CommendationCount` INT NOT NULL DEFAULT 0,
-
-                    -- Realtime status
                     `CurrentAvailability` VARCHAR(50) NOT NULL DEFAULT 'AVAILABLE',
                     `AvailabilityNotes` TEXT NULL,
-
-                    -- App & Biometric
                     `BiometricRegistered` BOOLEAN NOT NULL DEFAULT FALSE,
                     `FaceTemplateUrl` TEXT NULL,
                     `LastAppLogin` DATETIME NULL,
                     `DeviceTokens` TEXT NULL,
-
-                    -- Sync metadata
                     `LastSyncedAt` DATETIME NULL,
                     `SyncStatus` VARCHAR(50) NOT NULL DEFAULT 'SYNCED',
                     `UserServiceVersion` INT NULL,
                     `IsActive` BOOLEAN NOT NULL DEFAULT TRUE,
-
-                    -- Audit
                     `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     `UpdatedAt` DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
                     `IsDeleted` BOOLEAN NOT NULL DEFAULT FALSE,
@@ -211,9 +154,6 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
             ");
 
-            // ============================================================================
-            // 3. USER_SYNC_LOG TABLE
-            // ============================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `user_sync_log` (
                     `Id` CHAR(36) PRIMARY KEY,
@@ -240,9 +180,6 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
             ");
 
-            // ============================================================================
-            // 4. TEAMS TABLE
-            // ============================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `teams` (
                     `Id` CHAR(36) PRIMARY KEY,
@@ -268,10 +205,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     INDEX `idx_teams_active` (`IsActive`, `IsDeleted`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
             ");
-
-            // ============================================================================
-            // 5. TEAM_MEMBERS TABLE
-            // ============================================================================
+            
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `team_members` (
                     `Id` CHAR(36) PRIMARY KEY,
@@ -295,10 +229,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     INDEX `idx_team_members_guard` (`GuardId`, `IsActive`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
             ");
-
-            // ============================================================================
-            // 6. SHIFT_TEMPLATES TABLE
-            // ============================================================================
+            
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `shift_templates` (
                     `Id` CHAR(36) PRIMARY KEY,
@@ -351,14 +282,9 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
             ");
 
-            // ============================================================================
-            // 7. SHIFTS TABLE
-            // ============================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `shifts` (
                     `Id` CHAR(36) PRIMARY KEY,
-
-                    -- Foreign Keys
                     `ShiftTemplateId` CHAR(36) NULL,
                     `LocationId` CHAR(36) NULL,
                     `LocationName` VARCHAR(200) NULL,
@@ -367,8 +293,6 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     `LocationLongitude` DECIMAL(11,8) NULL,
                     `ContractId` CHAR(36) NULL,
                     `ManagerId` CHAR(36) NULL,
-
-                    -- Date splitting
                     `ShiftDate` DATE NOT NULL,
                     `ShiftDay` INT NOT NULL,
                     `ShiftMonth` INT NOT NULL,
@@ -377,20 +301,14 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     `ShiftWeek` INT NOT NULL,
                     `DayOfWeek` INT NOT NULL,
                     `ShiftEndDate` DATETIME NULL,
-
-                    -- Time (DATETIME not TIME)
                     `ShiftStart` DATETIME NOT NULL,
                     `ShiftEnd` DATETIME NOT NULL,
-
-                    -- Duration
                     `TotalDurationMinutes` INT NOT NULL DEFAULT 0,
                     `WorkDurationMinutes` INT NOT NULL DEFAULT 0,
                     `WorkDurationHours` DECIMAL(10,2) NOT NULL DEFAULT 0,
                     `BreakDurationMinutes` INT NOT NULL DEFAULT 60,
                     `PaidBreakMinutes` INT NOT NULL DEFAULT 0,
                     `UnpaidBreakMinutes` INT NOT NULL DEFAULT 60,
-
-                    -- Staffing
                     `RequiredGuards` INT NOT NULL DEFAULT 1,
                     `AssignedGuardsCount` INT NOT NULL DEFAULT 0,
                     `ConfirmedGuardsCount` INT NOT NULL DEFAULT 0,
@@ -400,49 +318,35 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     `IsUnderstaffed` BOOLEAN NOT NULL DEFAULT FALSE,
                     `IsOverstaffed` BOOLEAN NOT NULL DEFAULT FALSE,
                     `StaffingPercentage` DECIMAL(5,2) NULL,
-
-                    -- Day classification
                     `IsRegularWeekday` BOOLEAN NOT NULL DEFAULT TRUE,
                     `IsSaturday` BOOLEAN NOT NULL DEFAULT FALSE,
                     `IsSunday` BOOLEAN NOT NULL DEFAULT FALSE,
                     `IsPublicHoliday` BOOLEAN NOT NULL DEFAULT FALSE,
                     `IsTetHoliday` BOOLEAN NOT NULL DEFAULT FALSE,
-
-                    -- Shift type classification
                     `IsNightShift` BOOLEAN NOT NULL DEFAULT FALSE,
                     `NightHours` DECIMAL(10,2) NOT NULL DEFAULT 0,
                     `DayHours` DECIMAL(10,2) NOT NULL DEFAULT 0,
                     `ShiftType` VARCHAR(50) NOT NULL DEFAULT 'REGULAR',
-
-                    -- Flags
                     `IsMandatory` BOOLEAN NOT NULL DEFAULT FALSE,
                     `IsCritical` BOOLEAN NOT NULL DEFAULT FALSE,
                     `IsTrainingShift` BOOLEAN NOT NULL DEFAULT FALSE,
                     `RequiresArmedGuard` BOOLEAN NOT NULL DEFAULT FALSE,
-
-                    -- Approval
                     `RequiresApproval` BOOLEAN NOT NULL DEFAULT TRUE,
                     `ApprovedBy` CHAR(36) NULL,
                     `ApprovedAt` DATETIME NULL,
                     `ApprovalStatus` VARCHAR(50) NOT NULL DEFAULT 'PENDING',
                     `RejectionReason` TEXT NULL,
-
-                    -- Status & Lifecycle
                     `Status` VARCHAR(50) NOT NULL DEFAULT 'DRAFT',
                     `ScheduledAt` DATETIME NULL,
                     `StartedAt` DATETIME NULL,
                     `CompletedAt` DATETIME NULL,
                     `CancelledAt` DATETIME NULL,
                     `CancellationReason` TEXT NULL,
-
-                    -- Description & Instructions
                     `Description` TEXT NULL,
                     `SpecialInstructions` TEXT NULL,
                     `EquipmentNeeded` TEXT NULL,
                     `EmergencyContacts` TEXT NULL,
                     `SiteAccessInfo` TEXT NULL,
-
-                    -- Audit
                     `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     `UpdatedAt` DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
                     `CreatedBy` CHAR(36) NULL,
@@ -461,10 +365,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     INDEX `idx_shifts_year_month` (`ShiftYear`, `ShiftMonth`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
             ");
-
-            // ============================================================================
-            // 8. SHIFT_ASSIGNMENTS TABLE
-            // ============================================================================
+            
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `shift_assignments` (
                     `Id` CHAR(36) PRIMARY KEY,
@@ -472,13 +373,9 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     `TeamId` CHAR(36) NULL,
                     `GuardId` CHAR(36) NOT NULL,
                     `AssignmentType` VARCHAR(50) NOT NULL DEFAULT 'REGULAR',
-
-                    -- Replacement info
                     `ReplacedGuardId` CHAR(36) NULL,
                     `ReplacementReason` TEXT NULL,
                     `IsReplacement` BOOLEAN NOT NULL DEFAULT FALSE,
-
-                    -- Status lifecycle
                     `Status` VARCHAR(50) NOT NULL DEFAULT 'ASSIGNED',
                     `AssignedAt` DATETIME NOT NULL,
                     `ConfirmedAt` DATETIME NULL,
@@ -487,37 +384,23 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     `CheckedOutAt` DATETIME NULL,
                     `CompletedAt` DATETIME NULL,
                     `CancelledAt` DATETIME NULL,
-
-                    -- Reasons
                     `DeclineReason` TEXT NULL,
                     `CancellationReason` TEXT NULL,
-
-                    -- Attendance link
                     `AttendanceRecordId` CHAR(36) NULL,
                     `AttendanceSynced` BOOLEAN NOT NULL DEFAULT FALSE,
-
-                    -- Notifications
                     `NotificationSent` BOOLEAN NOT NULL DEFAULT FALSE,
                     `NotificationSentAt` DATETIME NULL,
                     `NotificationMethod` VARCHAR(50) NULL,
-
-                    -- Reminders
                     `Reminder24HSent` BOOLEAN NOT NULL DEFAULT FALSE,
                     `Reminder24HSentAt` DATETIME NULL,
                     `Reminder2HSent` BOOLEAN NOT NULL DEFAULT FALSE,
                     `Reminder2HSentAt` DATETIME NULL,
-
-                    -- Performance tracking
                     `PunctualityScore` DECIMAL(3,2) NULL,
                     `PerformanceNote` TEXT NULL,
                     `RatedBy` CHAR(36) NULL,
                     `RatedAt` DATETIME NULL,
-
-                    -- Notes
                     `AssignmentNotes` TEXT NULL,
                     `GuardNotes` TEXT NULL,
-
-                    -- Audit
                     `AssignedBy` CHAR(36) NOT NULL,
                     `UpdatedAt` DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
                     `IsDeleted` BOOLEAN NOT NULL DEFAULT FALSE,
@@ -532,40 +415,20 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
             ");
 
-            // ============================================================================
-            // 9. SHIFT_ISSUES TABLE (Lưu thông tin sự cố ảnh hưởng tới ca trực)
-            // ============================================================================
-            // USE CASES:
-            // - Cancel shift (đơn lẻ)
-            // - Bulk cancel shifts (nghỉ ốm dài ngày, thai sản)
-            // - Các sự cố khác ảnh hưởng tới ca trực hoặc nhân sự
+
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `shift_issues` (
                     `Id` CHAR(36) PRIMARY KEY,
-
-                    -- Shift bị ảnh hưởng (NULL nếu là issue liên quan đến nhiều shifts)
                     `ShiftId` CHAR(36) NULL COMMENT 'Shift bị ảnh hưởng (NULL nếu bulk cancel)',
-
-                    -- Guard liên quan (nếu có)
                     `GuardId` CHAR(36) NULL COMMENT 'Guard liên quan đến issue',
-
-                    -- Issue information
                     `IssueType` VARCHAR(50) NOT NULL COMMENT 'CANCEL_SHIFT | BULK_CANCEL | SICK_LEAVE | MATERNITY_LEAVE | OTHER',
                     `Reason` TEXT NOT NULL COMMENT 'Lý do chi tiết (nghỉ ốm, thai sản, v.v.)',
-
-                    -- Date range (cho trường hợp nghỉ dài ngày)
                     `StartDate` DATE NULL COMMENT 'Ngày bắt đầu nghỉ (cho bulk cancel)',
                     `EndDate` DATE NULL COMMENT 'Ngày kết thúc nghỉ (cho bulk cancel)',
                     `IssueDate` DATETIME NOT NULL COMMENT 'Ngày phát sinh sự cố',
-
-                    -- Evidence (chứng từ)
                     `EvidenceFileUrl` TEXT NULL COMMENT 'URL file chứng từ trên S3 (đơn xin nghỉ, giấy khám bệnh, v.v.)',
-
-                    -- Statistics
                     `TotalShiftsAffected` INT NOT NULL DEFAULT 0 COMMENT 'Tổng số ca bị ảnh hưởng',
                     `TotalGuardsAffected` INT NOT NULL DEFAULT 0 COMMENT 'Tổng số guard bị ảnh hưởng',
-
-                    -- Audit
                     `CreatedAt` DATETIME NOT NULL COMMENT 'Thời gian tạo record (VN timezone)',
                     `CreatedBy` CHAR(36) NOT NULL COMMENT 'Manager tạo record',
                     `UpdatedAt` DATETIME NULL COMMENT 'Thời gian cập nhật cuối (VN timezone)',
@@ -573,7 +436,6 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     `IsDeleted` BOOLEAN NOT NULL DEFAULT FALSE,
                     `DeletedAt` DATETIME NULL,
                     `DeletedBy` CHAR(36) NULL,
-
                     INDEX `idx_shift_issues_shift` (`ShiftId`, `IsDeleted`),
                     INDEX `idx_shift_issues_guard` (`GuardId`, `IsDeleted`),
                     INDEX `idx_shift_issues_type` (`IssueType`, `IsDeleted`),
@@ -583,34 +445,20 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                 COMMENT='Lưu thông tin sự cố ảnh hưởng tới ca trực và nhân sự';
             ");
 
-            // ============================================================================
-            // 10. WAGE_RATES TABLE (Mức tiền công chuẩn theo cấp bậc)
-            // ============================================================================
+
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `wage_rates` (
                     `Id` CHAR(36) PRIMARY KEY,
-
-                    -- Cấp bậc
                     `CertificationLevel` VARCHAR(10) NOT NULL COMMENT 'Hạng chứng chỉ: I, II, III, IV, V, VI',
-
-                    -- Tiền công cơ bản (VNĐ/tháng - làm 192 giờ/tháng chuẩn)
                     `MinWage` DECIMAL(15,2) NOT NULL COMMENT 'Mức tối thiểu',
                     `MaxWage` DECIMAL(15,2) NOT NULL COMMENT 'Mức tối đa',
                     `StandardWage` DECIMAL(15,2) NOT NULL COMMENT 'Mức chuẩn (gợi ý khi tạo HĐ)',
                     `StandardWageInWords` TEXT NULL COMMENT 'Số tiền chuẩn bằng chữ: Sáu triệu đồng chẵn',
                     `Currency` VARCHAR(10) NOT NULL DEFAULT 'VNĐ' COMMENT 'Đơn vị tính: VNĐ, USD...',
-
-                    -- Mô tả
                     `Description` TEXT NULL COMMENT 'Mô tả chi tiết về cấp bậc và nhiệm vụ',
-
-                    -- Thời gian hiệu lực (để theo dõi lịch sử tăng lương)
                     `EffectiveFrom` DATE NOT NULL COMMENT 'Ngày bắt đầu áp dụng',
                     `EffectiveTo` DATE NULL COMMENT 'Ngày kết thúc áp dụng (NULL = đang áp dụng)',
-
-                    -- Ghi chú
                     `Notes` TEXT NULL COMMENT 'Ghi chú về mức lương',
-
-                    -- Metadata
                     `IsActive` BOOLEAN NOT NULL DEFAULT TRUE,
                     `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     `UpdatedAt` DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
@@ -623,10 +471,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 COMMENT='Bảng mức tiền công chuẩn theo cấp bậc bảo vệ';
             ");
-
-            // ============================================================================
-            // 11. INSERT DỮ LIỆU MẪU CHO WAGE_RATES (Mức lương thị trường 2025)
-            // ============================================================================
+            
             await connection.ExecuteAsync(@"
                 INSERT IGNORE INTO `wage_rates`
                 (`Id`, `CertificationLevel`, `MinWage`, `MaxWage`, `StandardWage`, `StandardWageInWords`, `Currency`, `Description`, `EffectiveFrom`, `Notes`, `IsActive`, `CreatedAt`)

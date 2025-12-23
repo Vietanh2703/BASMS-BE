@@ -1,13 +1,9 @@
-// Handler xử lý logic lấy tất cả guards đã joined theo ManagerId
-// Query từ cache database với filter ContractType = "joined_in"
 using Shifts.API.GuardsHandler.GetGuardById;
 
 namespace Shifts.API.GuardsHandler.GetAllGuardJoined;
 
-// Query chứa ManagerId để lấy tất cả guards đã joined
 public record GetAllGuardJoinedQuery(Guid ManagerId) : IQuery<GetAllGuardJoinedResult>;
 
-// Result chứa danh sách guards đã joined
 public record GetAllGuardJoinedResult(
     Guid ManagerId,
     int TotalGuards,
@@ -28,12 +24,9 @@ internal class GetAllGuardJoinedHandler(
             logger.LogInformation(
                 "Getting all joined guards for Manager: {ManagerId}",
                 request.ManagerId);
-
-            // Bước 1: Tạo kết nối database
+            
             using var connection = await connectionFactory.CreateConnectionAsync();
-
-            // Bước 2: Lấy tất cả guards có DirectManagerId trùng với ManagerId
-            // và ContractType = "joined_in"
+            
             var allGuards = await connection.GetAllAsync<Guards>();
             var guards = allGuards
                 .Where(g =>
@@ -47,8 +40,7 @@ internal class GetAllGuardJoinedHandler(
                 "Found {Count} joined guards for Manager {ManagerId}",
                 guards.Count,
                 request.ManagerId);
-
-            // Bước 3: Map entities sang DTOs
+            
             var guardDtos = guards.Select(guard => new GuardDetailDto(
                 Id: guard.Id,
                 IdentityNumber: guard.IdentityNumber,
@@ -83,8 +75,7 @@ internal class GetAllGuardJoinedHandler(
                 "Successfully retrieved {Count} joined guards for Manager {ManagerId}",
                 guardDtos.Count,
                 request.ManagerId);
-
-            // Bước 4: Trả về kết quả
+            
             return new GetAllGuardJoinedResult(
                 ManagerId: request.ManagerId,
                 TotalGuards: guardDtos.Count,

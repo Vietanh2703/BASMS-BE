@@ -34,8 +34,7 @@ public class Users
     public Guid? CreatedBy { get; set; }
     
     public Guid? UpdatedBy { get; set; }
-
-    // Navigation properties - ignored by Dapper
+    
     [Write(false)]
     [Computed]
     public virtual Roles? Role { get; set; }

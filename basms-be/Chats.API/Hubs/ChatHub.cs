@@ -101,8 +101,8 @@ public class ChatHub : Hub<IChatsClient>
                 // User is completely offline
                 await _presenceService.UserDisconnectedAsync(userId);
 
-                // Notify other users
-                var lastSeen = DateTime.UtcNow;
+                // Notify other users with Vietnam time
+                var lastSeen = DateTime.UtcNow.ToVietnamTime();
                 await Clients.Others.UserOffline(userId, lastSeen);
 
                 _logger.LogInformation(

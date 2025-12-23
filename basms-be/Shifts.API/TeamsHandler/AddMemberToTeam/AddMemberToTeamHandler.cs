@@ -1,24 +1,14 @@
-using Dapper;
-using Dapper.Contrib.Extensions;
-using Shifts.API.Data;
-using Shifts.API.Models;
-
 namespace Shifts.API.TeamsHandler.AddMemberToTeam;
 
-/// <summary>
-/// Command để thêm guard vào team
-/// </summary>
 public record AddMemberToTeamCommand(
-    Guid TeamId,                    // Team cần thêm member
-    Guid GuardId,                   // Guard được thêm vào
-    string Role,                    // LEADER | DEPUTY | MEMBER
-    string? JoiningNotes,           // Ghi chú khi gia nhập
-    Guid CreatedBy                  // Manager thực hiện thao tác
+    Guid TeamId,                    
+    Guid GuardId,                  
+    string Role,                    
+    string? JoiningNotes,           
+    Guid CreatedBy                  
 ) : ICommand<AddMemberToTeamResult>;
 
-/// <summary>
-/// Result chứa thông tin member đã thêm
-/// </summary>
+
 public record AddMemberToTeamResult(
     Guid TeamMemberId,
     Guid TeamId,
@@ -46,10 +36,7 @@ internal class AddMemberToTeamHandler(
                 request.Role);
 
             using var connection = await dbFactory.CreateConnectionAsync();
-
-            // ================================================================
-            // BƯỚC 1: VALIDATE TEAM
-            // ================================================================
+            
             logger.LogInformation("Validating team {TeamId}", request.TeamId);
 
             var team = await connection.GetAsync<Teams>(request.TeamId);
@@ -69,13 +56,10 @@ internal class AddMemberToTeamHandler(
             }
 
             logger.LogInformation(
-                "✓ Team validated: {TeamCode} - {TeamName}",
+                "Team validated: {TeamCode} - {TeamName}",
                 team.TeamCode,
                 team.TeamName);
-
-            // ================================================================
-            // BƯỚC 2: CHECK MAX MEMBERS LIMIT
-            // ================================================================
+            
             if (team.MaxMembers.HasValue && team.CurrentMemberCount >= team.MaxMembers.Value)
             {
                 logger.LogWarning(
@@ -87,13 +71,10 @@ internal class AddMemberToTeamHandler(
             }
 
             logger.LogInformation(
-                "✓ Team has capacity: {Current}/{Max} members",
+                "Team has capacity: {Current}/{Max} members",
                 team.CurrentMemberCount,
                 team.MaxMembers?.ToString() ?? "unlimited");
 
-            // ================================================================
-            // BƯỚC 3: VALIDATE GUARD
-            // ================================================================
             logger.LogInformation("Validating guard {GuardId}", request.GuardId);
 
             var guard = await connection.GetAsync<Guards>(request.GuardId);
@@ -123,14 +104,11 @@ internal class AddMemberToTeamHandler(
             }
 
             logger.LogInformation(
-                "✓ Guard validated: {FullName} ({EmployeeCode}) - Level {Level}",
+                "Guard validated: {FullName} ({EmployeeCode}) - Level {Level}",
                 guard.FullName,
                 guard.EmployeeCode,
                 guard.CertificationLevel ?? "N/A");
 
-            // ================================================================
-            // BƯỚC 3.5: CHECK CERTIFICATION FOR SINGLE-GUARD TEAMS
-            // ================================================================
             if (team.MaxMembers.HasValue && team.MaxMembers.Value == 1)
             {
                 logger.LogInformation(
@@ -161,14 +139,11 @@ internal class AddMemberToTeamHandler(
                 }
 
                 logger.LogInformation(
-                    "✓ Guard {FullName} with Level {Level} is qualified for single-guard team",
+                    "Guard {FullName} with Level {Level} is qualified for single-guard team",
                     guard.FullName,
                     guard.CertificationLevel);
             }
-
-            // ================================================================
-            // BƯỚC 4: CHECK GUARD NOT ALREADY IN TEAM
-            // ================================================================
+            
             var existingMembership = await connection.QueryFirstOrDefaultAsync<TeamMembers>(
                 @"SELECT * FROM team_members
                   WHERE TeamId = @TeamId
@@ -193,8 +168,7 @@ internal class AddMemberToTeamHandler(
                         "Guard {GuardId} was previously in team {TeamId} but is inactive, reactivating...",
                         request.GuardId,
                         request.TeamId);
-
-                    // Reactivate existing membership
+                    
                     existingMembership.IsActive = true;
                     existingMembership.Role = request.Role.ToUpper();
                     existingMembership.JoiningNotes = request.JoiningNotes;
@@ -202,15 +176,14 @@ internal class AddMemberToTeamHandler(
                     existingMembership.UpdatedBy = request.CreatedBy;
 
                     await connection.UpdateAsync(existingMembership);
-
-                    // Update team member count
+                    
                     team.CurrentMemberCount++;
                     team.UpdatedAt = DateTime.UtcNow;
                     team.UpdatedBy = request.CreatedBy;
                     await connection.UpdateAsync(team);
 
                     logger.LogInformation(
-                        "✓ Reactivated guard {GuardId} in team {TeamId}",
+                        "Reactivated guard {GuardId} in team {TeamId}",
                         request.GuardId,
                         request.TeamId);
 
@@ -223,10 +196,7 @@ internal class AddMemberToTeamHandler(
                         existingMembership.Role);
                 }
             }
-
-            // ================================================================
-            // BƯỚC 5: VALIDATE ROLE
-            // ================================================================
+            
             var validRoles = new[] { "LEADER", "DEPUTY", "MEMBER" };
             var roleUpper = request.Role.ToUpper();
 
@@ -235,10 +205,6 @@ internal class AddMemberToTeamHandler(
                 throw new InvalidOperationException(
                     $"Role không hợp lệ. Phải là một trong: {string.Join(", ", validRoles)}");
             }
-
-            // ================================================================
-            // BƯỚC 6: VALIDATE CERTIFICATION LEVEL FOR LEADER/DEPUTY
-            // ================================================================
             if (roleUpper == "LEADER" || roleUpper == "DEPUTY")
             {
                 if (string.IsNullOrWhiteSpace(guard.CertificationLevel))
@@ -250,8 +216,7 @@ internal class AddMemberToTeamHandler(
                     throw new InvalidOperationException(
                         $"Guard {guard.FullName} chưa có CertificationLevel, không thể làm {roleUpper}");
                 }
-
-                // LEADER/DEPUTY nên có Level II hoặc III
+                
                 var validLeaderLevels = new[] { "II", "III", "IV", "V", "VI" };
                 if (!validLeaderLevels.Contains(guard.CertificationLevel.ToUpper()))
                 {
@@ -260,10 +225,9 @@ internal class AddMemberToTeamHandler(
                         request.GuardId,
                         guard.CertificationLevel,
                         roleUpper);
-
-                    // WARNING nhưng vẫn cho phép (có thể relax rule này nếu cần)
+                    
                     logger.LogInformation(
-                        "⚠️ Warning: {Role} {GuardName} có CertificationLevel {Level}. " +
+                        "Warning: {Role} {GuardName} có CertificationLevel {Level}. " +
                         "Khuyến nghị Level II hoặc III cho vị trí này.",
                         roleUpper,
                         guard.FullName,
@@ -271,11 +235,8 @@ internal class AddMemberToTeamHandler(
                 }
             }
 
-            logger.LogInformation("✓ Role and certification validation passed");
+            logger.LogInformation("Role and certification validation passed");
 
-            // ================================================================
-            // BƯỚC 7: CREATE TEAM MEMBER
-            // ================================================================
             var teamMember = new TeamMembers
             {
                 Id = Guid.NewGuid(),
@@ -294,27 +255,21 @@ internal class AddMemberToTeamHandler(
             await connection.InsertAsync(teamMember);
 
             logger.LogInformation(
-                "✓ Team member created: {TeamMemberId}",
+                "Team member created: {TeamMemberId}",
                 teamMember.Id);
 
-            // ================================================================
-            // BƯỚC 8: UPDATE TEAM MEMBER COUNT
-            // ================================================================
             team.CurrentMemberCount++;
             team.UpdatedAt = DateTime.UtcNow;
             team.UpdatedBy = request.CreatedBy;
             await connection.UpdateAsync(team);
 
             logger.LogInformation(
-                "✓ Team {TeamCode} member count updated: {Count}",
+                "Team {TeamCode} member count updated: {Count}",
                 team.TeamCode,
                 team.CurrentMemberCount);
-
-            // ================================================================
-            // BƯỚC 9: RETURN RESULT
-            // ================================================================
+            
             logger.LogInformation(
-                "✓ Successfully added guard {GuardName} to team {TeamCode} as {Role}",
+                "Successfully added guard {GuardName} to team {TeamCode} as {Role}",
                 guard.FullName,
                 team.TeamCode,
                 roleUpper);

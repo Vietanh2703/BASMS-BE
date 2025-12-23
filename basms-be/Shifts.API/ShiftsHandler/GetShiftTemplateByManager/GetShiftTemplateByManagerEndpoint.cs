@@ -1,12 +1,5 @@
-using Carter;
-using MediatR;
-using Microsoft.AspNetCore.Mvc;
-
 namespace Shifts.API.ShiftsHandler.GetShiftTemplateByManager;
 
-/// <summary>
-/// Endpoint để lấy danh sách shift templates theo manager
-/// </summary>
 public class GetShiftTemplateByManagerEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
@@ -46,7 +39,7 @@ public class GetShiftTemplateByManagerEndpoint : ICarterModule
             }
 
             logger.LogInformation(
-                "✓ Found {Count} shift templates for Manager {ManagerId}",
+                "Found {Count} shift templates for Manager {ManagerId}",
                 result.TotalCount,
                 managerId);
 
@@ -63,24 +56,10 @@ public class GetShiftTemplateByManagerEndpoint : ICarterModule
                 }
             });
         })
-        // .RequireAuthorization()
         .WithName("GetShiftTemplateByManager")
         .WithTags("Shift Templates")
         .Produces(200)
         .Produces(400)
-        .WithSummary("Get all shift templates for a specific manager")
-        .WithDescription(@"
-            Returns all shift templates created/managed by a specific manager.
-
-            Query Parameters:
-            - status (optional): Filter by template status (e.g., 'await_create_shift', 'active', 'inactive', 'archived')
-            - isActive (optional): Filter by active status (true/false)
-
-            Example:
-            GET /api/shifts/templates/by-manager/{managerId}
-            GET /api/shifts/templates/by-manager/{managerId}?status=await_create_shift
-            GET /api/shifts/templates/by-manager/{managerId}?isActive=true
-            GET /api/shifts/templates/by-manager/{managerId}?status=await_create_shift&isActive=true
-        ");
+        .WithSummary("Get all shift templates for a specific manager");
     }
 }

@@ -2,23 +2,14 @@ using Shifts.API.GuardsHandler.GetGuardById;
 
 namespace Shifts.API.GuardsHandler.GetAllGuardLevelI;
 
-/// <summary>
-/// Query để lấy tất cả guards có CertificationLevel I theo ManagerId
-/// </summary>
 public record GetAllGuardLevelIQuery(Guid ManagerId) : IQuery<GetAllGuardLevelIResult>;
 
-/// <summary>
-/// Result chứa danh sách guards Level I
-/// </summary>
 public record GetAllGuardLevelIResult(
     Guid ManagerId,
     int TotalGuards,
     List<GuardDetailDto> Guards
 );
 
-/// <summary>
-/// Handler để lấy danh sách guards có CertificationLevel I
-/// </summary>
 internal class GetAllGuardLevelIHandler(
     IDbConnectionFactory connectionFactory,
     ILogger<GetAllGuardLevelIHandler> logger)
@@ -35,8 +26,6 @@ internal class GetAllGuardLevelIHandler(
                 request.ManagerId);
 
             using var connection = await connectionFactory.CreateConnectionAsync();
-
-            // Lấy tất cả guards có CertificationLevel = "I" và DirectManagerId khớp
             var allGuards = await connection.GetAllAsync<Guards>();
             var levelIGuards = allGuards
                 .Where(g => g.CertificationLevel == "I"
@@ -51,7 +40,6 @@ internal class GetAllGuardLevelIHandler(
                 levelIGuards.Count,
                 request.ManagerId);
 
-            // Map entities sang DTOs
             var guardDtos = levelIGuards.Select(guard => new GuardDetailDto(
                 Id: guard.Id,
                 IdentityNumber: guard.IdentityNumber,

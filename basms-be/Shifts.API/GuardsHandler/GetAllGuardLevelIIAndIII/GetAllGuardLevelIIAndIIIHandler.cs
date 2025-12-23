@@ -2,14 +2,8 @@ using Shifts.API.GuardsHandler.GetGuardById;
 
 namespace Shifts.API.GuardsHandler.GetAllGuardLevelIIAndIII;
 
-/// <summary>
-/// Query để lấy tất cả guards có CertificationLevel II và III theo ManagerId
-/// </summary>
 public record GetAllGuardLevelIIAndIIIQuery(Guid ManagerId) : IQuery<GetAllGuardLevelIIAndIIIResult>;
 
-/// <summary>
-/// Result chứa danh sách guards Level II và III
-/// </summary>
 public record GetAllGuardLevelIIAndIIIResult(
     Guid ManagerId,
     int TotalGuards,
@@ -18,9 +12,6 @@ public record GetAllGuardLevelIIAndIIIResult(
     List<GuardDetailDto> Guards
 );
 
-/// <summary>
-/// Handler để lấy danh sách guards có CertificationLevel II và III
-/// </summary>
 internal class GetAllGuardLevelIIAndIIIHandler(
     IDbConnectionFactory connectionFactory,
     ILogger<GetAllGuardLevelIIAndIIIHandler> logger)
@@ -37,19 +28,17 @@ internal class GetAllGuardLevelIIAndIIIHandler(
                 request.ManagerId);
 
             using var connection = await connectionFactory.CreateConnectionAsync();
-
-            // Lấy tất cả guards có CertificationLevel = "II" hoặc "III" và DirectManagerId khớp
+            
             var allGuards = await connection.GetAllAsync<Guards>();
             var levelIIAndIIIGuards = allGuards
                 .Where(g => (g.CertificationLevel == "II" || g.CertificationLevel == "III")
                             && g.DirectManagerId == request.ManagerId
                             && !g.IsDeleted
                             && g.IsActive)
-                .OrderBy(g => g.CertificationLevel) // Level II trước, sau đó Level III
+                .OrderBy(g => g.CertificationLevel) 
                 .ThenBy(g => g.EmployeeCode)
                 .ToList();
-
-            // Đếm số lượng theo từng level
+            
             int levelIICount = levelIIAndIIIGuards.Count(g => g.CertificationLevel == "II");
             int levelIIICount = levelIIAndIIIGuards.Count(g => g.CertificationLevel == "III");
 
@@ -59,8 +48,7 @@ internal class GetAllGuardLevelIIAndIIIHandler(
                 request.ManagerId,
                 levelIICount,
                 levelIIICount);
-
-            // Map entities sang DTOs
+            
             var guardDtos = levelIIAndIIIGuards.Select(guard => new GuardDetailDto(
                 Id: guard.Id,
                 IdentityNumber: guard.IdentityNumber,

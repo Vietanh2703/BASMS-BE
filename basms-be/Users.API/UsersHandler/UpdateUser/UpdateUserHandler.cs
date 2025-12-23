@@ -37,7 +37,6 @@ internal class UpdateUserHandler(
 {
     public async Task<UpdateUserResult> Handle(UpdateUserCommand command, CancellationToken cancellationToken)
     {
-        // Validate command
         var validationResult = await validator.ValidateAsync(command, cancellationToken);
         if (!validationResult.IsValid)
         {
@@ -54,7 +53,6 @@ internal class UpdateUserHandler(
 
             try
             {
-                // Step 1: Get existing user
                 var users = await connection.GetAllAsync<Models.Users>(transaction);
                 var existingUser = users.FirstOrDefault(u => u.Id == command.Id && !u.IsDeleted);
 
@@ -63,12 +61,10 @@ internal class UpdateUserHandler(
                     logger.LogWarning("User not found with ID: {UserId}", command.Id);
                     throw new InvalidOperationException($"User with ID {command.Id} not found");
                 }
-
-                // Store old email for notification
+                
                 var oldEmail = existingUser.Email;
                 var emailChanged = !string.IsNullOrEmpty(command.Email) && command.Email != existingUser.Email;
-
-                // Store old values for audit
+                
                 var oldValues = new
                 {
                     existingUser.Email,
@@ -79,8 +75,7 @@ internal class UpdateUserHandler(
                     existingUser.Status,
                     existingUser.AvatarUrl
                 };
-
-                // Step 2: Check if email is being changed and if it's unique
+                
                 if (!string.IsNullOrEmpty(command.Email) && command.Email != existingUser.Email)
                 {
                     var emailExists = users.Any(u => u.Email == command.Email && !u.IsDeleted && u.Id != command.Id);
@@ -89,8 +84,7 @@ internal class UpdateUserHandler(
                         throw new InvalidOperationException($"Email {command.Email} is already in use by another user");
                     }
                 }
-
-                // Step 3: Update Firebase user if email or phone changed
+                
                 bool firebaseUpdated = false;
                 if (!string.IsNullOrEmpty(command.Email) && command.Email != existingUser.Email ||
                     !string.IsNullOrEmpty(command.Phone) && command.Phone != existingUser.Phone)
@@ -99,8 +93,7 @@ internal class UpdateUserHandler(
                     firebaseUpdated = true;
                     logger.LogInformation("Firebase user updated: {FirebaseUid}", existingUser.FirebaseUid);
                 }
-
-                // Step 4: Update user in database
+                
                 if (!string.IsNullOrEmpty(command.FullName))
                     existingUser.FullName = command.FullName;
 
@@ -135,8 +128,7 @@ internal class UpdateUserHandler(
 
                 await connection.UpdateAsync(existingUser, transaction);
                 logger.LogDebug("User updated in database: {UserId}", existingUser.Id);
-
-                // Step 5: Log audit
+                
                 var newValues = new
                 {
                     existingUser.Email,
@@ -155,21 +147,18 @@ internal class UpdateUserHandler(
 
                 logger.LogInformation("User updated successfully: {Email}, UserId: {UserId}",
                     existingUser.Email, existingUser.Id);
-
-                // Step 6: Send email notifications if email was changed
+                
                 if (emailChanged)
                 {
                     try
                     {
-                        // Send notification to old email
                         await emailHandler.SendEmailChangeNotificationAsync(
                             existingUser.FullName, 
                             oldEmail, 
                             command.Email!, 
                             isOldEmail: true);
                         logger.LogInformation("Email change notification sent to old email: {OldEmail}", oldEmail);
-
-                        // Send notification to new email
+                        
                         await emailHandler.SendEmailChangeNotificationAsync(
                             existingUser.FullName, 
                             oldEmail, 
@@ -179,7 +168,6 @@ internal class UpdateUserHandler(
                     }
                     catch (Exception emailEx)
                     {
-                        // Log error but don't fail the update
                         logger.LogError(emailEx, "Failed to send email change notifications, but user was updated successfully");
                     }
                 }
@@ -247,8 +235,8 @@ internal class UpdateUserHandler(
     }
 
     private async Task LogAuditAsync(
-        System.Data.IDbConnection connection,
-        System.Data.IDbTransaction transaction,
+        IDbConnection connection,
+        IDbTransaction transaction,
         Guid userId,
         object oldValues,
         object newValues)
@@ -260,8 +248,8 @@ internal class UpdateUserHandler(
             Action = "UPDATE_USER",
             EntityType = "User",
             EntityId = userId,
-            OldValues = System.Text.Json.JsonSerializer.Serialize(oldValues),
-            NewValues = System.Text.Json.JsonSerializer.Serialize(newValues),
+            OldValues = JsonSerializer.Serialize(oldValues),
+            NewValues = JsonSerializer.Serialize(newValues),
             IpAddress = null,
             Status = "success",
             CreatedAt = DateTime.UtcNow,

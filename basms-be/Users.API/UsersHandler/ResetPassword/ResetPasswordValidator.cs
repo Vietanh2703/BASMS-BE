@@ -1,6 +1,5 @@
 namespace Users.API.UsersHandler.ResetPassword;
 
-// Validator for RequestResetPasswordCommand
 public class RequestResetPasswordValidator : AbstractValidator<RequestResetPasswordCommand>
 {
     public RequestResetPasswordValidator()
@@ -11,7 +10,6 @@ public class RequestResetPasswordValidator : AbstractValidator<RequestResetPassw
     }
 }
 
-// Validator for VerifyResetPasswordOtpCommand
 public class VerifyResetPasswordOtpValidator : AbstractValidator<VerifyResetPasswordOtpCommand>
 {
     public VerifyResetPasswordOtpValidator()
@@ -26,7 +24,6 @@ public class VerifyResetPasswordOtpValidator : AbstractValidator<VerifyResetPass
     }
 }
 
-// Validator for CompleteResetPasswordCommand
 public class CompleteResetPasswordValidator : AbstractValidator<CompleteResetPasswordCommand>
 {
     public CompleteResetPasswordValidator()

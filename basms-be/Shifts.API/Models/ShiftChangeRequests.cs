@@ -1,19 +1,10 @@
 namespace Shifts.API.Models;
 
-/// <summary>
-/// SHIFT_CHANGE_REQUESTS - Yêu cầu đổi ca
-/// Chức năng: Guards xin đổi ca, hoán ca, bỏ ca
-/// Use case: "Guard A xin đổi ca với Guard B, pending approval"
-/// </summary>
 [Table("shift_change_requests")]
 public class ShiftChangeRequests
 {
     [ExplicitKey]
     public Guid Id { get; set; }
-
-    /// <summary>
-    /// Assignment muốn đổi
-    /// </summary>
     public Guid ShiftAssignmentId { get; set; }
 
     /// <summary>

@@ -214,7 +214,7 @@ internal class SendMessageHandler(
             {
                 Success = true,
                 MessageId = messageId,
-                CreatedAt = now,
+                CreatedAt = now.ToVietnamTime(),
                 Message = messageDto
             };
         }
@@ -305,7 +305,19 @@ internal class SendMessageHandler(
               AND m.IsDeleted = 0
             LIMIT 1";
 
-        return await connection.QueryFirstOrDefaultAsync<MessageDto>(sql, new { MessageId = messageId });
+        var message = await connection.QueryFirstOrDefaultAsync<MessageDto>(sql, new { MessageId = messageId });
+
+        // Convert DateTime fields to Vietnam time
+        if (message != null)
+        {
+            return message with
+            {
+                CreatedAt = message.CreatedAt.ToVietnamTime(),
+                EditedAt = message.EditedAt.ToVietnamTime()
+            };
+        }
+
+        return message;
     }
 }
 

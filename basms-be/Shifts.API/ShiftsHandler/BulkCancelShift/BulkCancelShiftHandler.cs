@@ -1,20 +1,5 @@
-using Dapper;
-using MassTransit;
-using BuildingBlocks.Messaging.Events;
-using Shifts.API.Handlers.SendNotification;
-using Shifts.API.Handlers.SendEmailNotification;
-using Shifts.API.Helpers;
-using Shifts.API.Extensions;
-
 namespace Shifts.API.ShiftsHandler.BulkCancelShift;
 
-// ============================================================================
-// COMMAND & RESULT
-// ============================================================================
-
-/// <summary>
-/// Command để hủy nhiều ca trực cùng lúc (ốm dài ngày, thai sản)
-/// </summary>
 public record BulkCancelShiftCommand(
     Guid GuardId,
     DateTime FromDate,
@@ -27,9 +12,7 @@ public record BulkCancelShiftCommand(
     Guid CancelledBy
 ) : ICommand<BulkCancelShiftResult>;
 
-/// <summary>
-/// Kết quả bulk cancel
-/// </summary>
+
 public record BulkCancelShiftResult(
     bool Success,
     string Message,
@@ -43,9 +26,6 @@ public record BulkCancelShiftResult(
     List<string> Errors
 );
 
-/// <summary>
-/// Chi tiết từng shift bị cancel
-/// </summary>
 public record ShiftCancellationDetail(
     Guid ShiftId,
     DateTime ShiftDate,
@@ -57,9 +37,6 @@ public record ShiftCancellationDetail(
     string? ErrorMessage
 );
 
-// ============================================================================
-// HANDLER
-// ============================================================================
 
 internal class BulkCancelShiftHandler(
     IDbConnectionFactory dbFactory,
@@ -76,20 +53,17 @@ internal class BulkCancelShiftHandler(
         try
         {
             logger.LogInformation(
-                "🔄 Starting bulk cancel for Guard {GuardId} from {FromDate:yyyy-MM-dd} to {ToDate:yyyy-MM-dd}",
+                "Starting bulk cancel for Guard {GuardId} from {FromDate:yyyy-MM-dd} to {ToDate:yyyy-MM-dd}",
                 request.GuardId,
                 request.FromDate,
                 request.ToDate);
 
-            // ================================================================
-            // BƯỚC 0: UPLOAD FILE LÊN AWS S3 (NẾU CÓ)
-            // ================================================================
             string? evidenceFileUrl = null;
 
             if (request.EvidenceFileStream != null && !string.IsNullOrEmpty(request.EvidenceFileName))
             {
                 logger.LogInformation(
-                    "📁 Uploading evidence file: {FileName}",
+                    "Uploading evidence file: {FileName}",
                     request.EvidenceFileName);
 
                 var (uploadSuccess, fileUrl, uploadErrorMessage) = await s3Service.UploadFileAsync(
@@ -100,19 +74,16 @@ internal class BulkCancelShiftHandler(
 
                 if (!uploadSuccess)
                 {
-                    logger.LogError("❌ Failed to upload evidence file: {ErrorMessage}", uploadErrorMessage);
+                    logger.LogError("Failed to upload evidence file: {ErrorMessage}", uploadErrorMessage);
                     throw new InvalidOperationException($"Upload file thất bại: {uploadErrorMessage}");
                 }
 
                 evidenceFileUrl = fileUrl;
-                logger.LogInformation("✅ Evidence file uploaded successfully: {FileUrl}", fileUrl);
+                logger.LogInformation("Evidence file uploaded successfully: {FileUrl}", fileUrl);
             }
 
             using var connection = await dbFactory.CreateConnectionAsync();
-
-            // ================================================================
-            // BƯỚC 1: LẤY THÔNG TIN GUARD
-            // ================================================================
+            
             var guard = await connection.QueryFirstOrDefaultAsync<dynamic>(@"
                 SELECT Id, EmployeeCode, FullName, Email, PhoneNumber
                 FROM guards
@@ -129,10 +100,6 @@ internal class BulkCancelShiftHandler(
                 (string)guard.EmployeeCode,
                 (string)guard.FullName);
 
-            // ================================================================
-            // BƯỚC 2: TÌM TẤT CẢ ASSIGNMENTS CỦA GUARD NÀY TRONG DATE RANGE
-            // CHỈ CANCEL ASSIGNMENTS CỦA GUARD NÀY, KHÔNG CANCEL SHIFT!
-            // ================================================================
             var assignmentsQuery = @"
                 SELECT sa.*, g.Email, g.FullName, g.PhoneNumber,
                        s.ShiftDate, s.ShiftStart, s.ShiftEnd, s.LocationName
@@ -161,7 +128,7 @@ internal class BulkCancelShiftHandler(
 
             if (!assignmentsList.Any())
             {
-                logger.LogWarning("⚠️ No assignments found for Guard {GuardId} in date range", request.GuardId);
+                logger.LogWarning("No assignments found for Guard {GuardId} in date range", request.GuardId);
                 return new BulkCancelShiftResult(
                     Success: true,
                     Message: "Không tìm thấy ca trực nào cần hủy trong khoảng thời gian này",
@@ -180,9 +147,8 @@ internal class BulkCancelShiftHandler(
                 "✓ Found {Count} assignments to cancel for guard {GuardId}",
                 assignmentsList.Count,
                 request.GuardId);
-
-            // Log chi tiết để debug
-            foreach (var a in assignmentsList.Take(3)) // Log first 3 for debugging
+            
+            foreach (var a in assignmentsList.Take(3))
             {
                 logger.LogInformation(
                     "  - Assignment {Id}: GuardId={GuardId}, GuardName={Name}, ShiftId={ShiftId}, Date={Date}",
@@ -192,13 +158,9 @@ internal class BulkCancelShiftHandler(
                     a.ShiftId,
                     a.ShiftDate.ToString("yyyy-MM-dd"));
             }
-
-            // Lấy danh sách ShiftIds để cập nhật counters sau
+            
             var affectedShiftIds = assignmentsList.Select(a => a.ShiftId).Distinct().ToList();
-
-            // ================================================================
-            // BƯỚC 3: BEGIN TRANSACTION - BULK UPDATE DATABASE
-            // ================================================================
+            
             using var transaction = connection.BeginTransaction();
 
             try
@@ -208,15 +170,12 @@ internal class BulkCancelShiftHandler(
                 var warnings = new List<string>();
                 var errors = new List<string>();
 
-                // ============================================================
-                // 3.1. CANCEL CHỈ ASSIGNMENTS CỦA GUARD NÀY
-                // ============================================================
                 var assignmentIds = assignmentsList.Select(a => a.Id).ToList();
 
                 logger.LogInformation(
-                    "🔍 About to cancel {Count} assignment IDs: [{Ids}] for GuardId: {GuardId}",
+                    "About to cancel {Count} assignment IDs: [{Ids}] for GuardId: {GuardId}",
                     assignmentIds.Count,
-                    string.Join(", ", assignmentIds.Take(5)), // Log first 5 IDs
+                    string.Join(", ", assignmentIds.Take(5)),
                     request.GuardId);
 
                 var updateAssignmentsSql = @"
@@ -236,7 +195,7 @@ internal class BulkCancelShiftHandler(
                     new
                     {
                         AssignmentIds = assignmentIds,
-                        GuardId = request.GuardId, // Extra safety check
+                        GuardId = request.GuardId, 
                         CancelledAt = DateTime.UtcNow,
                         CancellationReason = request.CancellationReason,
                         UpdatedAt = DateTime.UtcNow
@@ -247,8 +206,7 @@ internal class BulkCancelShiftHandler(
                     "✓ Cancelled {Count} assignments for guard {GuardId}",
                     assignmentsCancelled,
                     request.GuardId);
-
-                // Verify: Đảm bảo chỉ cancel đúng guard
+                
                 var verifyQuery = @"
                     SELECT COUNT(DISTINCT GuardId) as GuardCount
                     FROM shift_assignments
@@ -268,24 +226,19 @@ internal class BulkCancelShiftHandler(
                 if (distinctGuardsAffected > 1)
                 {
                     logger.LogError(
-                        "⚠️ WARNING: {Count} distinct guards were affected! Expected only 1 guard ({GuardId})",
+                        "WARNING: {Count} distinct guards were affected! Expected only 1 guard ({GuardId})",
                         distinctGuardsAffected,
                         request.GuardId);
-
-                    // Rollback vì có lỗi logic
+                    
                     transaction.Rollback();
                     throw new InvalidOperationException(
                         $"Logic error: {distinctGuardsAffected} guards were affected instead of 1. Transaction rolled back.");
                 }
 
-                logger.LogInformation("✓ Verified: Only 1 guard affected (GuardId: {GuardId})", request.GuardId);
+                logger.LogInformation("Verified: Only 1 guard affected (GuardId: {GuardId})", request.GuardId);
 
-                // ============================================================
-                // 3.2. CẬP NHẬT COUNTERS CỦA TỪNG SHIFT BỊ ẢNH HƯỞNG
-                // ============================================================
                 foreach (var shiftId in affectedShiftIds)
                 {
-                    // Đếm lại số guards còn lại sau khi cancel
                     var countsSql = @"
                         SELECT
                             COUNT(*) as TotalAssignments,
@@ -301,27 +254,22 @@ internal class BulkCancelShiftHandler(
                         countsSql,
                         new { ShiftId = shiftId },
                         transaction);
-
-                    // Lấy RequiredGuards để tính staffing status
+                    
                     var requiredGuards = await connection.QueryFirstOrDefaultAsync<int>(
                         "SELECT RequiredGuards FROM shifts WHERE Id = @ShiftId",
                         new { ShiftId = shiftId },
                         transaction);
-
-                    // MySQL trả về long cho COUNT/SUM, phải cast sang int
+                    
                     int totalAssignments = counts?.TotalAssignments != null ? Convert.ToInt32((long)counts.TotalAssignments) : 0;
                     int confirmedCount = counts?.ConfirmedCount != null ? Convert.ToInt32((long)counts.ConfirmedCount) : 0;
                     int checkedInCount = counts?.CheckedInCount != null ? Convert.ToInt32((long)counts.CheckedInCount) : 0;
                     int completedCount = counts?.CompletedCount != null ? Convert.ToInt32((long)counts.CompletedCount) : 0;
-
-                    // Tính staffing status
                     bool isFullyStaffed = totalAssignments >= requiredGuards;
                     bool isUnderstaffed = totalAssignments < requiredGuards;
                     decimal staffingPercentage = requiredGuards > 0
                         ? (decimal)totalAssignments / requiredGuards * 100
                         : 0;
-
-                    // Cập nhật shift counters
+                    
                     var updateShiftCountersSql = @"
                         UPDATE shifts
                         SET
@@ -356,12 +304,9 @@ internal class BulkCancelShiftHandler(
                 }
 
                 logger.LogInformation(
-                    "✓ Updated counters for {Count} affected shifts",
+                    "Updated counters for {Count} affected shifts",
                     affectedShiftIds.Count);
-
-                // ============================================================
-                // 3.3. TẠO DETAILS CHO TỪNG ASSIGNMENT
-                // ============================================================
+                
                 foreach (var assignment in assignmentsList)
                 {
                     details.Add(new ShiftCancellationDetail(
@@ -370,16 +315,14 @@ internal class BulkCancelShiftHandler(
                         ShiftTimeSlot: ShiftClassificationHelper.ClassifyShiftTimeSlot(assignment.ShiftStart),
                         ShiftStartTime: assignment.ShiftStart.TimeOfDay,
                         ShiftEndTime: assignment.ShiftEnd.TimeOfDay,
-                        AssignmentsCancelled: 1, // Mỗi assignment này là 1 assignment bị cancel
+                        AssignmentsCancelled: 1,
                         Success: true,
                         ErrorMessage: null
                     ));
                 }
 
-                // ============================================================
-                // BƯỚC 5: ⚠️ CRITICAL - PUBLISH EVENTS ĐỂ SYNC ATTENDANCES.API
-                // ============================================================
-                logger.LogInformation("📤 Publishing {Count} ShiftAssignmentCancelledEvent...", assignmentsList.Count);
+
+                logger.LogInformation("Publishing {Count} ShiftAssignmentCancelledEvent...", assignmentsList.Count);
 
                 foreach (var assignment in assignmentsList)
                 {
@@ -400,19 +343,13 @@ internal class BulkCancelShiftHandler(
                     "✓ Published {Count} events to sync with Attendances.API",
                     assignmentsList.Count);
 
-                // ============================================================
-                // BƯỚC 4: COMMIT TRANSACTION
-                // ============================================================
                 transaction.Commit();
 
                 logger.LogInformation(
-                    "✅ Bulk cancel committed: {Shifts} shifts affected, {Assignments} assignments cancelled",
+                    "Bulk cancel committed: {Shifts} shifts affected, {Assignments} assignments cancelled",
                     affectedShiftIds.Count,
                     assignmentsCancelled);
-
-                // ================================================================
-                // 🆕 BƯỚC 4.5: LƯU BULK SHIFT ISSUE RECORD
-                // ================================================================
+                
                 var vietnamNow = TimeZoneInfo.ConvertTimeFromUtc(
                     DateTime.UtcNow,
                     TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time"));
@@ -420,7 +357,7 @@ internal class BulkCancelShiftHandler(
                 var issueRecord = new
                 {
                     Id = Guid.NewGuid(),
-                    ShiftId = (Guid?)null, // Bulk cancel không có shift cụ thể
+                    ShiftId = (Guid?)null,
                     GuardId = request.GuardId,
                     IssueType = request.LeaveType switch
                     {
@@ -434,8 +371,8 @@ internal class BulkCancelShiftHandler(
                     EndDate = request.ToDate.Date,
                     IssueDate = vietnamNow,
                     EvidenceFileUrl = evidenceFileUrl,
-                    TotalShiftsAffected = affectedShiftIds.Count, // Số shifts bị ảnh hưởng
-                    TotalGuardsAffected = 1, // Chỉ 1 guard (guard này)
+                    TotalShiftsAffected = affectedShiftIds.Count, 
+                    TotalGuardsAffected = 1,
                     CreatedAt = vietnamNow,
                     CreatedBy = request.CancelledBy,
                     UpdatedAt = (DateTime?)null,
@@ -467,9 +404,6 @@ internal class BulkCancelShiftHandler(
                     assignmentsCancelled,
                     (string)guard.FullName);
 
-                // ================================================================
-                // BƯỚC 5: GỬI NOTIFICATIONS (ASYNC - NGOÀI TRANSACTION)
-                // ================================================================
                 _ = Task.Run(async () =>
                 {
                     await SendBulkCancellationNotifications(
@@ -480,17 +414,14 @@ internal class BulkCancelShiftHandler(
                         evidenceFileUrl,
                         cancellationToken);
                 }, cancellationToken);
-
-                // ================================================================
-                // HOÀN THÀNH
-                // ================================================================
+                
                 return new BulkCancelShiftResult(
                     Success: true,
                     Message: $"Đã hủy thành công {assignmentsCancelled} assignment(s) trong {affectedShiftIds.Count} ca trực cho bảo vệ {guard.FullName}",
                     TotalShiftsProcessed: affectedShiftIds.Count,
-                    ShiftsCancelled: 0, // Không cancel shift, chỉ cancel assignments
+                    ShiftsCancelled: 0, 
                     AssignmentsCancelled: assignmentsCancelled,
-                    GuardsAffected: 1, // Chỉ 1 guard (guard này)
+                    GuardsAffected: 1, 
                     EvidenceFileUrl: evidenceFileUrl,
                     Details: details,
                     Warnings: warnings,
@@ -500,20 +431,17 @@ internal class BulkCancelShiftHandler(
             catch (Exception ex)
             {
                 transaction.Rollback();
-                logger.LogError(ex, "❌ Bulk cancel failed, transaction rolled back");
+                logger.LogError(ex, "Bulk cancel failed, transaction rolled back");
                 throw;
             }
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "❌ Error in bulk cancel shift");
+            logger.LogError(ex, "Error in bulk cancel shift");
             throw;
         }
     }
-
-    /// <summary>
-    /// Gửi notifications cho guard và director
-    /// </summary>
+    
     private async Task SendBulkCancellationNotifications(
         dynamic guard,
         List<AssignmentWithGuardInfo> assignments,
@@ -524,11 +452,7 @@ internal class BulkCancelShiftHandler(
     {
         try
         {
-            logger.LogInformation("📧 Sending bulk cancellation notifications...");
-
-            // ================================================================
-            // 1. GỬI EMAIL CHO GUARD
-            // ================================================================
+            logger.LogInformation("Sending bulk cancellation notifications...");
             if (!string.IsNullOrEmpty(guard.Email))
             {
                 var leaveTypeName = leaveType switch
@@ -538,8 +462,6 @@ internal class BulkCancelShiftHandler(
                     "LONG_TERM_LEAVE" => "Nghỉ phép dài hạn",
                     _ => "Nghỉ việc"
                 };
-
-                // Tạo danh sách assignments bị hủy
                 var shiftList = string.Join("\n", assignments.Select(a =>
                     $"- Ngày {a.ShiftDate:dd/MM/yyyy}: {ShiftClassificationHelper.ClassifyShiftTimeSlot(a.ShiftStart)} ({a.ShiftStart.TimeOfDay:hh\\:mm}-{a.ShiftEnd.TimeOfDay:hh\\:mm}) tại {a.LocationName ?? "N/A"}"));
 
@@ -566,10 +488,7 @@ Số ca bị hủy: {assignments.Count}|
                     (string)guard.FullName,
                     (string)guard.Email);
             }
-
-            // ================================================================
-            // 2. GỬI EMAIL BÁO CÁO CHO DIRECTOR
-            // ================================================================
+            
             var leaveTypeDisplay = leaveType switch
             {
                 "SICK_LEAVE" => "nghỉ ốm dài ngày",
@@ -598,14 +517,11 @@ Số assignment bị hủy: {assignments.Count} assignment(s) trong {affectedShi
                 AdditionalInfo: directorEmailBody
             ), cancellationToken);
 
-            logger.LogInformation("✓ Sent bulk cancellation report to director@basms.com");
-
-            // ================================================================
-            // 3. GỬI IN-APP NOTIFICATION CHO GUARD
-            // ================================================================
+            logger.LogInformation("Sent bulk cancellation report to director@basms.com");
+            
             await sender.Send(new SendNotificationCommand(
                 ShiftId: assignments.First().ShiftId,
-                ContractId: null, // Bulk cancel không có contract cụ thể
+                ContractId: null,
                 RecipientId: (Guid)guard.Id,
                 RecipientType: "GUARD",
                 Action: "BULK_SHIFT_CANCELLED",
@@ -615,21 +531,17 @@ Số assignment bị hủy: {assignments.Count} assignment(s) trong {affectedShi
                 Priority: "HIGH"
             ), cancellationToken);
 
-            logger.LogInformation("✓ Sent in-app notification to guard");
+            logger.LogInformation("Sent in-app notification to guard");
 
-            logger.LogInformation("✅ All notifications sent successfully");
+            logger.LogInformation("All notifications sent successfully");
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "❌ Error sending bulk cancellation notifications");
-            // Không throw exception vì notifications là optional
+            logger.LogError(ex, "Error sending bulk cancellation notifications");
         }
     }
 }
 
-/// <summary>
-/// DTO chứa thông tin assignment kèm guard info
-/// </summary>
 internal class AssignmentWithGuardInfo
 {
     public Guid Id { get; set; }
@@ -639,8 +551,6 @@ internal class AssignmentWithGuardInfo
     public string? Email { get; set; }
     public string FullName { get; set; } = string.Empty;
     public string PhoneNumber { get; set; } = string.Empty;
-
-    // Shift info (joined from shifts table)
     public DateTime ShiftDate { get; set; }
     public DateTime ShiftStart { get; set; }
     public DateTime ShiftEnd { get; set; }

@@ -21,3 +21,4 @@ global using BuildingBlocks.Extensions;
 global using Microsoft.AspNetCore.SignalR;
 global using Chats.API.Hubs;
 global using Chats.API.Services;
+global using Chats.API.Extensions;

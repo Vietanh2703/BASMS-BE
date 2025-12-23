@@ -1,12 +1,5 @@
-using Dapper;
-using MassTransit;
-using BuildingBlocks.Messaging.Events;
-
 namespace Shifts.API.Validators;
 
-/// <summary>
-/// Validator để kiểm tra các ràng buộc về shift
-/// </summary>
 public class ShiftValidator
 {
     private readonly IDbConnectionFactory _dbFactory;
@@ -23,15 +16,6 @@ public class ShiftValidator
         _logger = logger;
     }
 
-    /// <summary>
-    /// Kiểm tra shift có bị trùng thời gian với các shift khác tại cùng location không
-    /// </summary>
-    /// <param name="locationId">ID địa điểm</param>
-    /// <param name="shiftDate">Ngày ca trực</param>
-    /// <param name="startTime">Giờ bắt đầu</param>
-    /// <param name="endTime">Giờ kết thúc</param>
-    /// <param name="excludeShiftId">ID shift cần loại trừ (dùng khi update)</param>
-    /// <returns>ValidationResult chứa thông tin về shift bị trùng</returns>
     public async Task<ShiftOverlapValidationResult> ValidateShiftTimeOverlapAsync(
         Guid locationId,
         DateTime shiftDate,
@@ -53,8 +37,6 @@ public class ShiftValidator
             var shiftStart = shiftDate.Date.Add(startTime);
             var shiftEnd = shiftDate.Date.Add(endTime);
 
-            // Query để tìm shifts bị trùng thời gian
-            // Trùng khi: (StartA < EndB) AND (EndA > StartB)
             var sql = @"
                 SELECT
                     Id,
@@ -119,13 +101,7 @@ public class ShiftValidator
             throw;
         }
     }
-
-    /// <summary>
-    /// Kiểm tra shift có nằm trong khoảng thời gian của contract không
-    /// </summary>
-    /// <param name="contractId">ID hợp đồng</param>
-    /// <param name="shiftDate">Ngày ca trực</param>
-    /// <returns>ValidationResult</returns>
+    
     public async Task<ContractPeriodValidationResult> ValidateShiftWithinContractPeriodAsync(
         Guid contractId,
         DateTime shiftDate)
@@ -136,8 +112,7 @@ public class ShiftValidator
                 "Validating shift date {ShiftDate:yyyy-MM-dd} within contract {ContractId} period",
                 shiftDate,
                 contractId);
-
-            // Gửi request qua RabbitMQ để lấy thông tin contract từ Contracts.API
+            
             var response = await _contractRequestClient.GetResponse<GetContractResponse>(
                 new GetContractRequest { ContractId = contractId },
                 timeout: RequestTimeout.After(s: 10));
@@ -159,8 +134,7 @@ public class ShiftValidator
             }
 
             var contract = contractResponse.Contract;
-
-            // Kiểm tra shift date có nằm trong khoảng StartDate và EndDate không
+            
             if (shiftDate.Date < contract.StartDate.Date)
             {
                 var message = $"Ngày ca trực ({shiftDate:yyyy-MM-dd}) trước ngày bắt đầu hợp đồng ({contract.StartDate:yyyy-MM-dd})";
@@ -210,9 +184,6 @@ public class ShiftValidator
     }
 }
 
-/// <summary>
-/// Kết quả validation shift overlap
-/// </summary>
 public class ShiftOverlapValidationResult
 {
     public bool IsValid { get; set; }
@@ -221,9 +192,6 @@ public class ShiftOverlapValidationResult
     public List<OverlappingShift> OverlappingShifts { get; set; } = new();
 }
 
-/// <summary>
-/// Thông tin shift bị trùng
-/// </summary>
 public class OverlappingShift
 {
     public Guid Id { get; set; }
@@ -236,9 +204,6 @@ public class OverlappingShift
     public Guid? ContractId { get; set; }
 }
 
-/// <summary>
-/// Kết quả validation contract period
-/// </summary>
 public class ContractPeriodValidationResult
 {
     public bool IsValid { get; set; }

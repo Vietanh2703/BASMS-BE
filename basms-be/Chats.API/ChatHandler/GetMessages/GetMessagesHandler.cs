@@ -193,6 +193,13 @@ internal class GetMessagesHandler(
                 messagesList = messagesList.Take(request.Limit).ToList();
             }
 
+            // Convert DateTime fields to Vietnam time
+            messagesList = messagesList.Select(m => m with
+            {
+                CreatedAt = m.CreatedAt.ToVietnamTime(),
+                EditedAt = m.EditedAt.ToVietnamTime()
+            }).ToList();
+
             // Get oldest message ID for next cursor
             var oldestMessageId = messagesList.LastOrDefault()?.Id;
 

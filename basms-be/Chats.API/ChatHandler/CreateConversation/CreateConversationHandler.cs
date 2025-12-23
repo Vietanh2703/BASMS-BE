@@ -307,9 +307,22 @@ internal class CreateConversationHandler(
               AND c.IsDeleted = 0
             LIMIT 1";
 
-        return await connection.QueryFirstOrDefaultAsync<ConversationDto>(
+        var conversation = await connection.QueryFirstOrDefaultAsync<ConversationDto>(
             sql,
             new { ConversationId = conversationId });
+
+        // Convert DateTime fields to Vietnam time
+        if (conversation != null)
+        {
+            return conversation with
+            {
+                LastMessageAt = conversation.LastMessageAt.ToVietnamTime(),
+                CreatedAt = conversation.CreatedAt.ToVietnamTime(),
+                UpdatedAt = conversation.UpdatedAt.ToVietnamTime()
+            };
+        }
+
+        return conversation;
     }
 }
 

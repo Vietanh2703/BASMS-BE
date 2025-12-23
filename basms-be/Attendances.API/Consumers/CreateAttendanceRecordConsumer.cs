@@ -1,20 +1,5 @@
-using Dapper;
-using MassTransit;
-using BuildingBlocks.Messaging.Events;
-using Attendances.API.Helpers;
-using Attendances.API.Models;
-
 namespace Attendances.API.Consumers;
 
-/// <summary>
-/// Consumer để tự động tạo AttendanceRecord khi ShiftAssignment được tạo
-///
-/// WORKFLOW:
-/// 1. Shifts.API tạo ShiftAssignment → Publish ShiftAssignmentCreatedEvent
-/// 2. Attendances.API nhận event
-/// 3. Tạo AttendanceRecord với status PENDING (chờ guard check-in)
-/// 4. Truyền ShiftAssignmentId, GuardId, ShiftId vào record
-/// </summary>
 public class CreateAttendanceRecordConsumer : IConsumer<ShiftAssignmentCreatedEvent>
 {
     private readonly IDbConnectionFactory _dbFactory;

@@ -1,5 +1,3 @@
-using FluentValidation;
-
 namespace Users.API.UsersHandler.CreateOtp;
 
 public class CreateOtpValidator : AbstractValidator<CreateOtpCommand>

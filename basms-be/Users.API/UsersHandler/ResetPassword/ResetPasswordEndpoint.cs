@@ -1,6 +1,6 @@
 namespace Users.API.UsersHandler.ResetPassword;
 
-// Step 1: Request DTO - Request reset password
+
 public record RequestResetPasswordRequest(
     string Email
 );
@@ -11,7 +11,6 @@ public record RequestResetPasswordResponse(
     DateTime? ExpiresAt = null
 );
 
-// Step 2: Request DTO - Verify OTP
 public record VerifyResetPasswordOtpRequest(
     string Email,
     string OtpCode

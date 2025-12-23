@@ -1,16 +1,8 @@
-using Dapper;
-using Shifts.API.Data;
-
 namespace Shifts.API.TeamsHandler.GetTeamById;
 
-/// <summary>
-/// Query để lấy thông tin chi tiết team kèm members
-/// </summary>
+
 public record GetTeamByIdQuery(Guid TeamId) : IQuery<GetTeamByIdResult>;
 
-/// <summary>
-/// Result chứa thông tin team và members
-/// </summary>
 public record GetTeamByIdResult
 {
     public Guid TeamId { get; init; }
@@ -57,10 +49,7 @@ internal class GetTeamByIdHandler(
             logger.LogInformation("Getting team {TeamId} with members", request.TeamId);
 
             using var connection = await dbFactory.CreateConnectionAsync();
-
-            // ================================================================
-            // QUERY TEAM INFO
-            // ================================================================
+            
             var teamQuery = @"
                 SELECT
                     t.Id AS TeamId,
@@ -89,10 +78,7 @@ internal class GetTeamByIdHandler(
                 logger.LogWarning("Team {TeamId} not found", request.TeamId);
                 throw new InvalidOperationException($"Team {request.TeamId} không tồn tại");
             }
-
-            // ================================================================
-            // QUERY TEAM MEMBERS
-            // ================================================================
+            
             var membersQuery = @"
                 SELECT
                     tm.Id AS TeamMemberId,
@@ -124,7 +110,7 @@ internal class GetTeamByIdHandler(
                 new { request.TeamId });
 
             logger.LogInformation(
-                "✓ Found team {TeamCode} with {MemberCount} members",
+                "Found team {TeamCode} with {MemberCount} members",
                 team.TeamCode,
                 members.Count());
 

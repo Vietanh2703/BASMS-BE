@@ -1,5 +1,3 @@
-using Microsoft.AspNetCore.Mvc;
-
 namespace Shifts.API.TeamsHandler.GetTeamMembers;
 
 public class GetTeamMembersEndpoint : ICarterModule
@@ -10,20 +8,6 @@ public class GetTeamMembersEndpoint : ICarterModule
             .WithName("GetTeamMembers")
             .WithTags("Teams")
             .WithSummary("Lấy danh sách members của team")
-            .WithDescription(@"
-Lấy danh sách tất cả members thuộc một team.
-
-Thông tin trả về:
-- Team info (TeamId, TeamCode, TeamName)
-- Danh sách members với thông tin chi tiết:
-  - Guard info (Name, EmployeeCode, Email, PhoneNumber, CertificationLevel)
-  - Role trong team (LEADER/DEPUTY/MEMBER)
-  - Status (IsActive)
-  - Performance metrics (TotalShiftsAssigned, TotalShiftsCompleted, AttendanceRate)
-  - JoinedAt (ngày gia nhập team)
-
-Members được sắp xếp theo thứ tự: LEADER → DEPUTY → MEMBER → Others
-            ")
             .Produces<GetTeamMembersResult>(StatusCodes.Status200OK)
             .Produces<ProblemDetails>(StatusCodes.Status404NotFound)
             .Produces<ProblemDetails>(StatusCodes.Status500InternalServerError);

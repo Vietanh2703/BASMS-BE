@@ -1,14 +1,9 @@
-// Handler xử lý logic lấy thông tin guard theo ID
-// Query từ cache database
 namespace Shifts.API.GuardsHandler.GetGuardById;
 
-// Query chứa ID guard cần lấy
 public record GetGuardByIdQuery(Guid Id) : IQuery<GetGuardByIdResult>;
 
-// Result chứa guard detail DTO
 public record GetGuardByIdResult(GuardDetailDto Guard);
 
-// DTO chứa đầy đủ thông tin guard
 public record GuardDetailDto(
     Guid Id,
     string IdentityNumber,
@@ -49,11 +44,7 @@ internal class GetGuardByIdHandler(
         try
         {
             logger.LogInformation("Getting guard by ID: {GuardId}", request.Id);
-
-            // Bước 1: Tạo kết nối database
             using var connection = await connectionFactory.CreateConnectionAsync();
-
-            // Bước 2: Lấy guard theo ID từ cache
             var guards = await connection.GetAllAsync<Guards>();
             var guard = guards.FirstOrDefault(g => g.Id == request.Id && !g.IsDeleted);
 
@@ -63,7 +54,6 @@ internal class GetGuardByIdHandler(
                 throw new InvalidOperationException($"Guard with ID {request.Id} not found");
             }
 
-            // Bước 3: Map entity sang DTO
             var guardDetailDto = new GuardDetailDto(
                 Id: guard.Id,
                 IdentityNumber: guard.IdentityNumber,
@@ -95,8 +85,7 @@ internal class GetGuardByIdHandler(
             );
 
             logger.LogInformation("Successfully retrieved guard: {EmployeeCode}", guard.EmployeeCode);
-
-            // Bước 4: Trả về kết quả
+            
             return new GetGuardByIdResult(guardDetailDto);
         }
         catch (Exception ex)

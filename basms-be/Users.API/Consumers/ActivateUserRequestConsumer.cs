@@ -4,10 +4,6 @@ using Users.API.UsersHandler.ActivateUser;
 
 namespace Users.API.Consumers;
 
-/// <summary>
-/// Consumer xử lý request activate user từ các service khác (Contracts.API)
-/// Receives ActivateUserRequest từ BuildingBlocks.Messaging.Events
-/// </summary>
 public class ActivateUserRequestConsumer(
     ISender sender,
     ILogger<ActivateUserRequestConsumer> logger)

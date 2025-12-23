@@ -1,16 +1,7 @@
-using Dapper;
-using Shifts.API.Data;
-
 namespace Shifts.API.ShiftsHandler.GetGuardGroupByShiftId;
 
-/// <summary>
-/// Query để lấy danh sách guards được phân công vào một shift
-/// </summary>
 public record GetGuardGroupByShiftIdQuery(Guid ShiftId) : IQuery<GetGuardGroupByShiftIdResult>;
 
-/// <summary>
-/// Result chứa danh sách guards trong shift
-/// </summary>
 public record GetGuardGroupByShiftIdResult
 {
     public bool Success { get; init; }
@@ -22,12 +13,8 @@ public record GetGuardGroupByShiftIdResult
     public string? ErrorMessage { get; init; }
 }
 
-/// <summary>
-/// DTO cho guard trong shift, bao gồm thông tin guard và role trong team
-/// </summary>
 public record GuardInShiftDto
 {
-    // Guard Info
     public Guid GuardId { get; init; }
     public string EmployeeCode { get; init; } = string.Empty;
     public string FullName { get; init; } = string.Empty;
@@ -36,26 +23,17 @@ public record GuardInShiftDto
     public string PhoneNumber { get; init; } = string.Empty;
     public string? Gender { get; init; }
     public string EmploymentStatus { get; init; } = string.Empty;
-
-    // Team Role Info
-    public string Role { get; init; } = string.Empty; // LEADER | DEPUTY | MEMBER
+    public string Role { get; init; } = string.Empty; 
     public bool IsLeader { get; init; }
-
-    // Assignment Info
     public Guid AssignmentId { get; init; }
     public string AssignmentStatus { get; init; } = string.Empty;
     public string AssignmentType { get; init; } = string.Empty;
     public DateTime AssignedAt { get; init; }
     public DateTime? ConfirmedAt { get; init; }
-
-    // Certification Level
     public string? CertificationLevel { get; init; }
 }
 
-/// <summary>
-/// Handler để lấy danh sách guards được phân công vào shift
-/// Sắp xếp: LEADER trước, sau đó DEPUTY, cuối cùng là MEMBER
-/// </summary>
+
 internal class GetGuardGroupByShiftIdHandler(
     IDbConnectionFactory dbFactory,
     ILogger<GetGuardGroupByShiftIdHandler> logger)
@@ -72,10 +50,6 @@ internal class GetGuardGroupByShiftIdHandler(
                 request.ShiftId);
 
             using var connection = await dbFactory.CreateConnectionAsync();
-
-            // ================================================================
-            // KIỂM TRA SHIFT CÓ TỒN TẠI KHÔNG
-            // ================================================================
             var shiftExists = await connection.ExecuteScalarAsync<bool>(
                 "SELECT COUNT(*) > 0 FROM shifts WHERE Id = @ShiftId AND IsDeleted = 0",
                 new { ShiftId = request.ShiftId });
@@ -91,19 +65,8 @@ internal class GetGuardGroupByShiftIdHandler(
                 };
             }
 
-            // ================================================================
-            // SQL QUERY - LẤY DANH SÁCH GUARDS VỚI ROLE
-            // ================================================================
-            // Logic:
-            // 1. Join shift_assignments với guards để lấy thông tin guard
-            // 2. LEFT JOIN với team_members để lấy role (nếu có team)
-            // 3. LEFT JOIN với teams để lấy team name
-            // 4. Sắp xếp: LEADER -> DEPUTY -> MEMBER
-            // ================================================================
-
             var sql = @"
                 SELECT
-                    -- Assignment Info
                     sa.Id AS AssignmentId,
                     sa.ShiftId,
                     sa.TeamId,
@@ -112,8 +75,6 @@ internal class GetGuardGroupByShiftIdHandler(
                     sa.AssignmentType,
                     sa.AssignedAt,
                     sa.ConfirmedAt,
-
-                    -- Guard Info
                     g.EmployeeCode,
                     g.FullName,
                     g.AvatarUrl,
@@ -122,11 +83,7 @@ internal class GetGuardGroupByShiftIdHandler(
                     g.Gender,
                     g.EmploymentStatus,
                     g.CertificationLevel,
-
-                    -- Team Role Info (NULL nếu không có team)
                     COALESCE(tm.Role, 'MEMBER') AS Role,
-
-                    -- Team Info
                     t.TeamName
 
                 FROM shift_assignments sa
@@ -161,8 +118,7 @@ internal class GetGuardGroupByShiftIdHandler(
                     TotalGuards = 0
                 };
             }
-
-            // Map to DTO
+            
             var guards = resultsList.Select(r => new GuardInShiftDto
             {
                 AssignmentId = r.AssignmentId,

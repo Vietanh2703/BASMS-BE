@@ -132,7 +132,7 @@ internal class EditMessageHandler(
                 return new EditMessageResult
                 {
                     Success = true,
-                    EditedAt = DateTime.UtcNow
+                    EditedAt = DateTime.UtcNow.ToVietnamTime()
                 };
             }
 
@@ -177,7 +177,7 @@ internal class EditMessageHandler(
             {
                 await hubContext.Clients
                     .Group(message.ConversationId.ToString())
-                    .MessageEdited(request.MessageId, request.NewContent, now);
+                    .MessageEdited(request.MessageId, request.NewContent, now.ToVietnamTime());
 
                 logger.LogInformation(
                     "✓ Edit notification broadcasted for message {MessageId}",
@@ -193,7 +193,7 @@ internal class EditMessageHandler(
             return new EditMessageResult
             {
                 Success = true,
-                EditedAt = now
+                EditedAt = now.ToVietnamTime()
             };
         }
         catch (Exception ex)

@@ -1,9 +1,5 @@
 namespace Shifts.API.Consumers;
 
-/// <summary>
-/// Consumer for DeactivateManagerEvent
-/// Deactivates Manager record khi contract hết hạn
-/// </summary>
 public class DeactivateManagerConsumer : IConsumer<DeactivateManagerEvent>
 {
     private readonly IDbConnectionFactory _dbFactory;
@@ -30,8 +26,6 @@ public class DeactivateManagerConsumer : IConsumer<DeactivateManagerEvent>
         try
         {
             using var connection = await _dbFactory.CreateConnectionAsync();
-
-            // Find manager by ID or email
             Managers? manager = null;
 
             if (@event.ManagerId != Guid.Empty)
@@ -54,8 +48,7 @@ public class DeactivateManagerConsumer : IConsumer<DeactivateManagerEvent>
                     @event.Email);
                 return;
             }
-
-            // Deactivate manager
+            
             manager.IsActive = false;
             manager.EmploymentStatus = "TERMINATED";
             manager.UpdatedAt = DateTime.UtcNow;
@@ -74,7 +67,7 @@ public class DeactivateManagerConsumer : IConsumer<DeactivateManagerEvent>
                 "Failed to deactivate Manager {ManagerId}",
                 @event.ManagerId);
 
-            throw; // Re-throw to trigger MassTransit retry
+            throw;
         }
     }
 }

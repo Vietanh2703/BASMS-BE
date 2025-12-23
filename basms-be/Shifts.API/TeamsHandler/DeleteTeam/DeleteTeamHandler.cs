@@ -1,19 +1,10 @@
-using Dapper;
-using Dapper.Contrib.Extensions;
-
 namespace Shifts.API.TeamsHandler.DeleteTeam;
 
-/// <summary>
-/// Command để xóa team (soft delete)
-/// </summary>
 public record DeleteTeamCommand(
     Guid TeamId,
-    Guid DeletedBy  // Manager xóa team
+    Guid DeletedBy  
 ) : ICommand<DeleteTeamResult>;
 
-/// <summary>
-/// Result của delete team operation
-/// </summary>
 public record DeleteTeamResult(
     bool Success,
     string Message
@@ -33,10 +24,6 @@ internal class DeleteTeamHandler(
             logger.LogInformation("Soft deleting team {TeamId}", request.TeamId);
 
             using var connection = await dbFactory.CreateConnectionAsync();
-
-            // ================================================================
-            // BƯỚC 1: VALIDATE TEAM EXISTS
-            // ================================================================
             var team = await connection.GetAsync<Models.Teams>(request.TeamId);
 
             if (team == null || team.IsDeleted)
@@ -52,9 +39,6 @@ internal class DeleteTeamHandler(
                 team.TeamCode,
                 team.TeamName);
 
-            // ================================================================
-            // BƯỚC 2: VALIDATE - CHECK IF TEAM HAS BEEN ASSIGNED TO SHIFTS
-            // ================================================================
             var assignmentCount = await connection.QueryFirstOrDefaultAsync<int>(@"
                 SELECT COUNT(1)
                 FROM shift_assignments
@@ -75,10 +59,7 @@ internal class DeleteTeamHandler(
             }
 
             logger.LogInformation("Team has no active shift assignments - safe to delete");
-
-            // ================================================================
-            // BƯỚC 3: SOFT DELETE TEAM (SET IsDeleted = 1)
-            // ================================================================
+            
             var now = DateTime.UtcNow;
             team.IsDeleted = true;
             team.DeletedAt = now;
@@ -92,10 +73,6 @@ internal class DeleteTeamHandler(
                 "Successfully soft deleted team {TeamId} ({TeamCode})",
                 team.Id,
                 team.TeamCode);
-
-            // ================================================================
-            // BƯỚC 4: DECREMENT TOTALTEAMMANAGED CHO MANAGER
-            // ================================================================
             var updateManagerResult = await connection.ExecuteAsync(@"
                 UPDATE managers
                 SET TotalTeamsManaged = GREATEST(COALESCE(TotalTeamsManaged, 1) - 1, 0)

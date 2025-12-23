@@ -1,5 +1,3 @@
-// Handler xử lý logic lấy danh sách tất cả guards
-// Query từ cache database để tránh gọi Users.API
 namespace Shifts.API.GuardsHandler.GetAllGuards;
 
 public record GetAllGuardsQuery() : IQuery<GetAllGuardsResult>;
@@ -43,11 +41,8 @@ internal class GetAllGuardsHandler(
             logger.LogInformation("Getting all guards from cache database");
 
             using var connection = await connectionFactory.CreateConnectionAsync();
-
-            // Get all guards (not deleted)
+            
             var guards = await connection.GetAllAsync<Guards>();
-
-            // Filter out deleted guards and map to DTO
             var guardDtos = guards
                 .Where(g => !g.IsDeleted && g.IsActive)
                 .Select(g => new GuardDto(

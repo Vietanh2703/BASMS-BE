@@ -46,30 +46,6 @@ public class GetUserByEmailEndpoint : ICarterModule
         .ProducesProblem(StatusCodes.Status404NotFound)
         .ProducesProblem(StatusCodes.Status401Unauthorized)
         .ProducesProblem(StatusCodes.Status500InternalServerError)
-        .WithSummary("Get user by email address")
-        .WithDescription(@"
-            Returns a single user with the specified email address.
-
-            Query Parameters:
-            - email (string): The email address to search for
-
-            Filters:
-            - Only non-deleted users (IsDeleted = false)
-            - Case-insensitive email matching
-
-            Response includes full user details:
-            - Id, FirebaseUid, Email, EmailVerified
-            - FullName, AvatarUrl, Phone, Address
-            - BirthDay, BirthMonth, BirthYear
-            - RoleId, RoleName
-            - AuthProvider, Status
-            - LastLoginAt, LoginCount, IsActive
-            - CreatedAt
-
-            Returns 404 if user not found.
-
-            Example:
-            GET /api/users/by-email/john.doe@example.com
-        ");
+        .WithSummary("Get user by email address");
     }
 }

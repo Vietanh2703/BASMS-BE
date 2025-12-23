@@ -1,17 +1,9 @@
-using Dapper;
-using Shifts.API.Data;
 using Shifts.API.TeamsHandler.GetTeamById;
 
 namespace Shifts.API.TeamsHandler.GetTeamMembers;
 
-/// <summary>
-/// Query để lấy danh sách members của một team
-/// </summary>
 public record GetTeamMembersQuery(Guid TeamId) : IQuery<GetTeamMembersResult>;
 
-/// <summary>
-/// Result chứa danh sách team members
-/// </summary>
 public record GetTeamMembersResult
 {
     public bool Success { get; init; }
@@ -37,10 +29,6 @@ internal class GetTeamMembersHandler(
             logger.LogInformation("Getting members for team {TeamId}", request.TeamId);
 
             using var connection = await dbFactory.CreateConnectionAsync();
-
-            // ================================================================
-            // BƯỚC 1: VALIDATE TEAM EXISTS
-            // ================================================================
             var teamInfo = await connection.QueryFirstOrDefaultAsync<dynamic>(@"
                 SELECT Id, TeamCode, TeamName, IsDeleted
                 FROM teams
@@ -75,10 +63,7 @@ internal class GetTeamMembersHandler(
                 "Team found: {TeamCode} - {TeamName}",
                 (string)teamInfo.TeamCode,
                 (string)teamInfo.TeamName);
-
-            // ================================================================
-            // BƯỚC 2: QUERY TEAM MEMBERS
-            // ================================================================
+            
             var membersQuery = @"
                 SELECT
                     tm.Id AS TeamMemberId,

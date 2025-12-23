@@ -1,19 +1,12 @@
-using Dapper;
-
 namespace Shifts.API.GuardsHandler.RequestGuardToManager;
 
-/// <summary>
-/// Command để guard gửi yêu cầu gia nhập team của manager
-/// </summary>
 public record RequestGuardToManagerCommand(
     Guid GuardId,
     Guid ManagerId,
     string? RequestNote
 ) : ICommand<RequestGuardToManagerResult>;
 
-/// <summary>
-/// Result trả về sau khi tạo request thành công
-/// </summary>
+
 public record RequestGuardToManagerResult(
     bool Success,
     string Message,
@@ -39,10 +32,7 @@ internal class RequestGuardToManagerHandler(
                 command.ManagerId);
 
             using var connection = await connectionFactory.CreateConnectionAsync();
-
-            // ================================================================
-            // BƯỚC 1: VALIDATE GUARD EXISTS
-            // ================================================================
+            
             var guard = await connection.QueryFirstOrDefaultAsync<Guards>(
                 @"SELECT * FROM guards
                   WHERE Id = @GuardId
@@ -61,9 +51,6 @@ internal class RequestGuardToManagerHandler(
                 );
             }
 
-            // ================================================================
-            // BƯỚC 2: VALIDATE MANAGER EXISTS
-            // ================================================================
             var manager = await connection.QueryFirstOrDefaultAsync<Managers>(
                 @"SELECT * FROM managers
                   WHERE Id = @ManagerId
@@ -83,9 +70,6 @@ internal class RequestGuardToManagerHandler(
                 );
             }
 
-            // ================================================================
-            // BƯỚC 3: CHECK IF GUARD ALREADY HAS PENDING REQUEST
-            // ================================================================
             if (guard.ContractType == "join_in_request" && guard.DirectManagerId != null)
             {
                 logger.LogWarning(
@@ -102,9 +86,6 @@ internal class RequestGuardToManagerHandler(
                 );
             }
 
-            // ================================================================
-            // BƯỚC 4: UPDATE GUARD - SET DirectManagerId & ContractType
-            // ================================================================
             using var transaction = connection.BeginTransaction();
 
             try
@@ -152,7 +133,7 @@ internal class RequestGuardToManagerHandler(
             }
 
             logger.LogInformation(
-                "✅ Guard {GuardId} ({GuardName}) successfully sent join request to Manager {ManagerId} ({ManagerName})",
+                "Guard {GuardId} ({GuardName}) successfully sent join request to Manager {ManagerId} ({ManagerName})",
                 command.GuardId,
                 guard.FullName,
                 command.ManagerId,

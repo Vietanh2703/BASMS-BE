@@ -1,18 +1,12 @@
 namespace Users.API.UsersHandler.GetUsersByRoleId;
 
-/// <summary>
-/// Query để lấy danh sách users theo roleId
-/// </summary>
+
 public record GetUsersByRoleIdQuery(Guid RoleId) : IQuery<GetUsersByRoleIdResult>;
 
-/// <summary>
-/// Result chứa danh sách users
-/// </summary>
+
 public record GetUsersByRoleIdResult(IEnumerable<UserDto> Users);
 
-/// <summary>
-/// DTO cho User
-/// </summary>
+
 public record UserDto(
     Guid Id,
     string FirebaseUid,
@@ -35,9 +29,6 @@ public record UserDto(
     DateTime CreatedAt
 );
 
-/// <summary>
-/// Handler để lấy danh sách users theo roleId
-/// </summary>
 internal class GetUsersByRoleIdHandler(
     IDbConnectionFactory connectionFactory,
     ILogger<GetUsersByRoleIdHandler> logger)

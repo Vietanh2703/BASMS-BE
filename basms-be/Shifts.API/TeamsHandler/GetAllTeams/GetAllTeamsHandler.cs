@@ -1,15 +1,9 @@
 namespace Shifts.API.TeamsHandler.GetAllTeams;
 
-/// <summary>
-/// Query để lấy danh sách teams theo manager
-/// </summary>
 public record GetAllTeamsQuery(
-    Guid ManagerId                  // Manager ID (required)
+    Guid ManagerId              
 ) : IQuery<GetAllTeamsResult>;
 
-/// <summary>
-/// Result chứa danh sách teams
-/// </summary>
 public record GetAllTeamsResult
 {
     public List<TeamSummaryDto> Teams { get; init; } = new();
@@ -47,10 +41,7 @@ internal class GetAllTeamsHandler(
                 request.ManagerId);
 
             using var connection = await dbFactory.CreateConnectionAsync();
-
-            // ================================================================
-            // QUERY TEAMS BY MANAGER
-            // ================================================================
+            
             var teamsQuery = @"
                 SELECT
                     t.Id AS TeamId,

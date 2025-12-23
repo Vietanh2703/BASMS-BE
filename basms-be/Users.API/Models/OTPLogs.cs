@@ -10,9 +10,9 @@ public class OTPLogs
 
     public string OtpCode { get; set; } = string.Empty;
 
-    public string Purpose { get; set; } = string.Empty; // login, verify_email, reset_password, etc.
+    public string Purpose { get; set; } = string.Empty;
 
-    public string DeliveryMethod { get; set; } = "email"; // email, sms
+    public string DeliveryMethod { get; set; } = "email";
 
     public DateTime ExpiresAt { get; set; }
 
@@ -35,8 +35,7 @@ public class OTPLogs
     public DateTime CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
-
-    // Navigation property - ignored by Dapper
+    
     [Write(false)]
     [Computed]
     public virtual Users? User { get; set; }

@@ -31,8 +31,7 @@ public class UserTokens
     public DateTime CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
-
-    // Navigation property - ignored by Dapper
+    
     [Write(false)]
     [Computed]
     public virtual Users? User { get; set; }

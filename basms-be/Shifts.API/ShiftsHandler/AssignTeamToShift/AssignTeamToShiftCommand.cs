@@ -1,23 +1,18 @@
 namespace Shifts.API.ShiftsHandler.AssignTeamToShift;
 
-/// <summary>
-/// Command để assign team vào shifts theo date range và time slot
-/// </summary>
 public record AssignTeamToShiftCommand(
-    Guid TeamId,                    // Team được assign
-    DateTime StartDate,             // Ngày bắt đầu
-    DateTime EndDate,               // Ngày kết thúc (multi-day assignment)
-    string ShiftTimeSlot,           // MORNING | AFTERNOON | EVENING
-    Guid LocationId,                // Địa điểm
-    Guid? ContractId,               // Hợp đồng (optional)
-    string AssignmentType,          // REGULAR | OVERTIME | MANDATORY
-    string? AssignmentNotes,        // Ghi chú
-    Guid AssignedBy                 // Manager thực hiện
+    Guid TeamId,                  
+    DateTime StartDate,           
+    DateTime EndDate,              
+    string ShiftTimeSlot,          
+    Guid LocationId,                
+    Guid? ContractId,               
+    string AssignmentType,          
+    string? AssignmentNotes,        
+    Guid AssignedBy                 
 ) : ICommand<AssignTeamToShiftResult>;
 
-/// <summary>
-/// Result chứa thông tin assignments đã tạo
-/// </summary>
+
 public record AssignTeamToShiftResult
 {
     public bool Success { get; init; }
@@ -29,9 +24,7 @@ public record AssignTeamToShiftResult
     public List<string> Errors { get; init; } = new();
 }
 
-/// <summary>
-/// Tổng kết assignment cho từng ngày
-/// </summary>
+
 public record DailyAssignmentSummary
 {
     public DateTime Date { get; init; }

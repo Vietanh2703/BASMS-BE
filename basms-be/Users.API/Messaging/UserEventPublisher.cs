@@ -3,10 +3,7 @@ using MassTransit;
 
 namespace Users.API.Messaging;
 
-/// <summary>
-/// Centralized service for publishing user-related events to message bus
-/// Used by: CreateUserHandler, UpdateUserHandler, DeleteUserHandler
-/// </summary>
+
 public class UserEventPublisher
 {
     private readonly IPublishEndpoint _publishEndpoint;
@@ -19,10 +16,7 @@ public class UserEventPublisher
         _publishEndpoint = publishEndpoint;
         _logger = logger;
     }
-
-    /// <summary>
-    /// Publish UserCreatedEvent when a new user is registered
-    /// </summary>
+    
     public async Task PublishUserCreatedAsync(Models.Users user, Roles role, CancellationToken cancellationToken = default)
     {
         try
@@ -47,7 +41,6 @@ public class UserEventPublisher
                         user.BirthYear,
                         user.BirthMonth,
                         user.BirthDay);
-                    // Keep dateOfBirth as null if invalid
                 }
             }
             
@@ -65,9 +58,6 @@ public class UserEventPublisher
 
                 RoleId = user.RoleId,
                 RoleName = role.Name,
-
-                // These would come from additional user fields if they exist
-                // For now, using placeholders - adjust based on your Users model
                 EmployeeCode = null, 
                 Position = null,
                 Department = null,
@@ -94,13 +84,9 @@ public class UserEventPublisher
             _logger.LogError(ex,
                 "Failed to publish UserCreatedEvent for User {UserId}",
                 user.Id);
-            // Don't throw - user creation should succeed even if event publishing fails
         }
     }
-
-    /// <summary>
-    /// Publish UserUpdatedEvent when user information changes
-    /// </summary>
+    
     public async Task PublishUserUpdatedAsync(
         Models.Users user,
         Roles role,
@@ -144,9 +130,6 @@ public class UserEventPublisher
         }
     }
 
-    /// <summary>
-    /// Publish UserDeletedEvent when user is soft-deleted
-    /// </summary>
     public async Task PublishUserDeletedAsync(
         Guid userId,
         string roleName,
@@ -181,10 +164,6 @@ public class UserEventPublisher
         }
     }
 
-    /// <summary>
-    /// Publish UserRoleChangedEvent when user's role changes
-    /// Example: Guard promoted to Manager
-    /// </summary>
     public async Task PublishUserRoleChangedAsync(
         Models.Users user,
         Roles oldRole,
@@ -205,7 +184,7 @@ public class UserEventPublisher
 
                 FullName = user.FullName,
                 Email = user.Email,
-                EmployeeCode = null, // Add to Users model
+                EmployeeCode = null, 
 
                 ChangedAt = DateTime.UtcNow,
                 ChangedBy = changedBy,

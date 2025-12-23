@@ -1,18 +1,5 @@
-using Carter;
-using Shifts.API.Extensions;
-
 namespace Shifts.API.FileHandler;
 
-/// <summary>
-/// Endpoint để upload file chứng từ lên AWS S3
-/// Hỗ trợ: Ảnh (jpg, png), PDF, Word (doc, docx), Video (mp4, avi)
-///
-/// USE CASE:
-/// 1. Upload đơn xin nghỉ (PDF, Word)
-/// 2. Upload giấy khám bệnh (PDF, ảnh)
-/// 3. Upload giấy thai sản (PDF, ảnh)
-/// 4. Upload video chứng minh (mp4)
-/// </summary>
 public class UploadFileEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
@@ -26,7 +13,6 @@ public class UploadFileEndpoint : ICarterModule
             {
                 try
                 {
-                    // Kiểm tra có file không
                     if (!request.HasFormContentType || request.Form.Files.Count == 0)
                     {
                         return Results.BadRequest(new
@@ -38,8 +24,8 @@ public class UploadFileEndpoint : ICarterModule
 
                     var file = request.Form.Files[0];
 
-                    // Validation: File size (max 100MB)
-                    const long maxFileSize = 100 * 1024 * 1024; // 100MB
+
+                    const long maxFileSize = 100 * 1024 * 1024; 
                     if (file.Length > maxFileSize)
                     {
                         return Results.BadRequest(new
@@ -48,14 +34,13 @@ public class UploadFileEndpoint : ICarterModule
                             message = $"File quá lớn. Kích thước tối đa: 100MB. File của bạn: {file.Length / 1024 / 1024}MB"
                         });
                     }
-
-                    // Validation: File type
+                    
                     var allowedExtensions = new[]
                     {
-                        ".jpg", ".jpeg", ".png", ".gif", ".bmp", // Ảnh
-                        ".pdf", // PDF
-                        ".doc", ".docx", // Word
-                        ".mp4", ".avi", ".mov", ".wmv" // Video
+                        ".jpg", ".jpeg", ".png", ".gif", ".bmp", 
+                        ".pdf", 
+                        ".doc", ".docx",
+                        ".mp4", ".avi", ".mov", ".wmv" 
                     };
 
                     var fileExtension = Path.GetExtension(file.FileName).ToLowerInvariant();
@@ -69,16 +54,15 @@ public class UploadFileEndpoint : ICarterModule
                         });
                     }
 
-                    // Xác định content type
-                    var contentType = file.ContentType ?? GetContentType(fileExtension);
+
+                    var contentType = file.ContentType;
 
                     logger.LogInformation(
-                        "📁 Uploading file: {FileName} ({Size}MB, Type: {ContentType})",
+                        "Uploading file: {FileName} ({Size}MB, Type: {ContentType})",
                         file.FileName,
                         file.Length / 1024.0 / 1024.0,
                         contentType);
 
-                    // Upload lên S3
                     using var stream = file.OpenReadStream();
                     var (success, fileUrl, errorMessage) = await s3Service.UploadFileAsync(
                         stream,
@@ -88,7 +72,7 @@ public class UploadFileEndpoint : ICarterModule
 
                     if (!success)
                     {
-                        logger.LogError("❌ Failed to upload file: {ErrorMessage}", errorMessage);
+                        logger.LogError("Failed to upload file: {ErrorMessage}", errorMessage);
                         return Results.BadRequest(new
                         {
                             success = false,
@@ -96,7 +80,7 @@ public class UploadFileEndpoint : ICarterModule
                         });
                     }
 
-                    logger.LogInformation("✅ File uploaded successfully: {FileUrl}", fileUrl);
+                    logger.LogInformation("File uploaded successfully: {FileUrl}", fileUrl);
 
                     return Results.Ok(new
                     {
@@ -114,7 +98,7 @@ public class UploadFileEndpoint : ICarterModule
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "❌ Error uploading file");
+                    logger.LogError(ex, "Error uploading file");
                     return Results.StatusCode(500);
                 }
             })
@@ -123,13 +107,11 @@ public class UploadFileEndpoint : ICarterModule
             .WithDescription("Upload file chứng từ lên AWS S3 (ảnh, PDF, Word, video)")
             .Produces<object>(StatusCodes.Status200OK)
             .Produces<object>(StatusCodes.Status400BadRequest)
-            .DisableAntiforgery() // Disable antiforgery cho file upload
+            .DisableAntiforgery() 
             .RequireAuthorization();
     }
 
-    /// <summary>
-    /// Xác định content type dựa trên file extension
-    /// </summary>
+ 
     private static string GetContentType(string extension)
     {
         return extension.ToLowerInvariant() switch

@@ -40,6 +40,17 @@ static string ExtractServerFromConnectionString(string connStr)
 builder.Services.AddDefaultAWSOptions(builder.Configuration.GetAWSOptions());
 builder.Services.AddAWSService<IAmazonS3>();
 
+builder.Services.Configure<Incidents.API.Extensions.AwsS3Settings>(options =>
+{
+    options.BucketName = builder.Configuration["AWS_BUCKET_NAME"] ?? builder.Configuration["AWS__BucketName"] ?? "basms-files";
+    options.Region = builder.Configuration["AWS_REGION"] ?? builder.Configuration["AWS__Region"] ?? "ap-southeast-2";
+    options.AccessKey = builder.Configuration["AWS_ACCESS_KEY"] ?? builder.Configuration["AWS__AccessKey"] ?? string.Empty;
+    options.SecretKey = builder.Configuration["AWS_SECRET_KEY"] ?? builder.Configuration["AWS__SecretKey"] ?? string.Empty;
+    options.FolderPrefix = "incidents/media";
+});
+
+builder.Services.AddScoped<Incidents.API.Extensions.IS3Service, Incidents.API.Extensions.S3Service>();
+
 // Đăng ký MassTransit with RabbitMQ
 builder.Services.AddMassTransit(x =>
 {

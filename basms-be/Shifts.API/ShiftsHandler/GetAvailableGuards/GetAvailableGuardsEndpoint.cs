@@ -1,10 +1,9 @@
-namespace Shifts.API.Handlers.GetAvailableGuards;
+namespace Shifts.API.ShiftsHandler.GetAvailableGuards;
 
 public class GetAvailableGuardsEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        // Route: GET /shifts/available-guards
         app.MapGet("/api/shifts/available-guards", async (
             Guid locationId,
             DateTime shiftDate,

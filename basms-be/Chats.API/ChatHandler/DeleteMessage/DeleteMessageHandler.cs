@@ -71,7 +71,7 @@ internal class DeleteMessageHandler(
                 return new DeleteMessageResult
                 {
                     Success = true,
-                    DeletedAt = DateTime.UtcNow
+                    DeletedAt = DateTime.UtcNow.ToVietnamTime()
                 };
             }
 
@@ -130,7 +130,7 @@ internal class DeleteMessageHandler(
             {
                 await hubContext.Clients
                     .Group(message.ConversationId.ToString())
-                    .MessageDeleted(request.MessageId, request.UserId, now);
+                    .MessageDeleted(request.MessageId, request.UserId, now.ToVietnamTime());
 
                 logger.LogInformation(
                     "✓ Delete notification broadcasted for message {MessageId}",
@@ -146,7 +146,7 @@ internal class DeleteMessageHandler(
             return new DeleteMessageResult
             {
                 Success = true,
-                DeletedAt = now
+                DeletedAt = now.ToVietnamTime()
             };
         }
         catch (Exception ex)

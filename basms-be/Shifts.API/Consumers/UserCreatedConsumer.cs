@@ -1,9 +1,5 @@
 namespace Shifts.API.Consumers;
 
-/// <summary>
-/// Consumer for UserCreatedEvent
-/// Creates manager/guard cache in Shifts database when new user is created
-/// </summary>
 public class UserCreatedConsumer : IConsumer<UserCreatedEvent>
 {
     private readonly IDbConnectionFactory _dbFactory;
@@ -31,8 +27,6 @@ public class UserCreatedConsumer : IConsumer<UserCreatedEvent>
         try
         {
             using var connection = await _dbFactory.CreateConnectionAsync();
-
-            // Determine if user is manager or guard
             var isManager = @event.RoleName.ToLower() is "manager";
             var isGuard = @event.RoleName.ToLower() is "guard";
 
@@ -53,7 +47,6 @@ public class UserCreatedConsumer : IConsumer<UserCreatedEvent>
                 return;
             }
 
-            // Log successful sync
             await LogSyncAsync(connection, @event, syncStarted, "SUCCESS", null);
 
             _logger.LogInformation(
@@ -67,12 +60,11 @@ public class UserCreatedConsumer : IConsumer<UserCreatedEvent>
             _logger.LogError(ex,
                 "Failed to process UserCreatedEvent for User {UserId}",
                 @event.UserId);
-
-            // Log failed sync
+            
             using var connection = await _dbFactory.CreateConnectionAsync();
             await LogSyncAsync(connection, @event, syncStarted, "FAILED", ex.Message);
 
-            throw; // Re-throw to trigger MassTransit retry
+            throw; 
         }
     }
     
@@ -99,7 +91,7 @@ public class UserCreatedConsumer : IConsumer<UserCreatedEvent>
 
             EmploymentStatus = "ACTIVE",
 
-            // Default permissions
+
             CanCreateShifts = true,
             CanApproveShifts = false,
             CanAssignGuards = true,
@@ -107,8 +99,6 @@ public class UserCreatedConsumer : IConsumer<UserCreatedEvent>
             CanManageTeams = true,
 
             IsActive = true,
-
-            // Sync metadata
             LastSyncedAt = DateTime.UtcNow,
             SyncStatus = "SYNCED",
             UserServiceVersion = @event.Version,
@@ -137,30 +127,21 @@ public class UserCreatedConsumer : IConsumer<UserCreatedEvent>
             Email = @event.Email,
             AvatarUrl = @event.AvatarUrl,
             PhoneNumber = @event.Phone ?? "N/A",
-
             DateOfBirth = @event.DateOfBirth,
             Gender = @event.Gender,
             CurrentAddress = @event.Address,
-
             EmploymentStatus = "ACTIVE",
             HireDate = @event.HireDate ?? DateTime.Today,
             ContractType = @event.ContractType,
-
-            // Default preferences
             MaxWeeklyHours = 48,
             CanWorkOvertime = true,
             CanWorkWeekends = true,
             CanWorkHolidays = true,
-
             CurrentAvailability = "AVAILABLE",
-
             IsActive = true,
-
-            // Sync metadata
             LastSyncedAt = DateTime.UtcNow,
             SyncStatus = "SYNCED",
             UserServiceVersion = @event.Version,
-
             CreatedAt = @event.CreatedAt
         };
 

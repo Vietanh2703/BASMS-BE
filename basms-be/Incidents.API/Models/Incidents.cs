@@ -1,35 +1,12 @@
 namespace Incidents.API.Models;
 
-/// <summary>
-/// INCIDENTS - Quản lý sự cố/sự kiện
-/// Chức năng: Ghi nhận, theo dõi và xử lý các sự cố phát sinh tại địa điểm bảo vệ
-/// Use case: "Guard báo cáo sự cố xâm nhập tại Location A lúc 23:00, severity HIGH"
-/// </summary>
 [Table("incidents")]
 public class Incidents
 {
     [ExplicitKey]
     public Guid Id { get; set; }
-
-    // ============================================================================
-    // THÔNG TIN CƠ BẢN
-    // ============================================================================
-
-    /// <summary>
-    /// Mã sự cố: INC001, INC002
-    /// Format: INC + số tự động tăng
-    /// </summary>
     public string IncidentCode { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Tiêu đề sự cố
-    /// Ví dụ: "Phát hiện người lạ đột nhập"
-    /// </summary>
     public string Title { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Mô tả chi tiết sự cố
-    /// </summary>
     public string Description { get; set; } = string.Empty;
 
     // ============================================================================
@@ -64,9 +41,10 @@ public class Incidents
     public string Location { get; set; } = string.Empty;
 
     /// <summary>
-    /// Location ID từ Contracts.API (nếu có)
+    /// Địa chỉ ca trực (Shift Location)
+    /// Ví dụ: "Cổng chính - Tòa nhà A"
     /// </summary>
-    public Guid? LocationId { get; set; }
+    public string? ShiftLocation { get; set; }
 
     // ============================================================================
     // LIÊN KẾT CA TRỰC

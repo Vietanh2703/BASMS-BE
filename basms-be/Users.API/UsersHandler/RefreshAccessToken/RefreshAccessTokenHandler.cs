@@ -1,21 +1,20 @@
 using BuildingBlocks.Exceptions;
-using Dapper;
 
 namespace Users.API.UsersHandler.RefreshAccessToken;
 
-// Command để refresh access token
+
 public record RefreshAccessTokenCommand(
-    string RefreshToken  // Refresh token từ client
+    string RefreshToken 
 ) : ICommand<RefreshAccessTokenResult>;
 
-// Result trả về sau khi refresh thành công
+
 public record RefreshAccessTokenResult(
     Guid UserId,
     string Email,
     string AccessToken,            
-    string RefreshToken,            // Refresh token mới
-    DateTime AccessTokenExpiry,     // Thời điểm access token mới hết hạn
-    DateTime RefreshTokenExpiry     // Thời điểm refresh token mới hết hạn
+    string RefreshToken,           
+    DateTime AccessTokenExpiry,     
+    DateTime RefreshTokenExpiry    
 );
 
 public class RefreshAccessTokenHandler(
@@ -28,18 +27,15 @@ public class RefreshAccessTokenHandler(
 
     public async Task<RefreshAccessTokenResult> Handle(RefreshAccessTokenCommand command, CancellationToken cancellationToken)
     {
-        // Bước 1: Validate JWT settings
         ValidateJwtSettings();
 
         try
         {
-            // Bước 2: Tạo kết nối database và transaction
             using var connection = await connectionFactory.CreateConnectionAsync();
             using var transaction = connection.BeginTransaction();
 
             try
             {
-                // Bước 3: Tìm refresh token trong database
                 var sql = @"
                     SELECT * FROM refresh_tokens
                     WHERE Token = @Token
@@ -57,54 +53,42 @@ public class RefreshAccessTokenHandler(
                     logger.LogWarning("Refresh token not found or revoked");
                     throw new UnauthorizedException("Invalid refresh token", "AUTH_INVALID_REFRESH_TOKEN");
                 }
-
-                // Bước 4: Kiểm tra refresh token còn hạn không
+                
                 if (storedToken.ExpiresAt <= DateTime.UtcNow)
                 {
                     logger.LogWarning("Refresh token expired for UserId: {UserId}", storedToken.UserId);
                     throw new UnauthorizedException("Refresh token expired", "AUTH_REFRESH_TOKEN_EXPIRED");
                 }
-
-                // Bước 5: Lấy thông tin user
+                
                 var user = await connection.GetAsync<Models.Users>(storedToken.UserId, transaction);
                 if (user == null || user.IsDeleted)
                 {
                     logger.LogWarning("User not found for refresh token");
                     throw new NotFoundException("User not found", "USER_NOT_FOUND");
                 }
-
-                // Bước 6: Kiểm tra user có active không
+                
                 if (!user.IsActive)
                 {
                     logger.LogWarning("User account inactive for UserId: {UserId}", user.Id);
                     throw new UnauthorizedException("Account is inactive", "AUTH_ACCOUNT_INACTIVE");
                 }
-
-                // Bước 7: Tạo JWT tokens mới
+                
                 var newAccessToken = GenerateAccessToken(user);
                 var newRefreshToken = GenerateRefreshToken();
                 
-                // Tính toán thời gian hết hạn
                 var accessTokenExpiry = DateTime.UtcNow.AddMinutes(_jwtSettings.AccessTokenExpirationMinutes);
                 var refreshTokenExpiry = DateTime.UtcNow.AddDays(_jwtSettings.RefreshTokenExpirationDays);
-
-                // Bước 8: Lưu Access Token mới vào bảng user_tokens
-                // XÓA tất cả access tokens cũ, chỉ giữ token mới nhất
+                
                 await SaveUserTokenAsync(connection, transaction, user.Id, newAccessToken, accessTokenExpiry);
-
-                // Bước 9: Lưu Refresh Token mới vào bảng refresh_tokens
-                // XÓA tất cả refresh tokens cũ, chỉ giữ token mới nhất
+                
                 await SaveRefreshTokenAsync(connection, transaction, user.Id, newRefreshToken, refreshTokenExpiry);
-
-                // Bước 10: Ghi log audit trail
+                
                 await LogAuditAsync(connection, transaction, user.Id, "REFRESH_TOKEN");
-
-                // Bước 11: Commit transaction
+                
                 transaction.Commit();
 
                 logger.LogInformation("Access token refreshed successfully for UserId: {UserId}", user.Id);
-
-                // Bước 12: Trả về kết quả với tokens mới
+                
                 return new RefreshAccessTokenResult(
                     UserId: user.Id,
                     Email: user.Email,
@@ -116,7 +100,6 @@ public class RefreshAccessTokenHandler(
             }
             catch
             {
-                // Rollback nếu có lỗi
                 transaction.Rollback();
                 logger.LogWarning("Transaction rolled back due to error");
                 throw;
@@ -128,8 +111,7 @@ public class RefreshAccessTokenHandler(
             throw;
         }
     }
-
-    // Validate JWT settings
+    
     private void ValidateJwtSettings()
     {
         if (_jwtSettings == null)
@@ -157,8 +139,7 @@ public class RefreshAccessTokenHandler(
             throw new InvalidOperationException("JWT Audience is not configured");
         }
     }
-
-    // Tạo JWT Access Token
+    
     private string GenerateAccessToken(Models.Users user)
     {
         try
@@ -197,8 +178,7 @@ public class RefreshAccessTokenHandler(
             throw;
         }
     }
-
-    // Tạo Refresh Token
+    
     private string GenerateRefreshToken()
     {
         var randomBytes = new byte[64];
@@ -206,8 +186,7 @@ public class RefreshAccessTokenHandler(
         rng.GetBytes(randomBytes);
         return Convert.ToBase64String(randomBytes);
     }
-
-    // Lưu Access Token vào database
+    
     private async Task SaveUserTokenAsync(
         IDbConnection connection,
         IDbTransaction transaction,
@@ -215,15 +194,13 @@ public class RefreshAccessTokenHandler(
         string token,
         DateTime expiresAt)
     {
-        // XÓA tất cả access tokens cũ bằng DELETE query
         var deleteSql = @"
             DELETE FROM user_tokens
             WHERE UserId = @UserId
             AND TokenType = 'access_token'";
 
         await connection.ExecuteAsync(deleteSql, new { UserId = userId }, transaction);
-
-        // INSERT access token mới
+        
         var insertSql = @"
             INSERT INTO user_tokens
             (Id, UserId, Token, TokenType, ExpiresAt, IsRevoked, CreatedAt, UpdatedAt, IsDeleted)
@@ -242,8 +219,7 @@ public class RefreshAccessTokenHandler(
             UpdatedAt = DateTime.UtcNow
         }, transaction);
     }
-
-    // Lưu Refresh Token vào database
+    
     private async Task SaveRefreshTokenAsync(
         IDbConnection connection,
         IDbTransaction transaction,
@@ -251,14 +227,12 @@ public class RefreshAccessTokenHandler(
         string token,
         DateTime expiresAt)
     {
-        // XÓA tất cả refresh tokens cũ bằng DELETE query
         var deleteSql = @"
             DELETE FROM refresh_tokens
             WHERE UserId = @UserId";
 
         await connection.ExecuteAsync(deleteSql, new { UserId = userId }, transaction);
-
-        // INSERT refresh token mới
+        
         var insertSql = @"
             INSERT INTO refresh_tokens
             (Id, UserId, Token, ExpiresAt, IsRevoked, CreatedAt, UpdatedAt, IsDeleted)
@@ -277,7 +251,7 @@ public class RefreshAccessTokenHandler(
         }, transaction);
     }
 
-    // Ghi log audit trail
+
     private async Task LogAuditAsync(IDbConnection connection, IDbTransaction transaction, Guid userId, string action)
     {
         var auditLog = new AuditLogs

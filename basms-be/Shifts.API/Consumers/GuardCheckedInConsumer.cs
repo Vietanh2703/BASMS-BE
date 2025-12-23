@@ -1,19 +1,5 @@
-using Dapper;
-using MassTransit;
-using BuildingBlocks.Messaging.Events;
-using Shifts.API.Data;
-
 namespace Shifts.API.Consumers;
 
-/// <summary>
-/// Consumer để xử lý GuardCheckedInEvent từ Attendances.API
-///
-/// WORKFLOW:
-/// 1. Attendances.API: Guard check-in thành công → Publish GuardCheckedInEvent
-/// 2. Shifts.API nhận event
-/// 3. Update ShiftAssignments: ConfirmedAt, CheckedInAt
-/// 4. Update Shifts: ConfirmedGuardsCount + 1, CheckedInGuardsCount + 1
-/// </summary>
 public class GuardCheckedInConsumer : IConsumer<GuardCheckedInEvent>
 {
     private readonly IDbConnectionFactory _dbFactory;
@@ -32,7 +18,7 @@ public class GuardCheckedInConsumer : IConsumer<GuardCheckedInEvent>
         var message = context.Message;
 
         _logger.LogInformation(
-            "📨 Received GuardCheckedInEvent: Guard={GuardId}, ShiftAssignment={AssignmentId}, Shift={ShiftId}, CheckInTime={CheckInTime}",
+            "Received GuardCheckedInEvent: Guard={GuardId}, ShiftAssignment={AssignmentId}, Shift={ShiftId}, CheckInTime={CheckInTime}",
             message.GuardId,
             message.ShiftAssignmentId,
             message.ShiftId,
@@ -41,10 +27,6 @@ public class GuardCheckedInConsumer : IConsumer<GuardCheckedInEvent>
         try
         {
             using var connection = await _dbFactory.CreateConnectionAsync();
-
-            // ================================================================
-            // STEP 1: UPDATE SHIFT ASSIGNMENT
-            // ================================================================
             var updateAssignmentSql = @"
                 UPDATE shift_assignments
                 SET ConfirmedAt = @ConfirmedAt,
@@ -71,14 +53,10 @@ public class GuardCheckedInConsumer : IConsumer<GuardCheckedInEvent>
             else
             {
                 _logger.LogWarning(
-                    "⚠️ ShiftAssignment not found or not updated: {AssignmentId}",
+                    "ShiftAssignment not found or not updated: {AssignmentId}",
                     message.ShiftAssignmentId);
             }
-
-            // ================================================================
-            // STEP 2: UPDATE SHIFT COUNTERS
-            // ================================================================
-            // Check if this is the first check-in for this assignment
+            
             var isFirstCheckIn = assignmentUpdated > 0;
 
             if (isFirstCheckIn)
@@ -101,8 +79,7 @@ public class GuardCheckedInConsumer : IConsumer<GuardCheckedInEvent>
                     _logger.LogInformation(
                         "✓ Updated Shift={ShiftId}: ConfirmedGuardsCount+1, CheckedInGuardsCount+1",
                         message.ShiftId);
-
-                    // Log shift statistics
+                    
                     var shiftStats = await connection.QueryFirstOrDefaultAsync(
                         @"SELECT ConfirmedGuardsCount, CheckedInGuardsCount, RequiredGuardsCount
                           FROM shifts
@@ -121,16 +98,13 @@ public class GuardCheckedInConsumer : IConsumer<GuardCheckedInEvent>
                 else
                 {
                     _logger.LogWarning(
-                        "⚠️ Shift not found or not updated: {ShiftId}",
+                        "Shift not found or not updated: {ShiftId}",
                         message.ShiftId);
                 }
             }
 
-            // ================================================================
-            // COMPLETION LOG
-            // ================================================================
             _logger.LogInformation(
-                "✅ GuardCheckedInEvent processed successfully: Guard={GuardId}, Late={IsLate} ({LateMinutes}min), FaceMatch={FaceMatchScore}%, Distance={Distance}m",
+                "GuardCheckedInEvent processed successfully: Guard={GuardId}, Late={IsLate} ({LateMinutes}min), FaceMatch={FaceMatchScore}%, Distance={Distance}m",
                 message.GuardId,
                 message.IsLate,
                 message.LateMinutes,
@@ -140,11 +114,9 @@ public class GuardCheckedInConsumer : IConsumer<GuardCheckedInEvent>
         catch (Exception ex)
         {
             _logger.LogError(ex,
-                "❌ Error processing GuardCheckedInEvent for Guard={GuardId}, ShiftAssignment={AssignmentId}",
+                "Error processing GuardCheckedInEvent for Guard={GuardId}, ShiftAssignment={AssignmentId}",
                 message.GuardId,
                 message.ShiftAssignmentId);
-
-            // Throw để MassTransit retry
             throw;
         }
     }

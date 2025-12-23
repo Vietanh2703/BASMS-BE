@@ -1,26 +1,16 @@
-using Dapper;
-using Dapper.Contrib.Extensions;
-using Shifts.API.Data;
-using Shifts.API.Models;
-
 namespace Shifts.API.TeamsHandler.CreateTeam;
 
-/// <summary>
-/// Command để tạo team mới
-/// </summary>
 public record CreateTeamCommand(
-    Guid ManagerId,                 // Manager quản lý team
-    string TeamName,                // Tên team: "Đội Bảo Vệ Khu A"
-    string? Specialization,         // RESIDENTIAL | COMMERCIAL | EVENT | VIP | INDUSTRIAL
-    string? Description,            // Mô tả team
-    int MinMembers,                 // Số guards tối thiểu: 1
-    int? MaxMembers,                // Số guards tối đa: 10 (nullable)
-    Guid CreatedBy                  // Manager tạo team
+    Guid ManagerId,                 
+    string TeamName,               
+    string? Specialization,        
+    string? Description,            
+    int MinMembers,                 
+    int? MaxMembers,               
+    Guid CreatedBy                  
 ) : ICommand<CreateTeamResult>;
 
-/// <summary>
-/// Result chứa team đã tạo
-/// </summary>
+
 public record CreateTeamResult(
     Guid TeamId,
     string TeamCode,
@@ -44,10 +34,7 @@ internal class CreateTeamHandler(
                 request.ManagerId);
 
             using var connection = await dbFactory.CreateConnectionAsync();
-
-            // ================================================================
-            // BƯỚC 1: VALIDATE MANAGER
-            // ================================================================
+            
             logger.LogInformation("Validating manager {ManagerId}", request.ManagerId);
 
             var manager = await connection.QueryFirstOrDefaultAsync<Managers>(
@@ -65,13 +52,10 @@ internal class CreateTeamHandler(
             }
 
             logger.LogInformation(
-                "✓ Manager validated: {FullName} ({EmployeeCode})",
+                "Manager validated: {FullName} ({EmployeeCode})",
                 manager.FullName,
                 manager.EmployeeCode);
-
-            // ================================================================
-            // BƯỚC 2: VALIDATE INPUT
-            // ================================================================
+            
             if (string.IsNullOrWhiteSpace(request.TeamName))
             {
                 throw new InvalidOperationException("Tên team không được để trống");
@@ -87,8 +71,7 @@ internal class CreateTeamHandler(
                 throw new InvalidOperationException(
                     "MaxMembers phải >= MinMembers");
             }
-
-            // Validate specialization nếu có
+            
             var validSpecializations = new[] { "RESIDENTIAL", "COMMERCIAL", "EVENT", "VIP", "INDUSTRIAL" };
             if (!string.IsNullOrWhiteSpace(request.Specialization) &&
                 !validSpecializations.Contains(request.Specialization.ToUpper()))
@@ -97,18 +80,12 @@ internal class CreateTeamHandler(
                     $"Specialization không hợp lệ. Phải là một trong: {string.Join(", ", validSpecializations)}");
             }
 
-            logger.LogInformation("✓ Input validation passed");
-
-            // ================================================================
-            // BƯỚC 3: GENERATE UNIQUE TEAM CODE (T-xxxxxx)
-            // ================================================================
+            logger.LogInformation("Input validation passed");
+            
             var teamCode = await GenerateUniqueTeamCodeAsync(connection);
 
-            logger.LogInformation("✓ Generated team code: {TeamCode}", teamCode);
-
-            // ================================================================
-            // BƯỚC 4: CREATE TEAM
-            // ================================================================
+            logger.LogInformation("Generated team code: {TeamCode}", teamCode);
+            
             var team = new Teams
             {
                 Id = Guid.NewGuid(),
@@ -129,13 +106,10 @@ internal class CreateTeamHandler(
             await connection.InsertAsync(team);
 
             logger.LogInformation(
-                "✓ Successfully created team {TeamId} with code {TeamCode}",
+                "Successfully created team {TeamId} with code {TeamCode}",
                 team.Id,
                 team.TeamCode);
 
-            // ================================================================
-            // BƯỚC 5: INCREMENT TOTALTEAMMANAGED CHO MANAGER
-            // ================================================================
             var updateResult = await connection.ExecuteAsync(@"
                 UPDATE managers
                 SET TotalTeamsManaged = COALESCE(TotalTeamsManaged, 0) + 1
@@ -143,7 +117,7 @@ internal class CreateTeamHandler(
                 new { request.ManagerId });
 
             logger.LogInformation(
-                "✓ Incremented TotalTeamManaged for Manager {ManagerId}",
+                "Incremented TotalTeamManaged for Manager {ManagerId}",
                 request.ManagerId);
 
             return new CreateTeamResult(
@@ -158,9 +132,6 @@ internal class CreateTeamHandler(
         }
     }
 
-    /// <summary>
-    /// Generate unique team code: T-xxxxxx (T- + 6 random digits)
-    /// </summary>
     private async Task<string> GenerateUniqueTeamCodeAsync(IDbConnection connection)
     {
         const int maxAttempts = 10;
@@ -168,11 +139,9 @@ internal class CreateTeamHandler(
 
         for (int attempt = 0; attempt < maxAttempts; attempt++)
         {
-            // Generate 6 random digits
-            var randomNumber = random.Next(100000, 999999); // 100000 to 999999
-            var teamCode = $"T-{randomNumber}";
 
-            // Check if code already exists
+            var randomNumber = random.Next(100000, 999999); 
+            var teamCode = $"T-{randomNumber}";
             var exists = await connection.QueryFirstOrDefaultAsync<bool>(
                 "SELECT COUNT(1) FROM teams WHERE TeamCode = @TeamCode AND IsDeleted = 0",
                 new { TeamCode = teamCode });

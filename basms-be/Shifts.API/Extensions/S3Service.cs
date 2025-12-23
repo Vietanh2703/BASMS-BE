@@ -1,14 +1,5 @@
-using Amazon.S3;
-using Amazon.S3.Model;
-using Amazon.S3.Transfer;
-using Microsoft.Extensions.Options;
-
 namespace Shifts.API.Extensions;
 
-/// <summary>
-/// Service để tương tác với AWS S3
-/// Hỗ trợ upload file chứng từ nghỉ việc (ảnh, PDF, Word, video)
-/// </summary>
 public interface IS3Service
 {
     Task<(bool Success, string? FileUrl, string? ErrorMessage)> UploadFileAsync(
@@ -19,9 +10,6 @@ public interface IS3Service
 
     Task<bool> DeleteFileAsync(string fileUrl, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Tạo pre-signed URL cho file (URL tạm thời để download trực tiếp từ S3)
-    /// </summary>
     string GetPresignedUrl(string fileUrlOrKey, int expirationMinutes = 15);
 }
 
@@ -49,13 +37,10 @@ public class S3Service : IS3Service
     {
         try
         {
-            // Sanitize filename
             var sanitizedFileName = SanitizeFileName(fileName);
-
-            // Tạo key cho file trong S3 (shifts/evidence/2025/12/17/{guid}_{filename})
             var fileKey = $"{_settings.FolderPrefix}/{DateTime.UtcNow:yyyy/MM/dd}/{Guid.NewGuid()}_{sanitizedFileName}";
 
-            _logger.LogInformation("📤 Uploading file to S3: {FileKey}", fileKey);
+            _logger.LogInformation("Uploading file to S3: {FileKey}", fileKey);
 
             var uploadRequest = new TransferUtilityUploadRequest
             {
@@ -63,27 +48,26 @@ public class S3Service : IS3Service
                 Key = fileKey,
                 BucketName = _settings.BucketName,
                 ContentType = contentType,
-                CannedACL = S3CannedACL.Private // File private, chỉ access qua presigned URL
+                CannedACL = S3CannedACL.Private 
             };
 
             var transferUtility = new TransferUtility(_s3Client);
             await transferUtility.UploadAsync(uploadRequest, cancellationToken);
-
-            // Tạo file URL
+            
             var fileUrl = $"https://{_settings.BucketName}.s3.{_settings.Region}.amazonaws.com/{fileKey}";
 
-            _logger.LogInformation("✅ File uploaded successfully to S3: {FileUrl}", fileUrl);
+            _logger.LogInformation("File uploaded successfully to S3: {FileUrl}", fileUrl);
 
             return (true, fileUrl, null);
         }
         catch (AmazonS3Exception s3Ex)
         {
-            _logger.LogError(s3Ex, "❌ S3 error uploading file {FileName}: {ErrorCode}", fileName, s3Ex.ErrorCode);
+            _logger.LogError(s3Ex, "S3 error uploading file {FileName}: {ErrorCode}", fileName, s3Ex.ErrorCode);
             return (false, null, $"S3 upload failed: {s3Ex.Message}");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "❌ Error uploading file {FileName} to S3", fileName);
+            _logger.LogError(ex, "Error uploading file {FileName} to S3", fileName);
             return (false, null, $"Upload failed: {ex.Message}");
         }
     }
@@ -92,7 +76,6 @@ public class S3Service : IS3Service
     {
         try
         {
-            // Extract key from URL
             string fileKey;
             if (fileUrlOrKey.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
                 fileUrlOrKey.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
@@ -105,7 +88,7 @@ public class S3Service : IS3Service
                 fileKey = fileUrlOrKey;
             }
 
-            _logger.LogInformation("🗑️ Deleting file from S3: {FileKey}", fileKey);
+            _logger.LogInformation("Deleting file from S3: {FileKey}", fileKey);
 
             var deleteRequest = new DeleteObjectRequest
             {
@@ -115,35 +98,29 @@ public class S3Service : IS3Service
 
             await _s3Client.DeleteObjectAsync(deleteRequest, cancellationToken);
 
-            _logger.LogInformation("✅ File deleted from S3: {FileKey}", fileKey);
+            _logger.LogInformation("File deleted from S3: {FileKey}", fileKey);
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "❌ Error deleting file from S3: {FileUrlOrKey}", fileUrlOrKey);
+            _logger.LogError(ex, "Error deleting file from S3: {FileUrlOrKey}", fileUrlOrKey);
             return false;
         }
     }
 
-    /// <summary>
-    /// Tạo pre-signed URL cho file - URL tạm thời cho phép download trực tiếp từ S3
-    /// </summary>
     public string GetPresignedUrl(string fileUrlOrKey, int expirationMinutes = 15)
     {
         try
         {
-            // Extract key: support both full URL and S3 key
             string fileKey;
             if (fileUrlOrKey.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
                 fileUrlOrKey.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             {
-                // Full URL: extract key from URL
                 var uri = new Uri(fileUrlOrKey);
                 fileKey = uri.AbsolutePath.TrimStart('/');
             }
             else
             {
-                // Already an S3 key
                 fileKey = fileUrlOrKey;
             }
 
@@ -160,20 +137,17 @@ public class S3Service : IS3Service
 
             var presignedUrl = _s3Client.GetPreSignedURL(request);
 
-            _logger.LogInformation("✅ Pre-signed URL generated successfully for {FileKey}", fileKey);
+            _logger.LogInformation("Pre-signed URL generated successfully for {FileKey}", fileKey);
 
             return presignedUrl;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "❌ Error generating pre-signed URL for {FileUrlOrKey}", fileUrlOrKey);
+            _logger.LogError(ex, "Error generating pre-signed URL for {FileUrlOrKey}", fileUrlOrKey);
             throw;
         }
     }
-
-    /// <summary>
-    /// Sanitize filename để loại bỏ ký tự đặc biệt
-    /// </summary>
+    
     private static string SanitizeFileName(string fileName)
     {
         if (string.IsNullOrEmpty(fileName))

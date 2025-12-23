@@ -1,28 +1,7 @@
-using BuildingBlocks.CQRS;
-using BuildingBlocks.Messaging.Events;
-using Dapper;
-using Dapper.Contrib.Extensions;
-using MassTransit;
-using Shifts.API.Data;
-using Shifts.API.Models;
 using Shifts.API.ShiftsHandler.AssignTeamToShift;
-using Shifts.API.Helpers;
-using System.Globalization;
-using System.Data;
 
 namespace Shifts.API.ShiftsHandler.GenerateShifts;
 
-/// <summary>
-/// OPTIMIZED Handler tự động tạo shifts từ nhiều ShiftTemplates
-///
-/// PERFORMANCE IMPROVEMENTS:
-/// 1. Batch holiday check: 1 RabbitMQ call thay vì 30 calls (30x faster)
-/// 2. Bulk insert: 1 DB transaction thay vì 300+ INSERTs (100x faster)
-/// 3. Pre-load existing shifts: 1 query thay vì 300+ queries (300x faster)
-/// 4. In-memory duplicate detection: O(1) lookup thay vì DB query
-///
-/// OVERALL: ~100x faster cho việc tạo 300 shifts
-/// </summary>
 public class GenerateShiftsHandler(
     IDbConnectionFactory connectionFactory,
     IRequestClient<BatchCheckPublicHolidaysRequest> batchHolidayClient,
@@ -37,7 +16,7 @@ public class GenerateShiftsHandler(
     {
         var startTime = DateTime.UtcNow;
         logger.LogInformation(
-            "Starting OPTIMIZED shift generation from {TemplateCount} templates by Manager {ManagerId}",
+            "Starting shift generation from {TemplateCount} templates by Manager {ManagerId}",
             command.ShiftTemplateIds.Count,
             command.ManagerId);
 
@@ -53,9 +32,6 @@ public class GenerateShiftsHandler(
 
         try
         {
-            // ================================================================
-            // BƯỚC 1: VALIDATE MANAGER
-            // ================================================================
             var manager = await connection.QueryFirstOrDefaultAsync<Managers>(
                 @"SELECT * FROM managers
                   WHERE Id = @ManagerId
@@ -78,13 +54,10 @@ public class GenerateShiftsHandler(
             }
 
             logger.LogInformation(
-                "✓ Manager validated: {FullName} ({EmployeeCode})",
+                "Manager validated: {FullName} ({EmployeeCode})",
                 manager.FullName,
                 manager.EmployeeCode);
-
-            // ================================================================
-            // BƯỚC 2: LẤY TẤT CẢ SHIFT TEMPLATES CỦA CONTRACT
-            // ================================================================
+            
             if (!command.ShiftTemplateIds.Any())
             {
                 errors.Add("ShiftTemplateIds list is empty");
@@ -105,30 +78,23 @@ public class GenerateShiftsHandler(
                     string.Join(", ", command.ShiftTemplateIds));
                 return CreateErrorResult(generateFrom, generateTo, errors);
             }
-
-            // Get ContractId from first template (all should have same contract)
+            
             var contractId = templates.First().ContractId ?? Guid.Empty;
 
             logger.LogInformation(
-                "✓ Found {TemplateCount} templates for Contract {ContractId}",
+                "Found {TemplateCount} templates for Contract {ContractId}",
                 templates.Count,
                 contractId);
-
-            // ================================================================
-            // BƯỚC 3: BATCH CHECK PUBLIC HOLIDAYS (1 CALL CHO TẤT CẢ NGÀY)
-            // ================================================================
+            
             var allDates = GenerateDateRange(generateFrom, generateTo);
 
             var holidayMap = await BatchCheckPublicHolidays(allDates, cancellationToken);
 
             logger.LogInformation(
-                "✓ Batch holiday check completed: {TotalDays} days, {HolidayCount} holidays",
+                "Batch holiday check completed: {TotalDays} days, {HolidayCount} holidays",
                 allDates.Count,
                 holidayMap.Count(h => h.Value != null));
-
-            // ================================================================
-            // BƯỚC 4: PRE-LOAD EXISTING SHIFTS (1 QUERY)
-            // ================================================================
+            
             var existingShifts = await PreLoadExistingShifts(
                 connection,
                 templates.Select(t => t.LocationId).Distinct().ToList(),
@@ -136,12 +102,9 @@ public class GenerateShiftsHandler(
                 allDates.Last());
 
             logger.LogInformation(
-                "✓ Pre-loaded {Count} existing shifts for duplicate detection",
+                "Pre-loaded {Count} existing shifts for duplicate detection",
                 existingShifts.Count);
-
-            // ================================================================
-            // BƯỚC 5: GENERATE SHIFTS IN-MEMORY (KHÔNG DB QUERY)
-            // ================================================================
+            
             foreach (var template in templates)
             {
                 try
@@ -166,21 +129,14 @@ public class GenerateShiftsHandler(
                 }
             }
 
-            // ================================================================
-            // BƯỚC 6: BULK INSERT SHIFTS (1 TRANSACTION)
-            // ================================================================
             if (createdShifts.Any())
             {
                 await BulkInsertShifts(connection, createdShifts);
 
                 logger.LogInformation(
-                    "✓ Bulk inserted {Count} shifts in single transaction",
+                    "Bulk inserted {Count} shifts in single transaction",
                     createdShifts.Count);
-
-                // ================================================================
-                // BƯỚC 6.1: UPDATE SHIFT TEMPLATE STATUS
-                // Sau khi tạo shifts thành công, update status từ "await_create_shift" sang "created_shift"
-                // ================================================================
+                
                 var templatesWithShifts = createdShifts
                     .Select(s => s.ShiftTemplateId)
                     .Where(id => id.HasValue)
@@ -197,13 +153,10 @@ public class GenerateShiftsHandler(
                         command.ManagerId);
 
                     logger.LogInformation(
-                        "✓ Updated {Count} shift templates from 'await_create_shift' to 'created_shift'",
+                        "Updated {Count} shift templates from 'await_create_shift' to 'created_shift'",
                         updatedCount);
                 }
 
-                // ================================================================
-                // BƯỚC 6.2: AUTO-ASSIGN TEAMS (nếu template có TeamId)
-                // ================================================================
                 await AutoAssignTeamsToShifts(
                     connection,
                     createdShifts,
@@ -212,9 +165,6 @@ public class GenerateShiftsHandler(
                     cancellationToken);
             }
 
-            // ================================================================
-            // BƯỚC 7: PUBLISH SHIFTS GENERATED EVENT
-            // ================================================================
             var endTime = DateTime.UtcNow;
             var durationMs = (int)(endTime - startTime).TotalMilliseconds;
 
@@ -248,7 +198,7 @@ public class GenerateShiftsHandler(
             await publishEndpoint.Publish(shiftsGeneratedEvent, cancellationToken);
 
             logger.LogInformation(
-                @"✅ OPTIMIZED shift generation completed:
+                @"Shift generation completed:
                   - Manager: {ManagerName} ({EmployeeCode})
                   - Templates Processed: {TemplateCount}
                   - Shifts Created: {CreatedCount}
@@ -284,10 +234,7 @@ public class GenerateShiftsHandler(
             return CreateErrorResult(generateFrom, generateTo, errors);
         }
     }
-
-    /// <summary>
-    /// Generate list of dates from start to end
-    /// </summary>
+    
     private List<DateTime> GenerateDateRange(DateTime from, DateTime to)
     {
         var dates = new List<DateTime>();
@@ -297,10 +244,7 @@ public class GenerateShiftsHandler(
         }
         return dates;
     }
-
-    /// <summary>
-    /// BATCH check public holidays - 1 RabbitMQ call thay vì 30 calls
-    /// </summary>
+    
     private async Task<Dictionary<DateTime, HolidayInfo?>> BatchCheckPublicHolidays(
         List<DateTime> dates,
         CancellationToken cancellationToken)
@@ -315,7 +259,7 @@ public class GenerateShiftsHandler(
             var response = await batchHolidayClient.GetResponse<BatchCheckPublicHolidaysResponse>(
                 batchRequest,
                 cancellationToken,
-                timeout: RequestTimeout.After(s: 10)); // 10s timeout cho batch
+                timeout: RequestTimeout.After(s: 10)); 
 
             return response.Message.Holidays;
         }
@@ -324,16 +268,10 @@ public class GenerateShiftsHandler(
             logger.LogWarning(ex,
                 "Failed to batch check public holidays for {Count} dates. Assuming no holidays.",
                 dates.Count);
-
-            // Return empty dictionary if batch check fails
             return dates.ToDictionary(d => d, d => (HolidayInfo?)null);
         }
     }
-
-    /// <summary>
-    /// PRE-LOAD existing shifts to avoid N+1 query problem
-    /// 1 query thay vì 300+ queries
-    /// </summary>
+    
     private async Task<HashSet<string>> PreLoadExistingShifts(
         IDbConnection connection,
         List<Guid?> locationIds,
@@ -359,7 +297,6 @@ public class GenerateShiftsHandler(
                 To = to
             });
 
-        // Create HashSet of unique keys for O(1) lookup
         var keys = new HashSet<string>();
         foreach (var shift in existing)
         {
@@ -374,17 +311,11 @@ public class GenerateShiftsHandler(
         return keys;
     }
 
-    /// <summary>
-    /// Create unique key for shift deduplication
-    /// </summary>
     private string CreateShiftKey(Guid locationId, DateTime shiftDate, DateTime shiftStart, DateTime shiftEnd)
     {
         return $"{locationId}_{shiftDate:yyyyMMdd}_{shiftStart:HHmm}_{shiftEnd:HHmm}";
     }
 
-    /// <summary>
-    /// Generate shifts for một template - OPTIMIZED với in-memory checks
-    /// </summary>
     private Task GenerateShiftsForTemplateOptimized(
         ShiftTemplates template,
         List<DateTime> dates,
@@ -401,10 +332,6 @@ public class GenerateShiftsHandler(
             try
             {
                 var dayOfWeek = (int)date.DayOfWeek;
-
-                // ================================================================
-                // CHECK 1: TEMPLATE APPLIES ON THIS DAY?
-                // ================================================================
                 if (!DayOfWeekMatches(dayOfWeek, template))
                 {
                     skipReasons.Add(new SkipReason
@@ -418,9 +345,6 @@ public class GenerateShiftsHandler(
                     continue;
                 }
 
-                // ================================================================
-                // CHECK 2: WITHIN EFFECTIVE DATE RANGE?
-                // ================================================================
                 if (template.EffectiveFrom.HasValue && date < template.EffectiveFrom.Value)
                 {
                     skipReasons.Add(new SkipReason
@@ -446,17 +370,10 @@ public class GenerateShiftsHandler(
                     });
                     continue;
                 }
-
-                // ================================================================
-                // CHECK 3: HOLIDAY INFO (FROM PRE-LOADED MAP)
-                // ================================================================
+                
                 var holidayInfo = holidayMap.GetValueOrDefault(date);
                 bool isPublicHoliday = holidayInfo != null;
                 string holidayName = holidayInfo?.HolidayName ?? string.Empty;
-
-                // ================================================================
-                // CHECK 4: DUPLICATE DETECTION (IN-MEMORY O(1))
-                // ================================================================
                 var shiftStart = date.Add(template.StartTime);
                 var shiftEnd = template.CrossesMidnight
                     ? date.AddDays(1).Add(template.EndTime)
@@ -480,10 +397,7 @@ public class GenerateShiftsHandler(
                     });
                     continue;
                 }
-
-                // ================================================================
-                // CREATE SHIFT IN-MEMORY
-                // ================================================================
+                
                 var shift = CreateShiftFromTemplate(
                     template,
                     date,
@@ -493,8 +407,7 @@ public class GenerateShiftsHandler(
                     dayOfWeek);
 
                 createdShifts.Add(shift);
-
-                // Add to existing set to prevent duplicates within this batch
+                
                 existingShifts.Add(shiftKey);
 
                 generatedShifts.Add(new GeneratedShiftDto
@@ -524,21 +437,14 @@ public class GenerateShiftsHandler(
 
         return Task.CompletedTask;
     }
-
-    /// <summary>
-    /// BULK INSERT shifts - 1 transaction thay vì 300+ INSERTs
-    /// </summary>
+    
     private async Task BulkInsertShifts(IDbConnection connection, List<Models.Shifts> shifts)
     {
-        // Use transaction for atomicity
         var transaction = connection.BeginTransaction();
 
         try
         {
-            // Dapper.Contrib InsertAsync có hỗ trợ batch nhưng vẫn là multiple commands
-            // Tối ưu hơn: Sử dụng raw SQL với multiple VALUES
-
-            const int batchSize = 100; // MySQL max_allowed_packet limit
+            const int batchSize = 100;
             var batches = shifts.Chunk(batchSize);
 
             foreach (var batch in batches)
@@ -555,10 +461,6 @@ public class GenerateShiftsHandler(
         }
     }
 
-    /// <summary>
-    /// UPDATE SHIFT TEMPLATE STATUS sau khi tạo shifts thành công
-    /// Chuyển status từ "await_create_shift" sang "created_shift"
-    /// </summary>
     private async Task<int> UpdateShiftTemplateStatus(
         IDbConnection connection,
         List<Guid> templateIds,
@@ -591,15 +493,10 @@ public class GenerateShiftsHandler(
             logger.LogError(ex,
                 "Failed to update shift template status for {Count} templates",
                 templateIds.Count);
-
-            // Don't throw - status update failure shouldn't fail the entire operation
             return 0;
         }
     }
 
-    /// <summary>
-    /// Check if template applies on this day of week
-    /// </summary>
     private bool DayOfWeekMatches(int dayOfWeek, ShiftTemplates template)
     {
         return dayOfWeek switch
@@ -615,9 +512,6 @@ public class GenerateShiftsHandler(
         };
     }
 
-    /// <summary>
-    /// Create shift from template với đầy đủ thông tin
-    /// </summary>
     private Models.Shifts CreateShiftFromTemplate(
         ShiftTemplates template,
         DateTime date,
@@ -634,8 +528,7 @@ public class GenerateShiftsHandler(
         var totalMinutes = (int)(shiftEnd - shiftStart).TotalMinutes;
         var breakMinutes = template.BreakDurationMinutes;
         var workMinutes = totalMinutes - breakMinutes;
-
-        // Detect shift type
+        
         string shiftType = "REGULAR";
         if (template.DurationHours > 12)
         {
@@ -654,8 +547,6 @@ public class GenerateShiftsHandler(
             LocationLatitude = template.LocationLatitude,
             LocationLongitude = template.LocationLongitude,
             ShiftTemplateId = template.Id,
-
-            // Date splitting
             ShiftDate = date,
             ShiftDay = date.Day,
             ShiftMonth = date.Month,
@@ -663,21 +554,15 @@ public class GenerateShiftsHandler(
             ShiftQuarter = (date.Month - 1) / 3 + 1,
             ShiftWeek = GetIso8601WeekOfYear(date),
             DayOfWeek = dayOfWeek == 0 ? 7 : dayOfWeek,
-
-            // Time
             ShiftStart = shiftStart,
             ShiftEnd = shiftEnd,
             ShiftEndDate = template.CrossesMidnight ? shiftEnd.Date : date,
-
-            // Duration
             TotalDurationMinutes = totalMinutes,
             WorkDurationMinutes = workMinutes,
             WorkDurationHours = Math.Round((decimal)workMinutes / 60, 2),
             BreakDurationMinutes = breakMinutes,
             PaidBreakMinutes = template.PaidBreakMinutes,
             UnpaidBreakMinutes = template.UnpaidBreakMinutes,
-
-            // Staffing
             RequiredGuards = template.MinGuardsRequired,
             AssignedGuardsCount = 0,
             ConfirmedGuardsCount = 0,
@@ -686,47 +571,29 @@ public class GenerateShiftsHandler(
             IsFullyStaffed = false,
             IsUnderstaffed = true,
             StaffingPercentage = 0,
-
-            // Day classification
             IsRegularWeekday = dayOfWeek >= 1 && dayOfWeek <= 5,
             IsSaturday = dayOfWeek == 6,
             IsSunday = dayOfWeek == 0,
             IsPublicHoliday = isPublicHoliday,
             IsTetHoliday = holidayName.Contains("Tết", StringComparison.OrdinalIgnoreCase),
-
-            // Night shift
             IsNightShift = isNightShift,
             NightHours = isNightShift ? template.DurationHours : 0,
             DayHours = isNightShift ? 0 : template.DurationHours,
-
-            // Shift type
             ShiftType = shiftType,
-
-            // Flags
             IsMandatory = false,
             IsCritical = false,
             IsTrainingShift = false,
             RequiresArmedGuard = false,
-
-            // Approval
             RequiresApproval = false,
             ApprovalStatus = "APPROVED",
             ApprovedBy = managerId,
             ApprovedAt = DateTime.UtcNow,
-
-            // Status
             Status = "SCHEDULED",
-
-            // Manager
             ManagerId = managerId,
-
-            // Description
             Description = $"Auto-generated from template: {template.TemplateName}" +
                          (isPublicHoliday ? $" (Holiday: {holidayName})" : "") +
                          (shiftType == "OVERTIME" ? " (OVERTIME)" : "") +
                          (isNightShift ? " (NIGHT SHIFT)" : ""),
-
-            // Audit
             CreatedAt = DateTime.UtcNow,
             CreatedBy = managerId,
             IsDeleted = false,
@@ -734,9 +601,7 @@ public class GenerateShiftsHandler(
         };
     }
 
-    /// <summary>
-    /// Get ISO 8601 week of year
-    /// </summary>
+
     private int GetIso8601WeekOfYear(DateTime date)
     {
         var day = CultureInfo.InvariantCulture.Calendar.GetDayOfWeek(date);
@@ -748,10 +613,7 @@ public class GenerateShiftsHandler(
         return CultureInfo.InvariantCulture.Calendar.GetWeekOfYear(
             date, CalendarWeekRule.FirstFourDayWeek, DayOfWeek.Monday);
     }
-
-    /// <summary>
-    /// Create error result
-    /// </summary>
+    
     private GenerateShiftsResult CreateErrorResult(DateTime from, DateTime to, List<string> errors)
     {
         return new GenerateShiftsResult
@@ -763,10 +625,7 @@ public class GenerateShiftsHandler(
             Errors = errors
         };
     }
-
-    /// <summary>
-    /// Auto-assign teams to shifts nếu template có TeamId
-    /// </summary>
+    
     private async Task AutoAssignTeamsToShifts(
         IDbConnection connection,
         List<Models.Shifts> createdShifts,
@@ -774,7 +633,6 @@ public class GenerateShiftsHandler(
         Guid managerId,
         CancellationToken cancellationToken)
     {
-        // Group templates by TeamId (chỉ lấy templates có TeamId)
         var templatesWithTeam = templates
             .Where(t => t.TeamId.HasValue)
             .ToList();
@@ -786,22 +644,20 @@ public class GenerateShiftsHandler(
         }
 
         logger.LogInformation(
-            "📋 Auto-assigning teams for {Count} templates with TeamId",
+            "Auto-assigning teams for {Count} templates with TeamId",
             templatesWithTeam.Count);
 
         foreach (var template in templatesWithTeam)
         {
             try
             {
-                // Tìm shifts được tạo từ template này
                 var shiftsFromTemplate = createdShifts
                     .Where(s => s.ShiftTemplateId == template.Id)
                     .ToList();
 
                 if (!shiftsFromTemplate.Any())
                     continue;
-
-                // Group shifts by (Date + TimeSlot) để assign theo batch
+                
                 var shiftsByDateAndSlot = shiftsFromTemplate
                     .GroupBy(s => new
                     {
@@ -816,8 +672,7 @@ public class GenerateShiftsHandler(
                     template.TeamId,
                     shiftsFromTemplate.Count,
                     shiftsByDateAndSlot.Count);
-
-                // Assign team cho từng group
+                
                 foreach (var group in shiftsByDateAndSlot)
                 {
                     var dateShifts = group.ToList();
@@ -826,7 +681,7 @@ public class GenerateShiftsHandler(
                     var assignCommand = new AssignTeamToShiftCommand(
                         TeamId: template.TeamId!.Value,
                         StartDate: group.Key.Date,
-                        EndDate: group.Key.Date, // Single day
+                        EndDate: group.Key.Date, 
                         ShiftTimeSlot: group.Key.TimeSlot,
                         LocationId: firstShift.LocationId,
                         ContractId: template.ContractId,
@@ -840,7 +695,7 @@ public class GenerateShiftsHandler(
                     if (result.Success)
                     {
                         logger.LogInformation(
-                            "✓ Auto-assigned Team {TeamId} to {Count} shifts on {Date} ({TimeSlot})",
+                            "Auto-assigned Team {TeamId} to {Count} shifts on {Date} ({TimeSlot})",
                             template.TeamId,
                             result.TotalGuardsAssigned,
                             group.Key.Date.ToString("yyyy-MM-dd"),
@@ -849,7 +704,7 @@ public class GenerateShiftsHandler(
                     else
                     {
                         logger.LogWarning(
-                            "⚠️ Failed to auto-assign Team {TeamId} on {Date}: {Errors}",
+                            "Failed to auto-assign Team {TeamId} on {Date}: {Errors}",
                             template.TeamId,
                             group.Key.Date.ToString("yyyy-MM-dd"),
                             string.Join(", ", result.Errors));
@@ -862,10 +717,9 @@ public class GenerateShiftsHandler(
                     "Error auto-assigning team {TeamId} for template {TemplateName}",
                     template.TeamId,
                     template.TemplateName);
-                // Continue with next template, don't fail entire generation
             }
         }
 
-        logger.LogInformation("✓ Completed auto-assigning teams");
+        logger.LogInformation("Completed auto-assigning teams");
     }
 }

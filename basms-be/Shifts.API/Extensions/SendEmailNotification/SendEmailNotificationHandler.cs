@@ -2,9 +2,6 @@ using Shifts.API.Extensions;
 
 namespace Shifts.API.Handlers.SendEmailNotification;
 
-/// <summary>
-/// Command để gửi email notification
-/// </summary>
 public record SendEmailNotificationCommand(
     string GuardName,
     string GuardEmail,
@@ -12,8 +9,8 @@ public record SendEmailNotificationCommand(
     TimeSpan StartTime,
     TimeSpan EndTime,
     string Location,
-    string EmailType,           // CANCELLATION | CREATED | UPDATED
-    string? AdditionalInfo = null  // Cancellation reason hoặc changes
+    string EmailType,          
+    string? AdditionalInfo = null  
 ) : ICommand<SendEmailNotificationResult>;
 
 public record SendEmailNotificationResult(bool Success, string Message);
@@ -70,36 +67,34 @@ internal class SendEmailNotificationHandler(
                     break;
 
                 case "CUSTOMER_CANCELLATION":
-                    // Parse AdditionalInfo: cancellationReason|contractId|managerName
                     var customerParts = (request.AdditionalInfo ?? "|||").Split('|');
                     await emailHandler.SendCustomerShiftCancellationEmailAsync(
-                        request.GuardName,  // customerName
-                        request.GuardEmail, // customerEmail
+                        request.GuardName, 
+                        request.GuardEmail,
                         request.ShiftDate,
                         request.StartTime,
                         request.EndTime,
                         request.Location,
-                        customerParts[0], // cancellationReason
-                        customerParts[1], // contractId
-                        customerParts[2]  // managerName
+                        customerParts[0],
+                        customerParts[1], 
+                        customerParts[2]  
                     );
                     break;
 
                 case "DIRECTOR_CANCELLATION":
-                    // Parse AdditionalInfo: locationAddress|cancellationReason|contractId|managerName|managerEmail|affectedGuardsCount|guardsList
                     var directorParts = (request.AdditionalInfo ?? "||||||").Split('|');
                     await emailHandler.SendDirectorShiftCancellationEmailAsync(
                         request.ShiftDate,
                         request.StartTime,
                         request.EndTime,
                         request.Location,
-                        directorParts[0], // locationAddress
-                        directorParts[1], // cancellationReason
-                        directorParts[2], // contractId
-                        directorParts[3], // managerName
-                        directorParts[4], // managerEmail
-                        int.TryParse(directorParts[5], out var count) ? count : 0, // affectedGuardsCount
-                        directorParts[6]  // guardsList
+                        directorParts[0],
+                        directorParts[1], 
+                        directorParts[2],
+                        directorParts[3], 
+                        directorParts[4], 
+                        int.TryParse(directorParts[5], out var count) ? count : 0, 
+                        directorParts[6]
                     );
                     break;
 

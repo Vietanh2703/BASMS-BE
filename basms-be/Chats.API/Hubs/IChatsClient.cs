@@ -18,12 +18,12 @@ public interface IChatsClient
     /// <summary>
     /// Tin nhắn đã được chỉnh sửa
     /// </summary>
-    Task MessageEdited(Guid messageId, string newContent, DateTime editedAt);
+    Task MessageEdited(Guid messageId, string newContent, DateTime editedAt); // editedAt should be Vietnam time
 
     /// <summary>
     /// Tin nhắn đã bị xóa
     /// </summary>
-    Task MessageDeleted(Guid messageId, Guid deletedBy, DateTime deletedAt);
+    Task MessageDeleted(Guid messageId, Guid deletedBy, DateTime deletedAt); // deletedAt should be Vietnam time
 
     // ============================================================================
     // PRESENCE - Online/Offline Status
@@ -37,7 +37,7 @@ public interface IChatsClient
     /// <summary>
     /// User đã offline
     /// </summary>
-    Task UserOffline(string userId, DateTime lastSeen);
+    Task UserOffline(string userId, DateTime lastSeen); // lastSeen should be Vietnam time
 
     // ============================================================================
     // TYPING INDICATORS
@@ -60,7 +60,7 @@ public interface IChatsClient
     /// <summary>
     /// Tin nhắn đã được đọc bởi user
     /// </summary>
-    Task MessageRead(Guid messageId, string userId, DateTime readAt);
+    Task MessageRead(Guid messageId, string userId, DateTime readAt); // readAt should be Vietnam time
 
     // ============================================================================
     // REACTIONS (Phase 6)

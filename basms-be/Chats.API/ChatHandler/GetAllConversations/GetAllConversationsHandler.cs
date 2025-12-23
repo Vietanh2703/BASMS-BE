@@ -121,6 +121,14 @@ internal class GetAllConversationsHandler(
             var conversations = await connection.QueryAsync<ConversationDto>(sql, new { request.UserId });
             var conversationsList = conversations.ToList();
 
+            // Convert DateTime fields to Vietnam time
+            conversationsList = conversationsList.Select(c => c with
+            {
+                LastMessageAt = c.LastMessageAt.ToVietnamTime(),
+                CreatedAt = c.CreatedAt.ToVietnamTime(),
+                UpdatedAt = c.UpdatedAt.ToVietnamTime()
+            }).ToList();
+
             logger.LogInformation(
                 "Retrieved {Count} conversations for user {UserId} sorted by last message time",
                 conversationsList.Count,

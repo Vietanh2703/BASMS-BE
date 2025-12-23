@@ -1,9 +1,5 @@
 namespace Shifts.API.Consumers;
 
-/// <summary>
-/// Consumer for UserDeletedEvent
-/// Soft-deletes manager/guard cache when user is deleted
-/// </summary>
 public class UserDeletedConsumer : IConsumer<UserDeletedEvent>
 {
     private readonly IDbConnectionFactory _dbFactory;

@@ -62,7 +62,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                 Severity VARCHAR(20) NOT NULL,
                 IncidentTime DATETIME NOT NULL,
                 Location VARCHAR(500) NOT NULL,
-                LocationId CHAR(36),
+                ShiftLocation VARCHAR(500),
                 ShiftId CHAR(36),
                 ShiftAssignmentId CHAR(36),
                 ReporterId CHAR(36) NOT NULL,
@@ -85,8 +85,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                 INDEX idx_reporter (ReporterId, ReportedTime),
                 INDEX idx_shift (ShiftId),
                 INDEX idx_status (Status, Severity),
-                INDEX idx_incident_time (IncidentTime),
-                INDEX idx_location (LocationId)
+                INDEX idx_incident_time (IncidentTime)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         ";
 
