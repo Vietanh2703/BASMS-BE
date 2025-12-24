@@ -2,24 +2,17 @@ using Attendances.API.Consumers;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Đăng ký Carter - Library để tổ chức API endpoints theo module
-builder.Services.AddCarter();
 
-// Đăng ký MediatR - Library để implement CQRS pattern
-// Tự động scan và đăng ký tất cả handlers trong assembly
+builder.Services.AddCarter();
 builder.Services.AddMediatR(config =>
 {
     config.RegisterServicesFromAssembly(typeof(Program).Assembly);
 });
 
-// Đăng ký HttpClient Factory cho Face Recognition API calls
 builder.Services.AddHttpClient();
 
-// Đăng ký Dapper connection factory cho MySQL
-// Singleton vì connection factory có thể tái sử dụng
 builder.Services.AddSingleton<IDbConnectionFactory>(sp =>
 {
-    // Ưu tiên đọc từ environment variable trực tiếp
     var connectionString = builder.Configuration["DB_CONNECTION_STRING_ATTENDANCES"]
                         ?? builder.Configuration["ConnectionStrings__Database"]
                         ?? builder.Configuration.GetConnectionString("Database");
@@ -33,7 +26,6 @@ builder.Services.AddSingleton<IDbConnectionFactory>(sp =>
     return new MySqlConnectionFactory(connectionString);
 });
 
-// Helper method để extract server từ connection string cho logging
 static string ExtractServerFromConnectionString(string connStr)
 {
     try
@@ -45,7 +37,7 @@ static string ExtractServerFromConnectionString(string connStr)
     catch { return "unknown"; }
 }
 
-// Đăng ký AWS S3
+
 var awsBucketName = builder.Configuration["AWS_BUCKET_FACEID_NAME"]
                  ?? builder.Configuration["AWS:BucketName"];
 var awsRegion = builder.Configuration["AWS_REGION"]
@@ -56,7 +48,6 @@ var awsSecretKey = builder.Configuration["AWS_SECRET_KEY"]
                 ?? builder.Configuration["AWS:SecretKey"];
 var awsFolderPrefix = builder.Configuration["AWS:FolderPrefix"] ?? "attendances";
 
-// Validate AWS configuration
 if (string.IsNullOrWhiteSpace(awsRegion) || awsRegion.StartsWith("${"))
 {
     throw new InvalidOperationException($"AWS_REGION is not configured properly. Value: '{awsRegion}'. Please set AWS_REGION environment variable.");
@@ -71,10 +62,8 @@ if (string.IsNullOrWhiteSpace(awsAccessKey) || awsAccessKey.StartsWith("${") ||
     throw new InvalidOperationException("AWS credentials are not configured properly. Please set AWS_ACCESS_KEY and AWS_SECRET_KEY environment variables.");
 }
 
-// Trim whitespace from bucket name (common issue with environment variables)
 awsBucketName = awsBucketName.Trim();
 
-// Validate bucket name format
 if (awsBucketName.Contains(" ") || awsBucketName.Contains("_"))
 {
     throw new InvalidOperationException($"Invalid S3 bucket name: '{awsBucketName}'. Bucket names cannot contain spaces or underscores.");
@@ -82,7 +71,6 @@ if (awsBucketName.Contains(" ") || awsBucketName.Contains("_"))
 
 Console.WriteLine($"AWS S3 Config - Region: {awsRegion}, Bucket: {awsBucketName}, Prefix: {awsFolderPrefix}");
 
-// Bind AWS settings manually
 builder.Services.Configure<Attendances.API.Extensions.AwsS3Settings>(options =>
 {
     options.BucketName = awsBucketName;
@@ -92,7 +80,6 @@ builder.Services.Configure<Attendances.API.Extensions.AwsS3Settings>(options =>
     options.FolderPrefix = awsFolderPrefix;
 });
 
-// Configure AWS S3 Client
 var awsOptions = new AWSOptions
 {
     Credentials = new BasicAWSCredentials(awsAccessKey, awsSecretKey),
@@ -108,21 +95,13 @@ builder.Services.AddDefaultAWSOptions(awsOptions);
 builder.Services.AddAWSService<IAmazonS3>();
 builder.Services.AddScoped<Attendances.API.Extensions.IS3Service, Attendances.API.Extensions.S3Service>();
 
-// Đăng ký MassTransit with RabbitMQ and Consumers
 builder.Services.AddMassTransit(x =>
 {
-    // Register consumers
     x.AddConsumer<CreateAttendanceRecordConsumer>();
-    x.AddConsumer<CancelAttendanceRecordConsumer>(); // 🆕 Consumer để sync khi assignment bị cancel
-
-    // Request Clients for querying other services
-    x.AddRequestClient<GetShiftLocationRequest>(); // Lấy shift location từ Shifts.API
-
-    // Configure RabbitMQ
+    x.AddConsumer<CancelAttendanceRecordConsumer>(); 
+    x.AddRequestClient<GetShiftLocationRequest>(); 
     x.UsingRabbitMq((context, cfg) =>
     {
-        // Ưu tiên đọc từ environment variables trực tiếp (RABBITMQ_HOST)
-        // Fallback về RabbitMQ:Host (nested config) nếu không có
         var rabbitMqHost = builder.Configuration["RABBITMQ_HOST"]
                         ?? builder.Configuration["RabbitMQ__Host"]
                         ?? builder.Configuration["RabbitMQ:Host"]
@@ -139,8 +118,7 @@ builder.Services.AddMassTransit(x =>
                             ?? "guest";
 
         Console.WriteLine($"RabbitMQ Config - Host: {rabbitMqHost}, Username: {rabbitMqUsername}");
-
-        // Validate host không empty
+        
         if (string.IsNullOrWhiteSpace(rabbitMqHost))
         {
             throw new InvalidOperationException("RabbitMQ Host is not configured properly");
@@ -151,30 +129,20 @@ builder.Services.AddMassTransit(x =>
             h.Username(rabbitMqUsername);
             h.Password(rabbitMqPassword);
         });
-
-        // Mỗi service cần queue riêng để cùng nhận events (publish/subscribe pattern)
-        // Example endpoints:
-        // cfg.ReceiveEndpoint("attendances-api-shift-assignment-created", e =>
-        // {
-        //     e.ConfigureConsumer<ShiftAssignmentCreatedConsumer>(context);
-        // });
-
-        // Configure other endpoints
+        
         cfg.ConfigureEndpoints(context);
 
-        // Configure retry policy
+
         cfg.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(5)));
     });
 });
 
-// Cấu hình CORS cho frontend và mobile app
-// Đọc từ ALLOWED_ORIGINS env var (string phân cách bằng dấu phẩy) hoặc AllowedOrigins section
 var allowedOriginsString = builder.Configuration["ALLOWED_ORIGINS"]
                          ?? builder.Configuration["AllowedOrigins"]
                          ?? "";
 
 var allowedOrigins = string.IsNullOrWhiteSpace(allowedOriginsString)
-    ? new[] { "http://localhost:3000" } // Fallback cho development
+    ? new[] { "http://localhost:3000" } 
     : allowedOriginsString.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
 Console.WriteLine($"CORS Allowed Origins: {string.Join(", ", allowedOrigins)}");
@@ -184,7 +152,6 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowFrontend",
         policy =>
         {
-            // Thay đổi địa chỉ cấu hình frontend/mobile để backend kết nối được
             policy.WithOrigins(allowedOrigins)
                 .AllowAnyMethod()
                 .AllowAnyHeader()
@@ -192,7 +159,7 @@ builder.Services.AddCors(options =>
         });
 });
 
-// JWT Authentication
+
 builder.Services.AddAuthentication(options =>
     {
         options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -209,33 +176,24 @@ builder.Services.AddAuthentication(options =>
             ValidIssuer = builder.Configuration["Jwt:Issuer"],
             ValidAudience = builder.Configuration["Jwt:Audience"],
             IssuerSigningKey = new SymmetricSecurityKey(
-                System.Text.Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
+                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
         };
     });
 
 builder.Services.AddAuthorization();
 
-// ================================================================
-// BACKGROUND JOBS (if needed)
-// ================================================================
-// Example: Auto-calculate daily attendance summary
-// builder.Services.AddHostedService<DailyAttendanceSummaryJob>();
-
 var app = builder.Build();
 
-// Initialize database tables
 using (var scope = app.Services.CreateScope())
 {
     var dbFactory = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>();
     if (dbFactory is MySqlConnectionFactory mysqlFactory)
     {
         await mysqlFactory.EnsureTablesCreatedAsync();
-        Console.WriteLine("✓ Attendances database tables initialized successfully");
+        Console.WriteLine("Attendances database tables initialized successfully");
     }
 }
 
-// Thêm Global Exception Handler Middleware
-// Middleware này phải đặt đầu tiên để catch tất cả exceptions
 app.UseGlobalExceptionHandler();
 
 app.MapCarter();

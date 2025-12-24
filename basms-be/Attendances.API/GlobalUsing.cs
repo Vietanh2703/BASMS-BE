@@ -1,6 +1,5 @@
 global using MediatR;
 global using Carter;
-global using Mapster;
 global using Attendances.API.Models;
 global using Dapper;
 global using Dapper.Contrib.Extensions;
@@ -23,3 +22,7 @@ global using Amazon.Extensions.NETCore.Setup;
 global using Amazon.Runtime;
 global using BuildingBlocks.Extensions;
 global using Attendances.API.Helpers;
+global using System.Text;
+global using System.Text.Json.Serialization;
+global using MySql.Data.MySqlClient;
+global using Amazon.S3.Transfer;

@@ -1,15 +1,5 @@
-using Dapper;
-using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using Attendances.API.Helpers;
-
 namespace Attendances.API.AttendanceHandler.RegisterFaceWithFiles;
 
-/// <summary>
-/// Command để đăng ký khuôn mặt guard với 6 file ảnh (form-data)
-/// Xử lý tuần tự từng ảnh: validate → convert → upload
-/// </summary>
 public record RegisterFaceWithFilesCommand(
     Guid GuardId,
     IFormFile FrontImage,
@@ -20,9 +10,6 @@ public record RegisterFaceWithFilesCommand(
     IFormFile SmileImage
 ) : ICommand<RegisterFaceWithFilesResult>;
 
-/// <summary>
-/// Processing log từ Python API
-/// </summary>
 public record ProcessingLog
 {
     public string Timestamp { get; init; } = string.Empty;
@@ -33,9 +20,6 @@ public record ProcessingLog
     public Dictionary<string, object>? Details { get; init; }
 }
 
-/// <summary>
-/// Result chứa thông tin đăng ký khuôn mặt
-/// </summary>
 public record RegisterFaceWithFilesResult
 {
     public bool Success { get; init; }
@@ -49,18 +33,14 @@ public record RegisterFaceWithFilesResult
     public string Message { get; init; } = string.Empty;
 }
 
-/// <summary>
-/// Trạng thái xử lý từng ảnh
-/// </summary>
+
 public record ImageProcessingStatus(
     string PoseType,
-    string Status, // "processing", "completed", "failed"
+    string Status,
     string? Message = null
 );
 
-/// <summary>
-/// Face Registration API Models
-/// </summary>
+
 internal record ImageDataDto
 {
     [JsonPropertyName("image_base64")]
@@ -130,10 +110,7 @@ internal record FaceRegistrationApiResponse
     public string Message { get; init; } = string.Empty;
 }
 
-/// <summary>
-/// Handler xử lý đăng ký khuôn mặt với files (form-data)
-/// Xử lý tuần tự: quay trái → quay phải → ngẩn → cúi → cười → hoàn tất
-/// </summary>
+
 internal class RegisterFaceWithFilesHandler(
     IDbConnectionFactory dbFactory,
     ILogger<RegisterFaceWithFilesHandler> logger,
@@ -154,12 +131,8 @@ internal class RegisterFaceWithFilesHandler(
         try
         {
             logger.LogInformation(
-                "🚀 Starting face registration for Guard={GuardId} with sequential processing",
+                "Starting face registration for Guard={GuardId} with sequential processing",
                 request.GuardId);
-
-            // ================================================================
-            // STEP 1: VALIDATE AND PROCESS IMAGES SEQUENTIALLY
-            // ================================================================
 
             var imageFiles = new List<(IFormFile file, string poseType, float angle)>
             {
@@ -178,12 +151,11 @@ internal class RegisterFaceWithFilesHandler(
                 processingSteps.Add(new ImageProcessingStatus(poseType, "processing", "Đang xử lý..."));
 
                 logger.LogInformation(
-                    "📸 Processing {PoseType} image: {FileName} ({Size} bytes)",
+                    "Processing {PoseType} image: {FileName} ({Size} bytes)",
                     poseType,
                     file.FileName,
                     file.Length);
-
-                // Validate file
+                
                 if (file == null || file.Length == 0)
                 {
                     processingSteps[^1] = new ImageProcessingStatus(
@@ -257,11 +229,7 @@ internal class RegisterFaceWithFilesHandler(
                     "✓ {PoseType} image processed successfully",
                     poseType);
             }
-
-            // ================================================================
-            // STEP 2: CALL FACE RECOGNITION API (Python)
-            // Gửi tất cả 6 ảnh đã xử lý tới Python API
-            // ================================================================
+            
 
             if (string.IsNullOrWhiteSpace(_faceApiBaseUrl))
             {
@@ -274,7 +242,7 @@ internal class RegisterFaceWithFilesHandler(
             }
 
             logger.LogInformation(
-                "🔄 Sending all 6 images to Python Face Recognition API...");
+                "Sending all 6 images to Python Face Recognition API...");
 
             var registrationResult = await CallFaceRegistrationApiAsync(
                 request.GuardId,
@@ -303,14 +271,9 @@ internal class RegisterFaceWithFilesHandler(
             }
 
             logger.LogInformation(
-                "✓ Python API processed successfully. Template URL: {TemplateUrl}",
+                "Python API processed successfully. Template URL: {TemplateUrl}",
                 registrationResult.TemplateUrl);
-
-            // ================================================================
-            // STEP 3: CREATE BIOMETRIC LOG WITH TEMPLATE + IMAGE URLs
-            // ================================================================
-
-            // Create JSON containing both template URL and image URLs
+            
             var registeredFaceData = new
             {
                 template_url = registrationResult.TemplateUrl,
@@ -325,12 +288,11 @@ internal class RegisterFaceWithFilesHandler(
                 cancellationToken);
 
             logger.LogInformation(
-                "✅ Face registration completed for Guard={GuardId}, BiometricLogId={LogId}, AvgQuality={Quality}",
+                "Face registration completed for Guard={GuardId}, BiometricLogId={LogId}, AvgQuality={Quality}",
                 request.GuardId,
                 biometricLogId,
                 registrationResult.AverageQuality);
-
-            // Log detailed processing steps từ Python API
+            
             foreach (var log in registrationResult.ProcessingLogs)
             {
                 var logLevel = log.Status.ToLower() switch
@@ -372,7 +334,7 @@ internal class RegisterFaceWithFilesHandler(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "❌ Error registering face for Guard={GuardId}", request.GuardId);
+            logger.LogError(ex, "Error registering face for Guard={GuardId}", request.GuardId);
 
             return new RegisterFaceWithFilesResult
             {
@@ -382,10 +344,7 @@ internal class RegisterFaceWithFilesHandler(
             };
         }
     }
-
-    /// <summary>
-    /// Call Python Face Recognition API
-    /// </summary>
+    
     private async Task<FaceRegistrationApiResponse?> CallFaceRegistrationApiAsync(
         Guid guardId,
         List<ImageDataDto> images,
@@ -395,7 +354,7 @@ internal class RegisterFaceWithFilesHandler(
         {
             var httpClient = httpClientFactory.CreateClient();
             httpClient.BaseAddress = new Uri(_faceApiBaseUrl!);
-            httpClient.Timeout = TimeSpan.FromSeconds(90); // Longer timeout for 6 images
+            httpClient.Timeout = TimeSpan.FromSeconds(90);
 
             var requestBody = new FaceRegistrationApiRequest
             {
@@ -436,10 +395,7 @@ internal class RegisterFaceWithFilesHandler(
         }
     }
 
-    /// <summary>
-    /// Tạo mới hoặc update BiometricLog cho Guard (cho phép retry nhiều lần khi quality chưa đạt)
-    /// Check guardId tồn tại chưa → nếu có: UPDATE, nếu chưa: CREATE
-    /// </summary>
+
     private async Task<Guid> CreateOrUpdateBiometricLogAsync(
         Guid guardId,
         string? registeredFaceDataJson,
@@ -451,8 +407,7 @@ internal class RegisterFaceWithFilesHandler(
             using var connection = await dbFactory.CreateConnectionAsync();
 
             var now = DateTimeHelper.VietnamNow;
-
-            // Check if BiometricLog already exists for this GuardId with EventType = REGISTRATION
+            
             var existingSql = @"
                 SELECT Id
                 FROM biometric_logs
@@ -466,7 +421,6 @@ internal class RegisterFaceWithFilesHandler(
 
             if (existingLogId.HasValue && existingLogId.Value != Guid.Empty)
             {
-                // UPDATE existing log (user retry để improve quality score)
                 logger.LogInformation(
                     "Updating existing BiometricLog for Guard={GuardId}, LogId={LogId}",
                     guardId,
@@ -503,7 +457,6 @@ internal class RegisterFaceWithFilesHandler(
             }
             else
             {
-                // CREATE new log (first time registration)
                 logger.LogInformation(
                     "Creating new BiometricLog for Guard={GuardId}",
                     guardId);

@@ -1,8 +1,6 @@
 namespace Attendances.API.AttendanceHandler.CheckInGuard;
 
-/// <summary>
-/// Endpoint để guard check-in với face verification và location validation
-/// </summary>
+
 public class CheckInGuardEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
@@ -15,10 +13,6 @@ public class CheckInGuardEndpoint : ICarterModule
             {
                 logger.LogInformation("POST /api/attendance/check-in - Processing check-in with face verification");
 
-                // ================================================================
-                // PARSE MULTIPART FORM-DATA
-                // ================================================================
-
                 if (!httpRequest.HasFormContentType)
                 {
                     return Results.BadRequest(new
@@ -30,11 +24,6 @@ public class CheckInGuardEndpoint : ICarterModule
 
                 var form = await httpRequest.ReadFormAsync(cancellationToken);
 
-                // ================================================================
-                // VALIDATE REQUIRED FIELDS
-                // ================================================================
-
-                // Get GuardId
                 if (!Guid.TryParse(form["guardId"].ToString(), out var guardId) || guardId == Guid.Empty)
                 {
                     return Results.BadRequest(new
@@ -44,7 +33,6 @@ public class CheckInGuardEndpoint : ICarterModule
                     });
                 }
 
-                // Get ShiftAssignmentId
                 if (!Guid.TryParse(form["shiftAssignmentId"].ToString(), out var shiftAssignmentId) || shiftAssignmentId == Guid.Empty)
                 {
                     return Results.BadRequest(new
@@ -53,8 +41,7 @@ public class CheckInGuardEndpoint : ICarterModule
                         error = "ShiftAssignmentId is required and must be a valid GUID"
                     });
                 }
-
-                // Get ShiftId
+                
                 if (!Guid.TryParse(form["shiftId"].ToString(), out var shiftId) || shiftId == Guid.Empty)
                 {
                     return Results.BadRequest(new
@@ -63,8 +50,7 @@ public class CheckInGuardEndpoint : ICarterModule
                         error = "ShiftId is required and must be a valid GUID"
                     });
                 }
-
-                // Get CheckInLatitude
+                
                 if (!double.TryParse(form["checkInLatitude"].ToString(), out var checkInLatitude))
                 {
                     return Results.BadRequest(new
@@ -74,7 +60,6 @@ public class CheckInGuardEndpoint : ICarterModule
                     });
                 }
 
-                // Get CheckInLongitude
                 if (!double.TryParse(form["checkInLongitude"].ToString(), out var checkInLongitude))
                 {
                     return Results.BadRequest(new
@@ -83,8 +68,7 @@ public class CheckInGuardEndpoint : ICarterModule
                         error = "CheckInLongitude is required and must be a valid number"
                     });
                 }
-
-                // Validate GPS coordinates range
+                
                 if (checkInLatitude < -90 || checkInLatitude > 90)
                 {
                     return Results.BadRequest(new
@@ -102,15 +86,13 @@ public class CheckInGuardEndpoint : ICarterModule
                         error = "Longitude must be between -180 and 180"
                     });
                 }
-
-                // Get optional CheckInLocationAccuracy
+                
                 float? checkInLocationAccuracy = null;
                 if (float.TryParse(form["checkInLocationAccuracy"].ToString(), out var accuracy))
                 {
                     checkInLocationAccuracy = accuracy;
                 }
-
-                // Get CheckInImage file
+                
                 var checkInImage = form.Files.GetFile("checkInImage");
                 if (checkInImage == null || checkInImage.Length == 0)
                 {
@@ -121,8 +103,7 @@ public class CheckInGuardEndpoint : ICarterModule
                         hint = "Required field: checkInImage (JPG or PNG, max 10MB)"
                     });
                 }
-
-                // Validate file size (max 10MB)
+                
                 if (checkInImage.Length > 10 * 1024 * 1024)
                 {
                     return Results.BadRequest(new
@@ -131,8 +112,7 @@ public class CheckInGuardEndpoint : ICarterModule
                         error = "Image file too large. Maximum size: 10MB"
                     });
                 }
-
-                // Validate file type
+                
                 var allowedTypes = new[] { "image/jpeg", "image/jpg", "image/png" };
                 if (!allowedTypes.Contains(checkInImage.ContentType.ToLower()))
                 {
@@ -142,11 +122,7 @@ public class CheckInGuardEndpoint : ICarterModule
                         error = "Invalid image format. Only JPG and PNG are allowed"
                     });
                 }
-
-                // ================================================================
-                // CREATE COMMAND
-                // ================================================================
-
+                
                 var command = new CheckInGuardCommand(
                     GuardId: guardId,
                     ShiftAssignmentId: shiftAssignmentId,

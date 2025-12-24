@@ -1,16 +1,8 @@
-using Dapper;
-
 namespace Attendances.API.AttendanceHandler.GetAllAttendanceRecords;
 
-/// <summary>
-/// Query để lấy danh sách tất cả attendance records
-/// Sắp xếp theo: CheckInTime giảm dần (mới nhất trước)
-/// </summary>
+
 public record GetAllAttendanceRecordsQuery() : IQuery<GetAllAttendanceRecordsResult>;
 
-/// <summary>
-/// Result chứa danh sách attendance records
-/// </summary>
 public record GetAllAttendanceRecordsResult
 {
     public bool Success { get; init; }
@@ -19,17 +11,12 @@ public record GetAllAttendanceRecordsResult
     public string? ErrorMessage { get; init; }
 }
 
-/// <summary>
-/// DTO cho attendance record
-/// </summary>
 public record AttendanceRecordDto
 {
     public Guid Id { get; init; }
     public Guid ShiftAssignmentId { get; init; }
     public Guid GuardId { get; init; }
     public Guid ShiftId { get; init; }
-
-    // Check-in Info
     public DateTime CheckInTime { get; init; }
     public decimal? CheckInLatitude { get; init; }
     public decimal? CheckInLongitude { get; init; }
@@ -38,8 +25,6 @@ public record AttendanceRecordDto
     public string? CheckInDeviceId { get; init; }
     public string? CheckInFaceImageUrl { get; init; }
     public decimal? CheckInFaceMatchScore { get; init; }
-
-    // Check-out Info
     public DateTime? CheckOutTime { get; init; }
     public decimal? CheckOutLatitude { get; init; }
     public decimal? CheckOutLongitude { get; init; }
@@ -48,51 +33,35 @@ public record AttendanceRecordDto
     public string? CheckOutDeviceId { get; init; }
     public string? CheckOutFaceImageUrl { get; init; }
     public decimal? CheckOutFaceMatchScore { get; init; }
-
-    // Scheduled Time
     public DateTime? ScheduledStartTime { get; init; }
     public DateTime? ScheduledEndTime { get; init; }
-
-    // Duration
     public int? ActualWorkDurationMinutes { get; init; }
     public int BreakDurationMinutes { get; init; }
     public decimal? TotalHours { get; init; }
-
-    // Status & Flags
     public string Status { get; init; } = string.Empty;
     public bool IsLate { get; init; }
     public bool IsEarlyLeave { get; init; }
     public bool HasOvertime { get; init; }
     public bool IsIncomplete { get; init; }
     public bool IsVerified { get; init; }
-
-    // Late/Early Minutes
     public int? LateMinutes { get; init; }
     public int? EarlyLeaveMinutes { get; init; }
     public int? OvertimeMinutes { get; init; }
-
-    // Verification
     public Guid? VerifiedBy { get; init; }
     public DateTime? VerifiedAt { get; init; }
     public string VerificationStatus { get; init; } = string.Empty;
-
-    // Notes
     public string? Notes { get; init; }
     public string? ManagerNotes { get; init; }
-
-    // Flags
     public bool AutoDetected { get; init; }
     public bool FlagsForReview { get; init; }
     public string? FlagReason { get; init; }
 
-    // Audit
+
     public DateTime CreatedAt { get; init; }
     public DateTime? UpdatedAt { get; init; }
 }
 
-/// <summary>
-/// Handler để lấy danh sách tất cả attendance records
-/// </summary>
+
 internal class GetAllAttendanceRecordsHandler(
     IDbConnectionFactory dbFactory,
     ILogger<GetAllAttendanceRecordsHandler> logger)
@@ -107,10 +76,7 @@ internal class GetAllAttendanceRecordsHandler(
             logger.LogInformation("Getting all attendance records");
 
             using var connection = await dbFactory.CreateConnectionAsync();
-
-            // ================================================================
-            // COUNT TOTAL RECORDS
-            // ================================================================
+            
             var countSql = @"
                 SELECT COUNT(*)
                 FROM attendance_records
@@ -122,9 +88,6 @@ internal class GetAllAttendanceRecordsHandler(
                 "Total attendance records found: {TotalCount}",
                 totalCount);
 
-            // ================================================================
-            // GET ALL DATA - SORTED BY CHECK-IN TIME DESCENDING
-            // ================================================================
 
             var sql = @"
                 SELECT

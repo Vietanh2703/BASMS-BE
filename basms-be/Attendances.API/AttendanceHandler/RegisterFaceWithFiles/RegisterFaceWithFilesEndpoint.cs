@@ -1,9 +1,5 @@
 namespace Attendances.API.AttendanceHandler.RegisterFaceWithFiles;
 
-/// <summary>
-/// Endpoint để đăng ký khuôn mặt guard với form-data (files)
-/// Xử lý tuần tự từng ảnh
-/// </summary>
 public class RegisterFaceWithFilesEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
@@ -16,10 +12,6 @@ public class RegisterFaceWithFilesEndpoint : ICarterModule
 {
     logger.LogInformation("POST /api/attendances/faces/register-with-files - Processing form-data");
 
-    // ================================================================
-    // PARSE MULTIPART FORM-DATA
-    // ================================================================
-
     if (!httpRequest.HasFormContentType)
     {
         return Results.BadRequest(new
@@ -30,8 +22,7 @@ public class RegisterFaceWithFilesEndpoint : ICarterModule
     }
 
     var form = await httpRequest.ReadFormAsync(cancellationToken);
-
-    // Get GuardId
+    
     if (!Guid.TryParse(form["guardId"].ToString(), out var guardId) || guardId == Guid.Empty)
     {
         return Results.BadRequest(new
@@ -40,8 +31,7 @@ public class RegisterFaceWithFilesEndpoint : ICarterModule
             error = "GuardId is required and must be a valid GUID"
         });
     }
-
-    // Get all 6 images
+    
     var frontImage = form.Files.GetFile("image_front");
     var leftImage = form.Files.GetFile("image_left");
     var rightImage = form.Files.GetFile("image_right");
@@ -49,7 +39,6 @@ public class RegisterFaceWithFilesEndpoint : ICarterModule
     var downImage = form.Files.GetFile("image_down");
     var smileImage = form.Files.GetFile("image_smile");
 
-    // Validate all images are present
     var missingImages = new List<string>();
     if (frontImage == null) missingImages.Add("image_front");
     if (leftImage == null) missingImages.Add("image_left");
@@ -67,10 +56,6 @@ public class RegisterFaceWithFilesEndpoint : ICarterModule
             hint = "Required fields: image_front, image_left, image_right, image_up, image_down, image_smile"
         });
     }
-
-    // ================================================================
-    // CREATE COMMAND
-    // ================================================================
 
     var command = new RegisterFaceWithFilesCommand(
         GuardId: guardId,
@@ -100,7 +85,7 @@ public class RegisterFaceWithFilesEndpoint : ICarterModule
     }
 
     logger.LogInformation(
-        "✓ Face registered: GuardId={GuardId}, BiometricLogId={BiometricLogId}, AvgQuality={Quality}",
+        "Face registered: GuardId={GuardId}, BiometricLogId={BiometricLogId}, AvgQuality={Quality}",
         guardId,
         result.BiometricLogId,
         result.AverageQuality);

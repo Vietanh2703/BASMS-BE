@@ -1,14 +1,8 @@
-using System.Text;
-using System.Text.Json.Serialization;
-using Attendances.API.Helpers;
 using Attendances.API.Extensions;
-using BuildingBlocks.Messaging.Events;
 
 namespace Attendances.API.AttendanceHandler.CheckOutGuard;
 
-/// <summary>
-/// Command để check-out guard với face verification
-/// </summary>
+
 public record CheckOutGuardCommand(
     Guid GuardId,
     Guid ShiftAssignmentId,
@@ -19,9 +13,7 @@ public record CheckOutGuardCommand(
     float? CheckOutLocationAccuracy
 ) : ICommand<CheckOutGuardResult>;
 
-/// <summary>
-/// Result của check-out operation
-/// </summary>
+
 public record CheckOutGuardResult
 {
     public bool Success { get; init; }
@@ -40,9 +32,7 @@ public record CheckOutGuardResult
     public string Message { get; init; } = string.Empty;
 }
 
-/// <summary>
-/// Face Verification API Models (reused from CheckIn)
-/// </summary>
+
 internal record FaceVerificationApiRequest
 {
     [JsonPropertyName("guard_id")]
@@ -76,9 +66,7 @@ internal record FaceVerificationApiResponse
     public string Message { get; init; } = string.Empty;
 }
 
-/// <summary>
-/// Shift Location Info từ Shifts.API
-/// </summary>
+
 internal record ShiftLocationInfo
 {
     public double LocationLatitude { get; init; }
@@ -86,9 +74,7 @@ internal record ShiftLocationInfo
     public DateTime ScheduledEndTime { get; init; }
 }
 
-/// <summary>
-/// Handler xử lý check-out guard với face verification, location validation, và work duration calculation
-/// </summary>
+
 internal class CheckOutGuardHandler(
     IDbConnectionFactory dbFactory,
     ILogger<CheckOutGuardHandler> logger,
@@ -113,12 +99,9 @@ internal class CheckOutGuardHandler(
         try
         {
             logger.LogInformation(
-                "🚀 Starting check-out for Guard={GuardId}, ShiftAssignment={ShiftAssignmentId}, Shift={ShiftId}",
+                "Starting check-out for Guard={GuardId}, ShiftAssignment={ShiftAssignmentId}, Shift={ShiftId}",
                 request.GuardId, request.ShiftAssignmentId, request.ShiftId);
-
-            // ================================================================
-            // STEP 1: VALIDATE ATTENDANCE RECORD EXISTS AND IS CHECKED_IN
-            // ================================================================
+            
             using var connection = await dbFactory.CreateConnectionAsync();
 
             var attendanceRecord = await GetAttendanceRecordAsync(
@@ -131,63 +114,59 @@ internal class CheckOutGuardHandler(
             if (attendanceRecord == null)
             {
                 logger.LogWarning(
-                    "❌ Attendance record not found - Guard={GuardId}, ShiftAssignment={ShiftAssignmentId}, Shift={ShiftId}",
+                    "Attendance record not found - Guard={GuardId}, ShiftAssignment={ShiftAssignmentId}, Shift={ShiftId}",
                     request.GuardId, request.ShiftAssignmentId, request.ShiftId);
 
                 return new CheckOutGuardResult
                 {
                     Success = false,
-                    ErrorMessage = "❌ Attendance record không tồn tại. Vui lòng kiểm tra lại thông tin ca làm việc."
+                    ErrorMessage = "Attendance record không tồn tại. Vui lòng kiểm tra lại thông tin ca làm việc."
                 };
             }
-
-            // Validate attendance record status must be CHECKED_IN
+            
             if (attendanceRecord.Status == "CHECKED_OUT")
             {
                 logger.LogWarning(
-                    "❌ Guard already checked out - AttendanceRecord={RecordId}",
+                    "Guard already checked out - AttendanceRecord={RecordId}",
                     attendanceRecord.Id);
 
                 return new CheckOutGuardResult
                 {
                     Success = false,
-                    ErrorMessage = "❌ Bạn đã check-out cho ca làm việc này rồi."
+                    ErrorMessage = "Bạn đã check-out cho ca làm việc này rồi."
                 };
             }
 
             if (attendanceRecord.Status != "CHECKED_IN")
             {
                 logger.LogWarning(
-                    "❌ Invalid attendance record status - Status={Status}, Expected=CHECKED_IN",
+                    "Invalid attendance record status - Status={Status}, Expected=CHECKED_IN",
                     attendanceRecord.Status);
 
                 return new CheckOutGuardResult
                 {
                     Success = false,
-                    ErrorMessage = $"❌ Chưa check-in. Vui lòng check-in trước khi check-out. Trạng thái hiện tại: {attendanceRecord.Status}"
+                    ErrorMessage = $"Chưa check-in. Vui lòng check-in trước khi check-out. Trạng thái hiện tại: {attendanceRecord.Status}"
                 };
             }
-
-            // Validate CheckInTime exists
+            
             if (!attendanceRecord.CheckInTime.HasValue)
             {
                 logger.LogWarning(
-                    "❌ CheckInTime not found - AttendanceRecord={RecordId}",
+                    "CheckInTime not found - AttendanceRecord={RecordId}",
                     attendanceRecord.Id);
 
                 return new CheckOutGuardResult
                 {
                     Success = false,
-                    ErrorMessage = "❌ Không tìm thấy thời gian check-in. Dữ liệu không hợp lệ."
+                    ErrorMessage = "Không tìm thấy thời gian check-in. Dữ liệu không hợp lệ."
                 };
             }
 
-            logger.LogInformation("✓ Found AttendanceRecord={RecordId}, Status={Status}, CheckInTime={CheckInTime}",
+            logger.LogInformation("Found AttendanceRecord={RecordId}, Status={Status}, CheckInTime={CheckInTime}",
                 attendanceRecord.Id, attendanceRecord.Status, attendanceRecord.CheckInTime);
 
-            // ================================================================
-            // STEP 2: VALIDATE REGISTERED FACE TEMPLATE EXISTS
-            // ================================================================
+
             var registeredFaceDataJson = await GetRegisteredFaceTemplateUrlAsync(
                 connection,
                 request.GuardId,
@@ -196,22 +175,19 @@ internal class CheckOutGuardHandler(
             if (string.IsNullOrWhiteSpace(registeredFaceDataJson))
             {
                 logger.LogWarning(
-                    "❌ No registered face template found for Guard={GuardId}",
+                    "No registered face template found for Guard={GuardId}",
                     request.GuardId);
 
                 return new CheckOutGuardResult
                 {
                     Success = false,
-                    ErrorMessage = "❌ Chưa đăng ký khuôn mặt. Vui lòng đăng ký khuôn mặt trước khi check-out."
+                    ErrorMessage = "Chưa đăng ký khuôn mặt. Vui lòng đăng ký khuôn mặt trước khi check-out."
                 };
             }
 
-            logger.LogInformation("✓ Found face data: {Data}", registeredFaceDataJson.Length > 100 ? registeredFaceDataJson.Substring(0, 100) + "..." : registeredFaceDataJson);
-
-            // ================================================================
-            // STEP 3: VALIDATE FACE WITH PYTHON API
-            // ================================================================
-            logger.LogInformation("🔍 Verifying face with Python API...");
+            logger.LogInformation("Found face data: {Data}", registeredFaceDataJson.Length > 100 ? registeredFaceDataJson.Substring(0, 100) + "..." : registeredFaceDataJson);
+            
+            logger.LogInformation("Verifying face with Python API...");
 
             var faceVerificationResult = await VerifyFaceAsync(
                 request.GuardId,
@@ -222,47 +198,47 @@ internal class CheckOutGuardHandler(
             if (faceVerificationResult == null)
             {
                 logger.LogError(
-                    "❌ Face verification failed - API returned null response");
+                    "Face verification failed - API returned null response");
 
                 return new CheckOutGuardResult
                 {
                     Success = false,
-                    ErrorMessage = "❌ Không thể xác minh khuôn mặt. Vui lòng kiểm tra kết nối mạng hoặc liên hệ quản trị viên."
+                    ErrorMessage = "Không thể xác minh khuôn mặt. Vui lòng kiểm tra kết nối mạng hoặc liên hệ quản trị viên."
                 };
             }
 
             if (!faceVerificationResult.FaceDetected)
             {
                 logger.LogWarning(
-                    "❌ No face detected in check-out image - Guard={GuardId}",
+                    "No face detected in check-out image - Guard={GuardId}",
                     request.GuardId);
 
                 return new CheckOutGuardResult
                 {
                     Success = false,
                     FaceMatchScore = 0,
-                    ErrorMessage = "❌ Không phát hiện khuôn mặt trong ảnh. Vui lòng chụp ảnh rõ ràng hơn."
+                    ErrorMessage = "Không phát hiện khuôn mặt trong ảnh. Vui lòng chụp ảnh rõ ràng hơn."
                 };
             }
 
             if (faceVerificationResult.FaceQuality < 50)
             {
                 logger.LogWarning(
-                    "❌ Low face quality detected - Quality={Quality}",
+                    "Low face quality detected - Quality={Quality}",
                     faceVerificationResult.FaceQuality);
 
                 return new CheckOutGuardResult
                 {
                     Success = false,
                     FaceMatchScore = faceVerificationResult.Confidence,
-                    ErrorMessage = $"❌ Chất lượng ảnh khuôn mặt thấp ({faceVerificationResult.FaceQuality:F1}/100). Vui lòng chụp ảnh trong điều kiện sáng tốt hơn."
+                    ErrorMessage = $"Chất lượng ảnh khuôn mặt thấp ({faceVerificationResult.FaceQuality:F1}/100). Vui lòng chụp ảnh trong điều kiện sáng tốt hơn."
                 };
             }
 
             if (!faceVerificationResult.IsMatch || faceVerificationResult.Confidence < MinFaceMatchScore)
             {
                 logger.LogWarning(
-                    "❌ Face verification failed - IsMatch={IsMatch}, Confidence={Confidence}, Required={Required}",
+                    "Face verification failed - IsMatch={IsMatch}, Confidence={Confidence}, Required={Required}",
                     faceVerificationResult.IsMatch,
                     faceVerificationResult.Confidence,
                     MinFaceMatchScore);
@@ -271,7 +247,7 @@ internal class CheckOutGuardHandler(
                 {
                     Success = false,
                     FaceMatchScore = faceVerificationResult.Confidence,
-                    ErrorMessage = $"❌ Khuôn mặt không khớp với dữ liệu đã đăng ký. Độ chính xác: {faceVerificationResult.Confidence:F1}% (yêu cầu >= {MinFaceMatchScore}%)"
+                    ErrorMessage = $"Khuôn mặt không khớp với dữ liệu đã đăng ký. Độ chính xác: {faceVerificationResult.Confidence:F1}% (yêu cầu >= {MinFaceMatchScore}%)"
                 };
             }
 
@@ -280,10 +256,7 @@ internal class CheckOutGuardHandler(
                 faceVerificationResult.Confidence,
                 faceVerificationResult.FaceQuality);
 
-            // ================================================================
-            // STEP 4: UPLOAD CHECK-OUT IMAGE TO S3
-            // ================================================================
-            logger.LogInformation("📤 Uploading check-out image to S3...");
+            logger.LogInformation("Uploading check-out image to S3...");
 
             var checkOutImageUrl = await UploadCheckOutImageToS3Async(
                 request.GuardId,
@@ -291,12 +264,9 @@ internal class CheckOutGuardHandler(
                 request.CheckOutImage,
                 cancellationToken);
 
-            logger.LogInformation("✓ Image uploaded: {ImageUrl}", checkOutImageUrl);
-
-            // ================================================================
-            // STEP 5: GET SHIFT LOCATION INFO FROM SHIFTS.API (via MassTransit)
-            // ================================================================
-            logger.LogInformation("📍 Getting shift location from Shifts.API via MassTransit...");
+            logger.LogInformation("Image uploaded: {ImageUrl}", checkOutImageUrl);
+            
+            logger.LogInformation("Getting shift location from Shifts.API via MassTransit...");
 
             var shiftLocation = await GetShiftLocationAsync(
                 request.ShiftId,
@@ -312,14 +282,12 @@ internal class CheckOutGuardHandler(
             }
 
             logger.LogInformation(
-                "✓ Shift location: Lat={Lat}, Lon={Lon}, ScheduledEndTime={EndTime}",
+                "Shift location: Lat={Lat}, Lon={Lon}, ScheduledEndTime={EndTime}",
                 shiftLocation.LocationLatitude,
                 shiftLocation.LocationLongitude,
                 shiftLocation.ScheduledEndTime);
 
-            // ================================================================
-            // STEP 6: VALIDATE LOCATION DISTANCE
-            // ================================================================
+
             var distanceFromSite = GeoLocationHelper.CalculateDistanceInMeters(
                 request.CheckOutLatitude,
                 request.CheckOutLongitude,
@@ -327,14 +295,14 @@ internal class CheckOutGuardHandler(
                 shiftLocation.LocationLongitude);
 
             logger.LogInformation(
-                "📏 Distance from site: {Distance:F2}m (max: {MaxDistance}m)",
+                "Distance from site: {Distance:F2}m (max: {MaxDistance}m)",
                 distanceFromSite,
                 MaxDistanceMeters);
 
             if (distanceFromSite > MaxDistanceMeters)
             {
                 logger.LogWarning(
-                    "❌ Guard too far from site - Distance={Distance:F0}m, Max={MaxDistance}m",
+                    "Guard too far from site - Distance={Distance:F0}m, Max={MaxDistance}m",
                     distanceFromSite,
                     MaxDistanceMeters);
 
@@ -343,39 +311,29 @@ internal class CheckOutGuardHandler(
                     Success = false,
                     DistanceFromSite = distanceFromSite,
                     FaceMatchScore = faceVerificationResult.Confidence,
-                    ErrorMessage = $"❌ Quá xa công trường. Khoảng cách hiện tại: {distanceFromSite:F0}m (tối đa cho phép: {MaxDistanceMeters}m)"
+                    ErrorMessage = $"Quá xa công trường. Khoảng cách hiện tại: {distanceFromSite:F0}m (tối đa cho phép: {MaxDistanceMeters}m)"
                 };
             }
 
-            logger.LogInformation("✓ Location validated - Distance within acceptable range");
+            logger.LogInformation("Location validated - Distance within acceptable range");
 
-            // ================================================================
-            // STEP 7: CALCULATE WORK DURATION AND STATUS
-            // ================================================================
             var checkOutTime = DateTimeHelper.VietnamNow;
             var checkInTime = attendanceRecord.CheckInTime.Value;
             var scheduledEndTime = shiftLocation.ScheduledEndTime;
-
-            // Calculate actual work duration in minutes
             var actualWorkDurationMinutes = (int)Math.Ceiling((checkOutTime - checkInTime).TotalMinutes);
-
-            // Calculate total hours (round to 2 decimal places)
-            // Subtract break duration (default 60 minutes) if applicable
+            
             var breakDurationMinutes = attendanceRecord.BreakDurationMinutes;
             var netWorkMinutes = actualWorkDurationMinutes - breakDurationMinutes;
             var totalHours = Math.Round((decimal)netWorkMinutes / 60, 2);
 
             logger.LogInformation(
-                "⏱ Work Duration: CheckIn={CheckIn}, CheckOut={CheckOut}, Actual={ActualMinutes}min, Break={BreakMinutes}min, Total={TotalHours}h",
+                "Work Duration: CheckIn={CheckIn}, CheckOut={CheckOut}, Actual={ActualMinutes}min, Break={BreakMinutes}min, Total={TotalHours}h",
                 checkInTime.ToString("yyyy-MM-dd HH:mm:ss"),
                 checkOutTime.ToString("yyyy-MM-dd HH:mm:ss"),
                 actualWorkDurationMinutes,
                 breakDurationMinutes,
                 totalHours);
-
-            // ================================================================
-            // STEP 8: CHECK EARLY LEAVE STATUS
-            // ================================================================
+            
             var isEarlyLeave = checkOutTime < scheduledEndTime;
             var earlyLeaveMinutes = isEarlyLeave
                 ? (int)Math.Ceiling((scheduledEndTime - checkOutTime).TotalMinutes)
@@ -384,19 +342,16 @@ internal class CheckOutGuardHandler(
             if (isEarlyLeave)
             {
                 logger.LogWarning(
-                    "⚠️ Guard is leaving early by {EarlyLeaveMinutes} minutes (CheckOut={CheckOut}, Scheduled={Scheduled})",
+                    "Guard is leaving early by {EarlyLeaveMinutes} minutes (CheckOut={CheckOut}, Scheduled={Scheduled})",
                     earlyLeaveMinutes,
                     checkOutTime.ToString("yyyy-MM-dd HH:mm:ss"),
                     scheduledEndTime.ToString("yyyy-MM-dd HH:mm:ss"));
             }
             else
             {
-                logger.LogInformation("✓ Guard is checking out on time or later");
+                logger.LogInformation("Guard is checking out on time or later");
             }
-
-            // ================================================================
-            // STEP 9: CHECK OVERTIME STATUS
-            // ================================================================
+            
             var hasOvertime = checkOutTime > scheduledEndTime;
             var overtimeMinutes = hasOvertime
                 ? (int)Math.Floor((checkOutTime - scheduledEndTime).TotalMinutes)
@@ -405,16 +360,13 @@ internal class CheckOutGuardHandler(
             if (hasOvertime)
             {
                 logger.LogInformation(
-                    "💰 Guard has overtime: {OvertimeMinutes} minutes (CheckOut={CheckOut}, Scheduled={Scheduled})",
+                    "Guard has overtime: {OvertimeMinutes} minutes (CheckOut={CheckOut}, Scheduled={Scheduled})",
                     overtimeMinutes,
                     checkOutTime.ToString("yyyy-MM-dd HH:mm:ss"),
                     scheduledEndTime.ToString("yyyy-MM-dd HH:mm:ss"));
             }
 
-            // ================================================================
-            // STEP 10: UPDATE ATTENDANCE RECORD
-            // ================================================================
-            logger.LogInformation("💾 Updating attendance record with check-out data...");
+            logger.LogInformation("Updating attendance record with check-out data...");
 
             await UpdateAttendanceRecordAsync(
                 connection,
@@ -434,12 +386,10 @@ internal class CheckOutGuardHandler(
                 overtimeMinutes,
                 cancellationToken);
 
-            logger.LogInformation("✓ Attendance record updated with status CHECKED_OUT");
+            logger.LogInformation("Attendance record updated with status CHECKED_OUT");
 
-            // ================================================================
-            // STEP 11: PUBLISH EVENTS TO UPDATE SHIFTS.API
-            // ================================================================
-            logger.LogInformation("📨 Publishing integration events...");
+
+            logger.LogInformation("Publishing integration events...");
 
             await PublishShiftAssignmentUpdateAsync(
                 request.ShiftAssignmentId,
@@ -456,13 +406,11 @@ internal class CheckOutGuardHandler(
                 distanceFromSite,
                 cancellationToken);
 
-            logger.LogInformation("✓ GuardCheckedOutEvent published successfully");
-
-            // ================================================================
-            // STEP 12: RETURN SUCCESS RESULT
-            // ================================================================
+            logger.LogInformation("GuardCheckedOutEvent published successfully");
+            
+            
             logger.LogInformation(
-                "✅ Check-out completed successfully for Guard={GuardId}, Duration={TotalHours}h, Overtime={OvertimeMinutes}min, EarlyLeave={EarlyLeaveMinutes}min",
+                "Check-out completed successfully for Guard={GuardId}, Duration={TotalHours}h, Overtime={OvertimeMinutes}min, EarlyLeave={EarlyLeaveMinutes}min",
                 request.GuardId,
                 totalHours,
                 overtimeMinutes,
@@ -487,7 +435,7 @@ internal class CheckOutGuardHandler(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "❌ Error during check-out for Guard={GuardId}", request.GuardId);
+            logger.LogError(ex, "Error during check-out for Guard={GuardId}", request.GuardId);
 
             return new CheckOutGuardResult
             {
@@ -545,11 +493,10 @@ internal class CheckOutGuardHandler(
         {
             if (string.IsNullOrWhiteSpace(_faceApiBaseUrl))
             {
-                logger.LogError("❌ Face Recognition API URL not configured");
+                logger.LogError("Face Recognition API URL not configured");
                 return null;
             }
-
-            // Convert check-out image to base64
+            
             string base64Image;
             using (var memoryStream = new MemoryStream())
             {
@@ -580,7 +527,7 @@ internal class CheckOutGuardHandler(
             if (!response.IsSuccessStatusCode)
             {
                 var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
-                logger.LogError("❌ Face Verification API failed - StatusCode={StatusCode}, Error={Error}",
+                logger.LogError("Face Verification API failed - StatusCode={StatusCode}, Error={Error}",
                     response.StatusCode, errorContent);
                 return null;
             }
@@ -593,7 +540,7 @@ internal class CheckOutGuardHandler(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "❌ Error calling Face Verification API");
+            logger.LogError(ex, "Error calling Face Verification API");
             return null;
         }
     }
@@ -621,9 +568,7 @@ internal class CheckOutGuardHandler(
             throw new InvalidOperationException($"Failed to upload image to S3: {errorMessage}");
         }
 
-        logger.LogInformation("✓ Check-out image uploaded successfully: {FileUrl}", fileUrl);
-
-        // Generate pre-signed URL (valid for 7 days)
+        logger.LogInformation("Check-out image uploaded successfully: {FileUrl}", fileUrl);
         return s3Service.GetPresignedUrl(fileUrl, expirationMinutes: 10080);
     }
 
@@ -757,7 +702,7 @@ internal class CheckOutGuardHandler(
             await publishEndpoint.Publish(guardCheckedOutEvent, cancellationToken);
 
             logger.LogInformation(
-                "📨 Published GuardCheckedOutEvent: ShiftAssignment={ShiftAssignmentId}, Shift={ShiftId}, Guard={GuardId}",
+                "Published GuardCheckedOutEvent: ShiftAssignment={ShiftAssignmentId}, Shift={ShiftId}, Guard={GuardId}",
                 shiftAssignmentId,
                 shiftId,
                 guardId);
@@ -765,7 +710,6 @@ internal class CheckOutGuardHandler(
         catch (Exception ex)
         {
             logger.LogError(ex, "Error publishing GuardCheckedOutEvent");
-            // Don't throw - check-out already completed successfully
         }
     }
 }

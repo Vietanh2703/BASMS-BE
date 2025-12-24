@@ -18,7 +18,7 @@ public class CreateAttendanceRecordConsumer : IConsumer<ShiftAssignmentCreatedEv
         var message = context.Message;
 
         _logger.LogInformation(
-            "📨 Received ShiftAssignmentCreatedEvent: ShiftAssignment={AssignmentId}, Guard={GuardId}, Shift={ShiftId}",
+            "Received ShiftAssignmentCreatedEvent: ShiftAssignment={AssignmentId}, Guard={GuardId}, Shift={ShiftId}",
             message.ShiftAssignmentId,
             message.GuardId,
             message.ShiftId);
@@ -26,12 +26,7 @@ public class CreateAttendanceRecordConsumer : IConsumer<ShiftAssignmentCreatedEv
         try
         {
             using var connection = await _dbFactory.CreateConnectionAsync();
-
-            // ================================================================
-            // KIỂM TRA XEM ĐÃ TỒN TẠI ATTENDANCE RECORD CHƯA
-            // ================================================================
-            // Note: Không query shift_assignments vì nó thuộc Shifts.API database
-            // Nếu có cancellation, ShiftAssignmentCancelledEvent sẽ xử lý
+            
             var existingRecord = await connection.QueryFirstOrDefaultAsync<AttendanceRecords>(
                 @"SELECT * FROM attendance_records
                   WHERE ShiftAssignmentId = @ShiftAssignmentId
@@ -41,14 +36,11 @@ public class CreateAttendanceRecordConsumer : IConsumer<ShiftAssignmentCreatedEv
             if (existingRecord != null)
             {
                 _logger.LogWarning(
-                    "⚠️ Attendance record already exists for ShiftAssignment={AssignmentId}, skipping creation",
+                    "Attendance record already exists for ShiftAssignment={AssignmentId}, skipping creation",
                     message.ShiftAssignmentId);
                 return;
             }
-
-            // ================================================================
-            // TẠO ATTENDANCE RECORD MỚI
-            // ================================================================
+            
             var now = DateTimeHelper.VietnamNow;
 
             var attendanceRecord = new AttendanceRecords
@@ -57,25 +49,16 @@ public class CreateAttendanceRecordConsumer : IConsumer<ShiftAssignmentCreatedEv
                 ShiftAssignmentId = message.ShiftAssignmentId,
                 GuardId = message.GuardId,
                 ShiftId = message.ShiftId,
-
-                // Thời gian dự kiến (từ shift)
                 ScheduledStartTime = message.ScheduledStartTime,
                 ScheduledEndTime = message.ScheduledEndTime,
-
-                // Status: PENDING (chờ guard check-in)
                 Status = "PENDING",
-                IsIncomplete = true,            // Chưa có check-in/out
+                IsIncomplete = true,        
                 IsVerified = false,
                 VerificationStatus = "PENDING",
-
-                // Break time mặc định
                 BreakDurationMinutes = 60,
-
-                // Audit
                 CreatedAt = now
             };
-
-            // Insert vào database
+            
             var insertSql = @"
                 INSERT INTO attendance_records (
                     Id, ShiftAssignmentId, GuardId, ShiftId,
@@ -92,7 +75,7 @@ public class CreateAttendanceRecordConsumer : IConsumer<ShiftAssignmentCreatedEv
             await connection.ExecuteAsync(insertSql, attendanceRecord);
 
             _logger.LogInformation(
-                "✅ Created attendance record {RecordId} for ShiftAssignment={AssignmentId}, Guard={GuardId}",
+                "Created attendance record {RecordId} for ShiftAssignment={AssignmentId}, Guard={GuardId}",
                 attendanceRecord.Id,
                 message.ShiftAssignmentId,
                 message.GuardId);
@@ -105,10 +88,9 @@ public class CreateAttendanceRecordConsumer : IConsumer<ShiftAssignmentCreatedEv
         catch (Exception ex)
         {
             _logger.LogError(ex,
-                "❌ Error creating attendance record for ShiftAssignment={AssignmentId}",
+                "Error creating attendance record for ShiftAssignment={AssignmentId}",
                 message.ShiftAssignmentId);
-
-            // Throw để MassTransit retry
+            
             throw;
         }
     }

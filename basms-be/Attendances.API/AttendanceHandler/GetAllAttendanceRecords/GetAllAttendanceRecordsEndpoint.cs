@@ -1,8 +1,5 @@
 namespace Attendances.API.AttendanceHandler.GetAllAttendanceRecords;
 
-/// <summary>
-/// Endpoint để lấy danh sách tất cả attendance records
-/// </summary>
 public class GetAllAttendanceRecordsEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
@@ -33,7 +30,7 @@ public class GetAllAttendanceRecordsEndpoint : ICarterModule
     }
 
     logger.LogInformation(
-        "✓ Retrieved {Count} attendance records",
+        "Retrieved {Count} attendance records",
         result.Records.Count);
 
     return Results.Ok(new
@@ -49,12 +46,6 @@ public class GetAllAttendanceRecordsEndpoint : ICarterModule
         .WithTags("Attendances")
         .Produces(200)
         .Produces(400)
-        .WithSummary("Get all attendance records")
-        .WithDescription(@"
-            Returns all attendance records sorted by check-in time (newest first).
-
-            Examples:
-            GET /api/attendances/get-all
-        ");
+        .WithSummary("Get all attendance records");
     }
 }
