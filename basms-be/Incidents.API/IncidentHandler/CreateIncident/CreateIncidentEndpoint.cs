@@ -4,7 +4,7 @@ public class CreateIncidentEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/incidents", async (
+        app.MapPost("/api/incidents/create", async (
             HttpRequest request,
             ISender sender,
             ILogger<CreateIncidentEndpoint> logger) =>
