@@ -34,7 +34,6 @@ public class CreateIncidentEndpoint : ICarterModule
                 var reporterIdStr = form["reporterId"].ToString();
                 var reporterName = form["reporterName"].ToString();
                 var reporterEmail = form["reporterEmail"].ToString();
-                var reporterRole = form["reporterRole"].ToString();
 
                 if (!DateTime.TryParse(incidentTimeStr, out var incidentTime))
                 {
@@ -97,7 +96,6 @@ public class CreateIncidentEndpoint : ICarterModule
                     reporterId,
                     reporterName,
                     reporterEmail,
-                    string.IsNullOrEmpty(reporterRole) ? null : reporterRole,
                     mediaFiles.Any() ? mediaFiles : null
                 );
 

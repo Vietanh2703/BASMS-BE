@@ -4,7 +4,6 @@ public class ValidateContractEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        // Route: POST /api/contracts/{id}/validate
         app.MapPost("/api/contracts/{id:guid}/validate", async (
             Guid id,
             HttpRequest request,
@@ -13,7 +12,6 @@ public class ValidateContractEndpoint : ICarterModule
         {
             try
             {
-                // Check if request has file
                 if (!request.HasFormContentType || request.Form.Files.Count == 0)
                 {
                     return Results.BadRequest(new
@@ -24,8 +22,7 @@ public class ValidateContractEndpoint : ICarterModule
                 }
 
                 var file = request.Form.Files[0];
-
-                // Validate file type
+                
                 var allowedExtensions = new[] { ".pdf", ".docx", ".doc" };
                 var fileExtension = Path.GetExtension(file.FileName).ToLowerInvariant();
 
@@ -37,9 +34,8 @@ public class ValidateContractEndpoint : ICarterModule
                         errorMessage = $"Invalid file type '{fileExtension}'. Only PDF and DOCX files are supported."
                     });
                 }
-
-                // Validate file size (max 10MB)
-                const long maxFileSize = 10 * 1024 * 1024; // 10MB
+                
+                const long maxFileSize = 10 * 1024 * 1024; 
                 if (file.Length > maxFileSize)
                 {
                     return Results.BadRequest(new
@@ -51,11 +47,9 @@ public class ValidateContractEndpoint : ICarterModule
 
                 logger.LogInformation("Validating contract {ContractId} with document: {FileName} ({FileSize} bytes)",
                     id, file.FileName, file.Length);
-
-                // Open file stream
+                
                 using var stream = file.OpenReadStream();
-
-                // Send query to handler
+                
                 var query = new ValidateContractQuery(id, stream, file.FileName);
                 var result = await sender.Send(query);
 
@@ -87,22 +81,6 @@ public class ValidateContractEndpoint : ICarterModule
         .Produces<ValidateContractResult>(StatusCodes.Status200OK)
         .ProducesProblem(StatusCodes.Status400BadRequest)
         .ProducesProblem(StatusCodes.Status500InternalServerError)
-        .WithSummary("Validate contract against document")
-        .WithDescription(@"
-Validates contract information in database against the source contract document (PDF/DOCX).
-Returns match percentage and detailed list of differences.
-
-**Usage:**
-```bash
-curl -X POST http://localhost:5000/api/contracts/{id}/validate \
-  -F 'file=@contract.pdf'
-```
-
-**Response includes:**
-- Overall match percentage
-- Section-by-section comparison (Contract Info, Locations, Shifts, Working Conditions)
-- Detailed differences with severity levels
-- Field-by-field comparison results
-");
+        .WithSummary("Validate contract against document");
     }
 }

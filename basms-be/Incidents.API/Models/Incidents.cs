@@ -80,11 +80,6 @@ public class Incidents
     public string ReporterEmail { get; set; } = string.Empty;
 
     /// <summary>
-    /// Vai trò người báo cáo: GUARD | MANAGER | ADMIN
-    /// </summary>
-    public string? ReporterRole { get; set; }
-
-    /// <summary>
     /// Thời điểm báo cáo
     /// </summary>
     public DateTime ReportedTime { get; set; }
@@ -122,11 +117,6 @@ public class Incidents
     /// Email người xử lý (cached từ Users.API)
     /// </summary>
     public string? ResponderEmail { get; set; }
-
-    /// <summary>
-    /// Vai trò người xử lý: GUARD | MANAGER | ADMIN
-    /// </summary>
-    public string? ResponderRole { get; set; }
 
     /// <summary>
     /// Thời điểm phản hồi

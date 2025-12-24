@@ -1,12 +1,5 @@
 namespace Contracts.API.ContractsHandler.UpdateHolidayPolicy;
 
-// ================================================================
-// COMMAND & RESULT
-// ================================================================
-
-/// <summary>
-/// Command để update public holiday policy
-/// </summary>
 public record UpdateHolidayPolicyCommand : ICommand<UpdateHolidayPolicyResult>
 {
     public Guid HolidayId { get; init; }
@@ -15,36 +8,25 @@ public record UpdateHolidayPolicyCommand : ICommand<UpdateHolidayPolicyResult>
     public string HolidayName { get; init; } = string.Empty;
     public string? HolidayNameEn { get; init; }
     public string HolidayCategory { get; init; } = string.Empty;
-
-    // Tet Period
     public bool IsTetPeriod { get; init; }
     public bool IsTetHoliday { get; init; }
     public int? TetDayNumber { get; init; }
     public DateTime? HolidayStartDate { get; init; }
     public DateTime? HolidayEndDate { get; init; }
     public int? TotalHolidayDays { get; init; }
-
-    // Official & Observed
     public bool IsOfficialHoliday { get; init; }
     public bool IsObserved { get; init; }
     public DateTime? OriginalDate { get; init; }
     public DateTime? ObservedDate { get; init; }
-
-    // Scope
     public bool AppliesNationwide { get; init; }
     public string? AppliesToRegions { get; init; }
-
-    // Impact
     public bool StandardWorkplacesClosed { get; init; }
     public bool EssentialServicesOperating { get; init; }
-
     public string? Description { get; init; }
     public int Year { get; init; }
 }
 
-/// <summary>
-/// Kết quả update holiday policy
-/// </summary>
+
 public record UpdateHolidayPolicyResult
 {
     public bool Success { get; init; }
@@ -54,13 +36,7 @@ public record UpdateHolidayPolicyResult
     public DateTime? HolidayDate { get; init; }
 }
 
-// ================================================================
-// HANDLER
-// ================================================================
 
-/// <summary>
-/// Handler để update public holiday policy
-/// </summary>
 internal class UpdateHolidayPolicyHandler(
     IDbConnectionFactory connectionFactory,
     ILogger<UpdateHolidayPolicyHandler> logger)
@@ -75,10 +51,7 @@ internal class UpdateHolidayPolicyHandler(
             logger.LogInformation("Updating public holiday: {HolidayId}", request.HolidayId);
 
             using var connection = await connectionFactory.CreateConnectionAsync();
-
-            // ================================================================
-            // 1. CHECK IF HOLIDAY EXISTS
-            // ================================================================
+            
             var checkQuery = @"
                 SELECT HolidayName, HolidayDate
                 FROM public_holidays
@@ -87,7 +60,7 @@ internal class UpdateHolidayPolicyHandler(
 
             var existingHoliday = await connection.QuerySingleOrDefaultAsync<dynamic>(
                 checkQuery,
-                new { HolidayId = request.HolidayId });
+                new { request.HolidayId });
 
             if (existingHoliday == null)
             {
@@ -99,15 +72,6 @@ internal class UpdateHolidayPolicyHandler(
                 };
             }
 
-            // ================================================================
-            // 2. VALIDATE HOLIDAY DATE UNIQUENESS (if changed)
-            // ================================================================
-            // Removed validation to avoid collation mismatch issues
-            // Database constraints will handle uniqueness validation
-
-            // ================================================================
-            // 3. UPDATE PUBLIC HOLIDAY
-            // ================================================================
             var updateQuery = @"
                 UPDATE public_holidays SET
                     ContractId = @ContractId,

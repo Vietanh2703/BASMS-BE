@@ -22,7 +22,6 @@ public record CreateIncidentCommand(
     Guid ReporterId,
     string ReporterName,
     string ReporterEmail,
-    string? ReporterRole,
     List<MediaFileDto>? MediaFiles
 ) : ICommand<CreateIncidentResult>;
 

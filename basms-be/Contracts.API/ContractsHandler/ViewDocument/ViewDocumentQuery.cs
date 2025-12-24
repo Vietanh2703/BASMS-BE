@@ -1,16 +1,9 @@
 namespace Contracts.API.ContractsHandler.ViewDocument;
 
-/// <summary>
-/// Query để lấy document chỉ bằng documentId (không cần token)
-/// Dùng cho internal access hoặc sau khi đã authenticated
-/// </summary>
 public record ViewDocumentQuery(
     Guid DocumentId
 ) : IQuery<ViewDocumentResult>;
 
-/// <summary>
-/// Result chứa pre-signed URL và metadata
-/// </summary>
 public record ViewDocumentResult
 {
     public bool Success { get; init; }

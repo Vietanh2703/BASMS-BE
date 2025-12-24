@@ -56,7 +56,6 @@ public class CreateIncidentHandler(
                 ReporterId = command.ReporterId,
                 ReporterName = command.ReporterName,
                 ReporterEmail = command.ReporterEmail,
-                ReporterRole = command.ReporterRole,
                 ReportedTime = DateTime.UtcNow,
                 Status = "REPORTED",
                 IsDeleted = false,

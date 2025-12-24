@@ -1,15 +1,7 @@
-using System.Security.Cryptography.X509Certificates;
-using Xceed.Document.NET;
 using Xceed.Words.NET;
 
 namespace Contracts.API.Extensions;
 
-/// <summary>
-/// Implementation của Digital Signature Service
-/// Sử dụng DocX để thêm signature placeholder vào Word document
-/// Note: True digital signature cần WindowsBase (Windows only)
-/// Giải pháp này sử dụng signature markers trong document
-/// </summary>
 public class DigitalSignatureService : IDigitalSignatureService
 {
     private readonly ILogger<DigitalSignatureService> _logger;
@@ -18,10 +10,7 @@ public class DigitalSignatureService : IDigitalSignatureService
     {
         _logger = logger;
     }
-
-    /// <summary>
-    /// Ký điện tử Word document bằng cách thêm signature marker
-    /// </summary>
+    
     public async Task<(bool Success, Stream? SignedStream, string? ErrorMessage)> SignWordDocumentAsync(
         Stream documentStream,
         string certificatePath,
@@ -31,13 +20,11 @@ public class DigitalSignatureService : IDigitalSignatureService
         try
         {
             _logger.LogInformation("Signing Word document with certificate: {CertPath}", certificatePath);
-
-            // Copy stream to memory
+            
             var memoryStream = new MemoryStream();
             await documentStream.CopyToAsync(memoryStream, cancellationToken);
             memoryStream.Position = 0;
-
-            // Load certificate để lấy thông tin
+            
             X509Certificate2 certificate;
             try
             {
@@ -45,14 +32,10 @@ public class DigitalSignatureService : IDigitalSignatureService
             }
             catch
             {
-                // Nếu không load được cert, dùng thông tin giả lập
                 certificate = null!;
             }
-
-            // Load Word document
+            
             using var doc = DocX.Load(memoryStream);
-
-            // Thêm signature marker vào cuối document
             var signatureMark = doc.InsertParagraph();
             signatureMark.Append("\n").AppendLine();
             signatureMark.Append("─────────────────────────────────────").AppendLine();
@@ -61,13 +44,12 @@ public class DigitalSignatureService : IDigitalSignatureService
             signatureMark.Append($"Timestamp: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss UTC}").AppendLine();
             signatureMark.Append($"Certificate: {Path.GetFileName(certificatePath)}").AppendLine();
             signatureMark.Append("─────────────────────────────────────");
-
-            // Save to new stream
+            
             var outputStream = new MemoryStream();
             doc.SaveAs(outputStream);
             outputStream.Position = 0;
 
-            _logger.LogInformation("✓ Successfully signed Word document");
+            _logger.LogInformation("Successfully signed Word document");
 
             return (true, outputStream, null);
         }
@@ -77,10 +59,7 @@ public class DigitalSignatureService : IDigitalSignatureService
             return (false, null, ex.Message);
         }
     }
-
-    /// <summary>
-    /// Verify signatures bằng cách đếm signature markers
-    /// </summary>
+    
     public async Task<(bool Success, List<string> Signatures, string? ErrorMessage)> VerifySignaturesAsync(
         Stream documentStream,
         CancellationToken cancellationToken = default)
@@ -97,13 +76,12 @@ public class DigitalSignatureService : IDigitalSignatureService
 
             using var doc = DocX.Load(memoryStream);
             var text = doc.Text;
-
-            // Tìm tất cả signature markers
-            var signatureBlocks = System.Text.RegularExpressions.Regex.Matches(
+            
+            var signatureBlocks = Regex.Matches(
                 text,
                 @"DIGITAL SIGNATURE\s+Signed by:\s*([^\n]+)\s+Timestamp:\s*([^\n]+)");
 
-            foreach (System.Text.RegularExpressions.Match match in signatureBlocks)
+            foreach (Match match in signatureBlocks)
             {
                 var signer = match.Groups[1].Value.Trim();
                 var timestamp = match.Groups[2].Value.Trim();
@@ -112,7 +90,7 @@ public class DigitalSignatureService : IDigitalSignatureService
                 _logger.LogInformation("Signature found: {Signer} at {Time}", signer, timestamp);
             }
 
-            _logger.LogInformation("✓ Found {Count} signatures", signatures.Count);
+            _logger.LogInformation("Found {Count} signatures", signatures.Count);
 
             return (true, signatures, null);
         }
@@ -122,10 +100,7 @@ public class DigitalSignatureService : IDigitalSignatureService
             return (false, new List<string>(), ex.Message);
         }
     }
-
-    /// <summary>
-    /// Đếm số chữ ký bằng cách đếm signature markers
-    /// </summary>
+    
     public async Task<(bool Success, int Count, string? ErrorMessage)> CountSignaturesAsync(
         Stream documentStream,
         CancellationToken cancellationToken = default)
@@ -143,7 +118,7 @@ public class DigitalSignatureService : IDigitalSignatureService
 
             var count = signatures?.Count ?? 0;
 
-            _logger.LogInformation("✓ Found {Count} signatures", count);
+            _logger.LogInformation("Found {Count} signatures", count);
 
             return (true, count, null);
         }

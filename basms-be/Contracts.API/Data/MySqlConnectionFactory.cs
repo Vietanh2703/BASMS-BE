@@ -1,11 +1,6 @@
-using MySql.Data.MySqlClient;
-
 namespace Contracts.API.Data;
 
-/// <summary>
-/// MySQL connection factory cho Contracts service
-/// Tạo 16 tables theo ERD: company_profile, customers, contracts, locations...
-/// </summary>
+
 public class MySqlConnectionFactory : IDbConnectionFactory
 {
     private readonly string _connectionString;
@@ -33,34 +28,28 @@ public class MySqlConnectionFactory : IDbConnectionFactory
         {
             if (_tablesCreated) return;
 
-            // ====================================================================
-            // STEP 1: TẠO DATABASE NẾU CHƯA TỒN TẠI
-            // ====================================================================
-            // Kết nối không chỉ định database để tạo database mới
+
             var connectionStringBuilder = new MySqlConnectionStringBuilder(_connectionString);
             var databaseName = connectionStringBuilder.Database;
-            connectionStringBuilder.Database = null; // Kết nối không chỉ định DB
+            connectionStringBuilder.Database = null; 
 
             using (var tempConnection = new MySqlConnection(connectionStringBuilder.ConnectionString))
             {
                 await tempConnection.OpenAsync();
-
-                // Tạo database nếu chưa tồn tại
+                
                 await tempConnection.ExecuteAsync($@"
                     CREATE DATABASE IF NOT EXISTS `{databaseName}`
                     CHARACTER SET utf8mb4
                     COLLATE utf8mb4_unicode_ci;
                 ");
 
-                Console.WriteLine($"✓ Database '{databaseName}' ready");
+                Console.WriteLine($"Database '{databaseName}' ready");
             }
 
-            // ====================================================================
-            // STEP 2: KẾT NỐI ĐẾN DATABASE VỪA TẠO VÀ CHECK/CREATE TABLES
-            // ====================================================================
+
             using var connection = await CreateConnectionAsync();
 
-            // Check if tables already exist
+
             var tablesExist = await connection.ExecuteScalarAsync<bool>(@"
                 SELECT COUNT(*) FROM information_schema.tables
                 WHERE table_schema = DATABASE()
@@ -69,22 +58,15 @@ public class MySqlConnectionFactory : IDbConnectionFactory
 
             if (tablesExist)
             {
-                Console.WriteLine("✓ Contracts tables already exist, skipping creation");
+                Console.WriteLine("Contracts tables already exist, skipping creation");
                 _tablesCreated = true;
                 return;
             }
 
             Console.WriteLine("Creating Contracts database tables...");
 
-            // ====================================================================
-            // BƯỚC 1: TẠO TẤT CẢ TABLES KHÔNG CÓ FOREIGN KEY TRƯỚC
-            // ====================================================================
-
             try
             {
-            // ====================================================================
-            // 1. CUSTOMERS - Khách hàng
-            // ====================================================================
             Console.WriteLine("Creating table: customers");
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `customers` (
@@ -124,9 +106,6 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                 COMMENT='Khách hàng - công ty thuê dịch vụ bảo vệ';
             ");
 
-            // ====================================================================
-            // 2. CUSTOMER_LOCATIONS - Địa điểm khách hàng
-            // ====================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `customer_locations` (
                     `Id` CHAR(36) PRIMARY KEY,
@@ -169,10 +148,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 COMMENT='Địa điểm khách hàng - nơi triển khai bảo vệ';
             ");
-
-            // ====================================================================
-            // 3. CONTRACT_DOCUMENTS - Tài liệu hợp đồng (MOVED BEFORE CONTRACTS)
-            // ====================================================================
+            
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `contract_documents` (
                     `Id` CHAR(36) PRIMARY KEY,
@@ -204,10 +180,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 COMMENT='Tài liệu hợp đồng';
              ");
-
-            // ====================================================================
-            // 6. CONTRACTS - Hợp đồng dịch vụ
-            // ====================================================================
+            
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `contracts` (
                     `Id` CHAR(36) PRIMARY KEY,
@@ -261,10 +234,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 COMMENT='Hợp đồng dịch vụ bảo vệ';
             ");
-
-            // ====================================================================
-            // 5. PUBLIC_HOLIDAYS - Ngày lễ quốc gia (MOVED AFTER CONTRACTS)
-            // ====================================================================
+            
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `public_holidays` (
                     `Id` CHAR(36) PRIMARY KEY,
@@ -301,10 +271,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 COMMENT='Ngày lễ quốc gia Việt Nam - bao gồm Tết và các ngày lễ khác';
             ");
-
-            // ====================================================================
-            // 6. HOLIDAY_SUBSTITUTE_WORK_DAYS - Ngày làm bù
-            // ====================================================================
+            
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `holiday_substitute_work_days` (
                     `Id` CHAR(36) PRIMARY KEY,
@@ -319,10 +286,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 COMMENT='Ngày làm bù cho ngày lễ';
             ");
-
-            // ====================================================================
-            // 7. CONTRACT_LOCATIONS - Địa điểm trong hợp đồng
-            // ====================================================================
+            
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `contract_locations` (
                     `Id` CHAR(36) PRIMARY KEY,
@@ -347,10 +311,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 COMMENT='Địa điểm được cover bởi hợp đồng';
             ");
-
-            // ====================================================================
-            // 8. CONTRACT_SHIFT_SCHEDULES - Mẫu ca trong hợp đồng
-            // ====================================================================
+            
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `contract_shift_schedules` (
                     `Id` CHAR(36) PRIMARY KEY,
@@ -400,9 +361,6 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                 COMMENT='Mẫu ca shift trong hợp đồng - để tự động tạo shifts';
             ");
 
-            // ====================================================================
-            // 9. CONTRACT_SHIFT_EXCEPTIONS - Ngoại lệ ca
-            // ====================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `contract_shift_exceptions` (
                     `Id` CHAR(36) PRIMARY KEY,
@@ -421,10 +379,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 COMMENT='Ngoại lệ ca - các trường hợp đặc biệt';
             ");
-
-            // ====================================================================
-            // 10. CONTRACT_PERIODS - Kỳ hạn hợp đồng
-            // ====================================================================
+            
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `contract_periods` (
                     `Id` CHAR(36) PRIMARY KEY,
@@ -443,9 +398,6 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                 COMMENT='Kỳ hạn hợp đồng - tracking renewals';
             ");
 
-            // ====================================================================
-            // 11. CONTRACT_AMENDMENTS - Phụ lục hợp đồng
-            // ====================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `contract_amendments` (
                     `Id` CHAR(36) PRIMARY KEY,
@@ -470,9 +422,6 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                 COMMENT='Phụ lục và sửa đổi hợp đồng';
             ");
 
-            // ====================================================================
-            // 12. SHIFT_GENERATION_LOG - Log tự động tạo ca
-            // ====================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `shift_generation_log` (
                     `Id` CHAR(36) PRIMARY KEY,
@@ -494,9 +443,6 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                 COMMENT='Log tự động tạo shifts - debugging và audit';
             ");
 
-            // ====================================================================
-            // 13. ATTENDANCE_SYNC_LOG - Log đồng bộ attendance
-            // ====================================================================
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `attendance_sync_log` (
                     `Id` CHAR(36) PRIMARY KEY,
@@ -513,10 +459,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 COMMENT='Log đồng bộ attendance data';
             ");
-
-            // ====================================================================
-            // 14. CUSTOMER_SYNC_LOG - Log đồng bộ customer
-            // ====================================================================
+            
             Console.WriteLine("Creating table: customer_sync_log");
             await connection.ExecuteAsync(@"
                 CREATE TABLE IF NOT EXISTS `customer_sync_log` (
@@ -545,11 +488,11 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             ");
 
                 _tablesCreated = true;
-                Console.WriteLine("✓ Created all 14 Contracts database tables successfully");
+                Console.WriteLine("Created all contracts database tables successfully");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"❌ Error creating tables: {ex.Message}");
+                Console.WriteLine($"Error creating tables: {ex.Message}");
                 Console.WriteLine($"Stack trace: {ex.StackTrace}");
                 throw;
             }

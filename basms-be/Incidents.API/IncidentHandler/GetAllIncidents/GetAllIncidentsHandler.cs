@@ -46,7 +46,6 @@ public record IncidentDto
     public Guid ReporterId { get; init; }
     public string ReporterName { get; init; } = string.Empty;
     public string ReporterEmail { get; init; } = string.Empty;
-    public string? ReporterRole { get; init; }
     public DateTime ReportedTime { get; init; }
 
     // Status
@@ -57,7 +56,6 @@ public record IncidentDto
     public Guid? ResponderId { get; init; }
     public string? ResponderName { get; init; }
     public string? ResponderEmail { get; init; }
-    public string? ResponderRole { get; init; }
     public DateTime? RespondedAt { get; init; }
 
     // Audit
@@ -120,14 +118,12 @@ internal class GetAllIncidentsHandler(
                     ReporterId,
                     ReporterName,
                     ReporterEmail,
-                    ReporterRole,
                     ReportedTime,
                     Status,
                     ResponseContent,
                     ResponderId,
                     ResponderName,
                     ResponderEmail,
-                    ResponderRole,
                     RespondedAt,
                     IsDeleted,
                     CreatedAt,
