@@ -4,14 +4,13 @@ public class UpdatePasswordValidator : AbstractValidator<UpdatePasswordCommand>
 {
     public UpdatePasswordValidator()
     {
-        // Email validation
         RuleFor(x => x.Email)
             .NotEmpty()
             .WithMessage("Email is required")
             .EmailAddress()
             .WithMessage("Invalid email format");
 
-        // New password validation
+
         RuleFor(x => x.NewPassword)
             .NotEmpty()
             .WithMessage("New password is required")
@@ -26,7 +25,7 @@ public class UpdatePasswordValidator : AbstractValidator<UpdatePasswordCommand>
             .Matches(@"[^a-zA-Z0-9]")
             .WithMessage("Password must contain at least one special character");
 
-        // Confirm password validation
+
         RuleFor(x => x.ConfirmPassword)
             .NotEmpty()
             .WithMessage("Confirm password is required")

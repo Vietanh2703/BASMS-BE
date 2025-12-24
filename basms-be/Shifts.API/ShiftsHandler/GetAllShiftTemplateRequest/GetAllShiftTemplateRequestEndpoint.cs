@@ -43,15 +43,12 @@ public class GetAllShiftTemplateRequestEndpoint : ICarterModule
                         templateCode = t.TemplateCode,
                         templateName = t.TemplateName,
                         description = t.Description,
-                        // Time
                         startTime = t.StartTime.ToString(@"hh\:mm"),
                         endTime = t.EndTime.ToString(@"hh\:mm"),
                         durationHours = t.DurationHours,
                         breakDurationMinutes = t.BreakDurationMinutes,
-                        // Classification
                         isNightShift = t.IsNightShift,
                         crossesMidnight = t.CrossesMidnight,
-                        // Days of week
                         daysOfWeek = new
                         {
                             monday = t.AppliesMonday,
@@ -62,20 +59,16 @@ public class GetAllShiftTemplateRequestEndpoint : ICarterModule
                             saturday = t.AppliesSaturday,
                             sunday = t.AppliesSunday
                         },
-                        // Staffing
                         minGuardsRequired = t.MinGuardsRequired,
                         maxGuardsAllowed = t.MaxGuardsAllowed,
                         optimalGuards = t.OptimalGuards,
-                        // Location
                         locationId = t.LocationId,
                         locationName = t.LocationName,
                         locationAddress = t.LocationAddress,
-                        // Status
                         status = t.Status,
                         isActive = t.IsActive,
                         effectiveFrom = t.EffectiveFrom,
                         effectiveTo = t.EffectiveTo,
-                        // Audit
                         createdAt = t.CreatedAt,
                         updatedAt = t.UpdatedAt
                     })
@@ -90,71 +83,6 @@ public class GetAllShiftTemplateRequestEndpoint : ICarterModule
         .ProducesProblem(StatusCodes.Status401Unauthorized)
         .ProducesProblem(StatusCodes.Status404NotFound)
         .ProducesProblem(StatusCodes.Status500InternalServerError)
-        .WithSummary("Get all shift templates pending shift creation")
-        .WithDescription(@"
-            Retrieves all shift templates with status 'await_create_shift' for a manager,
-            grouped by ContractId.
-
-            **Features:**
-            - Filters templates by status = 'await_create_shift'
-            - Groups templates by ContractId
-            - Each contract shows total templates and locations
-            - Calculates summary statistics per contract
-
-            **Use Case:**
-            This endpoint is used when a manager wants to see all pending shift templates
-            that need to be converted into actual shifts. Each contract group shows:
-            - How many templates are waiting
-            - Which locations are involved
-            - Total guards required across all templates
-
-            **Response Structure:**
-            ```json
-            {
-              ""success"": true,
-              ""managerId"": ""660e8400-e29b-41d4-a716-446655440000"",
-              ""totalContracts"": 3,
-              ""totalTemplates"": 15,
-              ""contractGroups"": [
-                {
-                  ""contractId"": ""770e8400-e29b-41d4-a716-446655440000"",
-                  ""contractName"": ""Contract 770e8400"",
-                  ""templateCount"": 8,
-                  ""totalLocations"": 2,
-                  ""locationNames"": [""Vincom Center"", ""Landmark 81""],
-                  ""totalMinGuardsRequired"": 24,
-                  ""templates"": [
-                    {
-                      ""id"": ""880e8400-e29b-41d4-a716-446655440000"",
-                      ""templateCode"": ""MORNING-8H"",
-                      ""templateName"": ""Ca Sáng 08:00-17:00"",
-                      ""startTime"": ""08:00"",
-                      ""endTime"": ""17:00"",
-                      ""durationHours"": 8.0,
-                      ""minGuardsRequired"": 3,
-                      ""locationName"": ""Vincom Center"",
-                      ""daysOfWeek"": {
-                        ""monday"": true,
-                        ""tuesday"": true,
-                        ""wednesday"": true,
-                        ""thursday"": true,
-                        ""friday"": true,
-                        ""saturday"": false,
-                        ""sunday"": false
-                      },
-                      ""status"": ""await_create_shift"",
-                      ""createdAt"": ""2024-01-15T10:30:00Z""
-                    }
-                  ]
-                }
-              ]
-            }
-            ```
-
-            **Next Steps:**
-            After reviewing the pending templates, the manager can use the
-            GenerateShifts or BulkGenerateAndAssignShifts endpoints to create
-            actual shifts from these templates.
-        ");
+        .WithSummary("Get all shift templates pending shift creation");
     }
 }

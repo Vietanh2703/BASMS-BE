@@ -1,8 +1,6 @@
 namespace Shifts.API.ShiftsHandler.GetAllShifts;
 
-/// <summary>
-/// Endpoint để lấy danh sách tất cả shifts với filtering và pagination
-/// </summary>
+
 public class GetAllShiftsEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
@@ -50,7 +48,7 @@ public class GetAllShiftsEndpoint : ICarterModule
     }
 
     logger.LogInformation(
-        "✓ Retrieved {Count} shifts sorted by date and shift time",
+        "Retrieved {Count} shifts sorted by date and shift time",
         result.Shifts.Count);
 
     return Results.Ok(new
@@ -73,41 +71,10 @@ public class GetAllShiftsEndpoint : ICarterModule
         }
     });
 })
-        // .RequireAuthorization()
         .WithName("GetAllShifts")
         .WithTags("Shifts")
         .Produces(200)
         .Produces(400)
-        .WithSummary("Get all shifts by contract with filtering")
-        .WithDescription(@"
-            Returns all shifts for a contract sorted by date (ascending) and shift time (morning → afternoon → evening).
-
-            Important Note:
-            - One contract can have multiple shift templates (e.g., morning shift, afternoon shift, night shift)
-            - This endpoint returns ALL shifts from ALL templates in the contract
-            - Shifts are automatically sorted chronologically by date and time
-
-            Sorting logic:
-            - First: By date (earliest to latest)
-            - Then: By shift start time (morning shifts first, then afternoon, then evening/night)
-
-            Query Parameters:
-            - contractId (optional but recommended): Filter by contract ID - gets all shifts from all templates in this contract
-            - fromDate (optional): Filter shifts from this date (yyyy-MM-dd)
-            - toDate (optional): Filter shifts until this date (yyyy-MM-dd)
-            - managerId (optional): Filter by manager ID
-            - locationId (optional): Filter by location ID
-            - status (optional): Filter by status (DRAFT, SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED, PARTIAL)
-            - shiftType (optional): Filter by shift type (REGULAR, OVERTIME, EMERGENCY, REPLACEMENT, TRAINING)
-            - isNightShift (optional): Filter by night shift (true/false)
-
-            Examples:
-            GET /api/shifts/get-all?contractId={guid}
-            GET /api/shifts/get-all?contractId={guid}&fromDate=2025-01-01&toDate=2025-01-31
-            GET /api/shifts/get-all?contractId={guid}&status=SCHEDULED
-            GET /api/shifts/get-all?contractId={guid}&locationId={guid}
-            GET /api/shifts/get-all?contractId={guid}&isNightShift=true
-            GET /api/shifts/get-all?managerId={guid}
-        ");
+        .WithSummary("Get all shifts by contract with filtering");
     }
 }

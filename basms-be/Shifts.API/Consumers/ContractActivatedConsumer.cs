@@ -2,15 +2,6 @@ using Shifts.API.ShiftsHandler.ImportShiftTemplates;
 
 namespace Shifts.API.Consumers;
 
-/// <summary>
-/// Consumer nhận ContractActivatedEvent từ Contracts Service
-/// WORKFLOW:
-/// 1. Contract được activate trong Contracts.API
-/// 2. Event được publish qua RabbitMQ
-/// 3. Shifts.API nhận event
-/// 4. Nếu AutoGenerateShifts = true → Tự động tạo ca làm
-/// 5. Gửi thông báo cho managers về contract mới
-/// </summary>
 public class ContractActivatedConsumer : IConsumer<ContractActivatedEvent>
 {
     private readonly IDbConnectionFactory _dbFactory;
@@ -41,7 +32,7 @@ public class ContractActivatedConsumer : IConsumer<ContractActivatedEvent>
             using var connection = await _dbFactory.CreateConnectionAsync();
 
             _logger.LogInformation(
-                @"✓ Contract {ContractNumber} activated successfully!
+                @"Contract {ContractNumber} activated successfully!
                   - Customer: {CustomerName}
                   - Start Date: {StartDate:yyyy-MM-dd}
                   - End Date: {EndDate:yyyy-MM-dd}
@@ -56,9 +47,7 @@ public class ContractActivatedConsumer : IConsumer<ContractActivatedEvent>
                 @event.ShiftSchedules.Count,
                 @event.AutoGenerateShifts ? "YES" : "NO");
 
-            // ================================================================
-            // BƯỚC 1: IMPORT SHIFT TEMPLATES TỪ CONTRACT SCHEDULES
-            // ================================================================
+
             _logger.LogInformation(
                 "Importing {Count} shift templates from Contract {ContractNumber}",
                 @event.ShiftSchedules.Count,
@@ -76,7 +65,7 @@ public class ContractActivatedConsumer : IConsumer<ContractActivatedEvent>
             var importResult = await _sender.Send(importCommand);
 
             _logger.LogInformation(
-                @"✓ Template import completed for Contract {ContractNumber}:
+                @"Template import completed for Contract {ContractNumber}:
                   - Created: {Created} templates
                   - Updated: {Updated} templates
                   - Skipped: {Skipped} templates
@@ -95,21 +84,13 @@ public class ContractActivatedConsumer : IConsumer<ContractActivatedEvent>
                     _logger.LogWarning("  - {Error}", error);
                 }
             }
-
-            // ================================================================
-            // BƯỚC 2: TỰ ĐỘNG TẠO CA - DISABLED (Use manual API endpoint)
-            // ================================================================
-            // NOTE: Auto-generate now requires Manager to manually trigger via API
-            // with specific ManagerId and ShiftTemplateId
-            // See: POST /api/shifts/generate
+            
             _logger.LogInformation(
                 "Contract {ContractNumber} activated. " +
-                "Manager can now create shifts using POST /api/shifts/generate " +
+                "Manager can now create shifts" +
                 "with ManagerId and ShiftTemplateId from imported templates.",
                 @event.ContractNumber);
-
-            //Send notification to managers about new contract
-            // await _notificationService.NotifyManagersAboutNewContract(@event);
+            
         }
         catch (Exception ex)
         {
@@ -117,7 +98,7 @@ public class ContractActivatedConsumer : IConsumer<ContractActivatedEvent>
                 "Failed to process ContractActivatedEvent for Contract {ContractNumber}",
                 @event.ContractNumber);
 
-            throw; // Re-throw to trigger MassTransit retry
+            throw;
         }
     }
 }

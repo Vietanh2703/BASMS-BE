@@ -78,3 +78,95 @@ public record ContractData
     public int GenerateShiftsAdvanceDays { get; init; }
     public Guid? CreatedBy { get; init; }
 }
+
+// ================================================================
+// REQUEST/RESPONSE: LẤY CUSTOMER INFO TỪ CONTRACT ID
+// ================================================================
+
+/// <summary>
+/// Request lấy thông tin customer từ contractId
+/// </summary>
+public record GetCustomerByContractRequest
+{
+    public Guid ContractId { get; init; }
+}
+
+/// <summary>
+/// Response chứa customer info
+/// </summary>
+public record GetCustomerByContractResponse
+{
+    public bool Success { get; init; }
+    public CustomerData? Customer { get; init; }
+    public string? ErrorMessage { get; init; }
+}
+
+/// <summary>
+/// Customer data transfer object
+/// </summary>
+public record CustomerData
+{
+    public Guid CustomerId { get; init; }
+    public string CompanyName { get; init; } = string.Empty;
+    public string Email { get; init; } = string.Empty;
+    public string ContactPersonName { get; init; } = string.Empty;
+}
+
+// ================================================================
+// REQUEST/RESPONSE: LẤY SHIFT LOCATION INFO
+// ================================================================
+
+/// <summary>
+/// Request lấy thông tin location của shift từ Shifts.API
+/// </summary>
+public record GetShiftLocationRequest
+{
+    public Guid ShiftId { get; init; }
+}
+
+/// <summary>
+/// Response chứa shift location info
+/// </summary>
+public record GetShiftLocationResponse
+{
+    public bool Success { get; init; }
+    public ShiftLocationData? Location { get; init; }
+    public string? ErrorMessage { get; init; }
+}
+
+/// <summary>
+/// Shift location data transfer object
+/// </summary>
+public record ShiftLocationData
+{
+    public Guid ShiftId { get; init; }
+    public double LocationLatitude { get; init; }
+    public double LocationLongitude { get; init; }
+    public DateTime ScheduledStartTime { get; init; }
+    public DateTime ScheduledEndTime { get; init; }
+}
+
+// ================================================================
+// REQUEST/RESPONSE: ACTIVATE USER
+// ================================================================
+
+/// <summary>
+/// Request để kích hoạt user (set IsActive = true)
+/// </summary>
+public record ActivateUserRequest
+{
+    public Guid UserId { get; init; }
+    public Guid? ActivatedBy { get; init; }
+}
+
+/// <summary>
+/// Response sau khi activate user
+/// </summary>
+public record ActivateUserResponse
+{
+    public bool Success { get; init; }
+    public string? Message { get; init; }
+    public Guid? UserId { get; init; }
+    public string? Email { get; init; }
+    public string? FullName { get; init; }
+}

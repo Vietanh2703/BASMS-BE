@@ -1,6 +1,5 @@
 namespace Users.API.UsersHandler.ResetPassword;
 
-// Step 1: Request reset password - Send OTP via email
 public record RequestResetPasswordCommand(
     string Email
 ) : ICommand<RequestResetPasswordResult>;
@@ -15,7 +14,7 @@ internal class RequestResetPasswordHandler(
     IDbConnectionFactory connectionFactory,
     ILogger<RequestResetPasswordHandler> logger,
     ISender sender,
-    RequestResetPasswordValidator validator) // MediatR sender to call CreateOtpHandler
+    RequestResetPasswordValidator validator) 
     : ICommandHandler<RequestResetPasswordCommand, RequestResetPasswordResult>
 {
     public async Task<RequestResetPasswordResult> Handle(RequestResetPasswordCommand command, CancellationToken cancellationToken)
@@ -31,15 +30,13 @@ internal class RequestResetPasswordHandler(
         try
         {
             logger.LogInformation("Processing reset password request for email: {Email}", command.Email);
-
-            // Validate account status before sending OTP
+            
             using var connection = await connectionFactory.CreateConnectionAsync();
             var users = await connection.GetAllAsync<Models.Users>();
             var user = users.FirstOrDefault(u => u.Email == command.Email && !u.IsDeleted);
 
             if (user == null)
             {
-                // Return generic message for security (don't reveal if email exists)
                 logger.LogWarning("Reset password requested for non-existent email: {Email}", command.Email);
                 return new RequestResetPasswordResult(
                     false,
@@ -47,7 +44,7 @@ internal class RequestResetPasswordHandler(
                 );
             }
 
-            // Check if account is active
+
             if (!user.IsActive)
             {
                 logger.LogWarning("Reset password requested for inactive account: {Email}", command.Email);
@@ -56,8 +53,7 @@ internal class RequestResetPasswordHandler(
                     "Your account is inactive. Please contact support."
                 );
             }
-
-            // Check if account is locked or suspended
+            
             if (user.Status?.ToLower() == "locked")
             {
                 logger.LogWarning("Reset password requested for locked account: {Email}", command.Email);
@@ -75,8 +71,7 @@ internal class RequestResetPasswordHandler(
                     "Your account has been suspended. Please contact support."
                 );
             }
-
-            // Create OTP using CreateOtpHandler
+            
             var createOtpCommand = new CreateOtpCommand(
                 Email: command.Email,
                 Purpose: "reset_password"
@@ -100,7 +95,6 @@ internal class RequestResetPasswordHandler(
     }
 }
 
-// Step 2: Verify OTP for reset password
 public record VerifyResetPasswordOtpCommand(
     string Email,
     string OtpCode
@@ -115,12 +109,11 @@ public record VerifyResetPasswordOtpResult(
 internal class VerifyResetPasswordOtpHandler(
     ILogger<VerifyResetPasswordOtpHandler> logger,
     ISender sender,
-    VerifyResetPasswordOtpValidator validator) // MediatR sender to call VerifyOtpHandler
+    VerifyResetPasswordOtpValidator validator) 
     : ICommandHandler<VerifyResetPasswordOtpCommand, VerifyResetPasswordOtpResult>
 {
     public async Task<VerifyResetPasswordOtpResult> Handle(VerifyResetPasswordOtpCommand command, CancellationToken cancellationToken)
     {
-        // Validate command
         var validationResult = await validator.ValidateAsync(command, cancellationToken);
         if (!validationResult.IsValid)
         {
@@ -131,8 +124,7 @@ internal class VerifyResetPasswordOtpHandler(
         try
         {
             logger.LogInformation("Verifying OTP for password reset: {Email}", command.Email);
-
-            // Verify OTP using VerifyOtpHandler
+            
             var verifyOtpCommand = new VerifyOtpCommand(
                 Email: command.Email,
                 OtpCode: command.OtpCode,
@@ -164,7 +156,7 @@ internal class VerifyResetPasswordOtpHandler(
     }
 }
 
-// Step 3: Complete reset password - Update new password
+
 public record CompleteResetPasswordCommand(
     string Email,
     string NewPassword,
@@ -184,7 +176,6 @@ internal class CompleteResetPasswordHandler(
 {
     public async Task<CompleteResetPasswordResult> Handle(CompleteResetPasswordCommand command, CancellationToken cancellationToken)
     {
-        // Validate command
         var validationResult = await validator.ValidateAsync(command, cancellationToken);
         if (!validationResult.IsValid)
         {
@@ -201,7 +192,6 @@ internal class CompleteResetPasswordHandler(
 
             try
             {
-                // Find user
                 var users = await connection.GetAllAsync<Models.Users>(transaction);
                 var user = users.FirstOrDefault(u => u.Email == command.Email && !u.IsDeleted);
 
@@ -213,8 +203,7 @@ internal class CompleteResetPasswordHandler(
                         "User not found"
                     );
                 }
-
-                // Check if account is active
+                
                 if (!user.IsActive)
                 {
                     logger.LogWarning("Attempted password reset for inactive account: {Email}", command.Email);
@@ -223,17 +212,13 @@ internal class CompleteResetPasswordHandler(
                         "Your account is inactive. Please contact support."
                     );
                 }
-
-                // Hash the new password using BCrypt
+                
                 var hashedPassword = BCrypt.Net.BCrypt.HashPassword(command.NewPassword);
-
-                // Update user password
                 user.Password = hashedPassword;
                 user.UpdatedAt = DateTime.UtcNow;
 
                 await connection.UpdateAsync(user, transaction);
-
-                // Log audit trail
+                
                 await LogAuditAsync(connection, transaction, user.Id, "PASSWORD_RESET",
                     "Password was reset successfully via OTP verification");
 

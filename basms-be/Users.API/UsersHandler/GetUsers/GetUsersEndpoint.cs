@@ -22,7 +22,6 @@ public class GetUsersEndpoint : ICarterModule
         .ProducesProblem(StatusCodes.Status401Unauthorized)
         .ProducesProblem(StatusCodes.Status403Forbidden)
         .ProducesProblem(StatusCodes.Status500InternalServerError)
-        .WithSummary("Get all users")
-        .WithDescription("Retrieves all active users from the database with their role information");
+        .WithSummary("Get all users");
     }
 }

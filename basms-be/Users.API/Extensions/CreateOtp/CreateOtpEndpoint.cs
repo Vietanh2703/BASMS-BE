@@ -2,7 +2,7 @@
 
 public record CreateOtpRequest(
     string Email,
-    string Purpose // login, verify_email, reset_password
+    string Purpose 
 );
 
 public class CreateOtpEndpoint : ICarterModule

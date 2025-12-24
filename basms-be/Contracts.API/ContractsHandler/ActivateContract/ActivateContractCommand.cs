@@ -1,11 +1,6 @@
-using BuildingBlocks.CQRS;
-
 namespace Contracts.API.ContractsHandler.ActivateContract;
 
-/// <summary>
-/// Command để activate contract (draft → active)
-/// Workflow: Manager review contract → Approve → Activate → Publish event to Shifts.API
-/// </summary>
+
 public record ActivateContractCommand(
     Guid ContractId,
     Guid? ActivatedBy = null,
@@ -13,9 +8,6 @@ public record ActivateContractCommand(
     string? Notes = null
 ) : ICommand<ActivateContractResult>;
 
-/// <summary>
-/// Result sau khi activate contract
-/// </summary>
 public record ActivateContractResult
 {
     public bool Success { get; init; }
@@ -27,9 +19,6 @@ public record ActivateContractResult
     public ContractActivationInfo? ActivationInfo { get; init; }
 }
 
-/// <summary>
-/// Thông tin activation để log và tracking
-/// </summary>
 public record ContractActivationInfo
 {
     public int LocationsCount { get; init; }

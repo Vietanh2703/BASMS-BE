@@ -4,7 +4,6 @@ public class GetCustomerFromEmailEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        // Route: GET /api/contracts/customers/by-email?email={email}
         app.MapGet("/api/contracts/customers/by-email", async (string email, ISender sender) =>
         {
             var query = new GetCustomerFromEmailQuery(email);
@@ -59,39 +58,6 @@ public class GetCustomerFromEmailEndpoint : ICarterModule
         .ProducesProblem(StatusCodes.Status401Unauthorized)
         .ProducesProblem(StatusCodes.Status404NotFound)
         .ProducesProblem(StatusCodes.Status500InternalServerError)
-        .WithSummary("Get customer by email")
-        .WithDescription(@"
-            Retrieves customer information by email address.
-
-            **Use Case:**
-            This endpoint is used when you need to find a customer using their
-            email address. Useful for customer lookup, login flows, or email-based
-            customer identification.
-
-            **Features:**
-            - Case-sensitive email matching
-            - Returns only non-deleted customers
-            - Full customer details in response
-
-            **Response Structure:**
-            ```json
-            {
-              ""success"": true,
-              ""customer"": {
-                ""id"": ""660e8400-e29b-41d4-a716-446655440000"",
-                ""customerCode"": ""CUST-001"",
-                ""companyName"": ""ABC Company Ltd."",
-                ""contactPersonName"": ""Nguyen Van A"",
-                ""email"": ""contact@abc.com"",
-                ""phone"": ""0901234567"",
-                ""status"": ""active"",
-                ""address"": ""123 Main St, District 1"",
-                ""city"": ""Ho Chi Minh"",
-                ""industry"": ""retail"",
-                ""customerSince"": ""2024-01-15T00:00:00Z""
-              }
-            }
-            ```
-        ");
+        .WithSummary("Get customer by email");
     }
 }

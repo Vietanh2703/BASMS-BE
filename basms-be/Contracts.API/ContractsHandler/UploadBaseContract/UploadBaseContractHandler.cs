@@ -1,17 +1,12 @@
 namespace Contracts.API.ContractsHandler.UploadBaseContract;
 
-/// <summary>
-/// Command để upload file template mẫu lên S3
-/// </summary>
 public record UploadBaseContractCommand(
     IFormFile File,
     string? Category,
-    string? FolderPath = null  // Optional: "templates/service" hoặc "templates/working"
+    string? FolderPath = null 
 ) : ICommand<UploadBaseContractResult>;
 
-/// <summary>
-/// Result của việc upload template
-/// </summary>
+
 public record UploadBaseContractResult
 {
     public bool Success { get; init; }
@@ -35,9 +30,6 @@ internal class UploadBaseContractHandler(
     {
         try
         {
-            // ================================================================
-            // BƯỚC 1: VALIDATE FILE
-            // ================================================================
             if (request.File == null || request.File.Length == 0)
             {
                 return new UploadBaseContractResult
@@ -46,8 +38,7 @@ internal class UploadBaseContractHandler(
                     ErrorMessage = "No file uploaded"
                 };
             }
-
-            // Validate file extension
+            
             var allowedExtensions = new[] { ".docx", ".pdf" };
             var fileExtension = Path.GetExtension(request.File.FileName).ToLowerInvariant();
 
@@ -68,18 +59,13 @@ internal class UploadBaseContractHandler(
                 fileName,
                 fileSize);
 
-            // ================================================================
-            // BƯỚC 2: XÁC ĐỊNH FOLDER PATH
-            // ================================================================
             var folderPath = request.FolderPath ?? "templates";
-
-            // Nếu file name chứa "LAO-DONG" hoặc "WORKING" -> working contract
+            
             if (fileName.Contains("LAO_DONG", StringComparison.OrdinalIgnoreCase) ||
                 fileName.Contains("WORKING", StringComparison.OrdinalIgnoreCase))
             {
                 folderPath = "templates/working";
             }
-            // Nếu file name chứa "DICH-VU" hoặc "SERVICE" -> service contract
             else if (fileName.Contains("DICH-VU", StringComparison.OrdinalIgnoreCase) ||
                      fileName.Contains("SERVICE", StringComparison.OrdinalIgnoreCase))
             {
@@ -88,9 +74,7 @@ internal class UploadBaseContractHandler(
 
             logger.LogInformation("Target folder: {FolderPath}", folderPath);
 
-            // ================================================================
-            // BƯỚC 3: UPLOAD FILE LÊN S3 (GIỮ NGUYÊN TÊN FILE)
-            // ================================================================
+
             var s3Key = $"{folderPath}/{fileName}";
 
             using var fileStream = request.File.OpenReadStream();
@@ -111,10 +95,7 @@ internal class UploadBaseContractHandler(
             }
 
             logger.LogInformation("Uploaded template to S3: {S3Url}", s3Url);
-
-            // ================================================================
-            // BƯỚC 4: TẠO RECORD TRONG CONTRACT_DOCUMENTS
-            // ================================================================
+            
             var documentId = Guid.NewGuid();
             using var connection = await connectionFactory.CreateConnectionAsync();
 
@@ -123,11 +104,11 @@ internal class UploadBaseContractHandler(
                 Id = documentId,
                 Category = string.IsNullOrWhiteSpace(request.Category) ? null : request.Category,
                 DocumentName = fileName,
-                FileUrl = s3Key,  // LƯU S3 KEY THAY VÌ FULL URL để tránh encoding issues
+                FileUrl = s3Key, 
                 FileSize = fileSize,
-                DocumentType = "template", // Loại: template mẫu
-                Version = "base", // Version: base template
-                UploadedBy = Guid.Empty, // No user context for system upload
+                DocumentType = "template", 
+                Version = "base",
+                UploadedBy = Guid.Empty, 
                 IsDeleted = false,
                 CreatedAt = DateTime.UtcNow
             };

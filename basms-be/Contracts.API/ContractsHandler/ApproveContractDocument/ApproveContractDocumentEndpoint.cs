@@ -1,13 +1,5 @@
-using Carter;
-using MediatR;
-using Microsoft.AspNetCore.Mvc;
-
 namespace Contracts.API.ContractsHandler.ApproveContractDocument;
 
-/// <summary>
-/// Endpoint để approve contract document
-/// Director/Manager gọi endpoint này sau khi xem xét và chấp thuận tài liệu hợp đồng
-/// </summary>
 public class ApproveContractDocumentEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
@@ -19,9 +11,6 @@ public class ApproveContractDocumentEndpoint : ICarterModule
             ILogger<ApproveContractDocumentEndpoint> logger,
             CancellationToken cancellationToken) =>
         {
-            logger.LogInformation(
-                "POST /api/contracts/documents/{DocumentId}/approve - Approving contract document",
-                documentId);
 
             var command = new ApproveContractDocumentCommand(
                 DocumentId: documentId,
@@ -46,7 +35,7 @@ public class ApproveContractDocumentEndpoint : ICarterModule
             }
 
             logger.LogInformation(
-                @"✓ Contract document {DocumentName} approved successfully!
+                @"Contract document {DocumentName} approved successfully!
                   - Document Type: {DocumentType}
                   - Version: {Version}
                   - Approved At: {ApprovedAt}",
@@ -72,23 +61,12 @@ public class ApproveContractDocumentEndpoint : ICarterModule
         .Produces(200)
         .Produces(400)
         .Produces(404)
-        .WithSummary("Approve a contract document")
-        .WithDescription("Updates document type to 'approved_document' and version to 'completed'");
+        .WithSummary("Approve a contract document");
     }
 }
 
-/// <summary>
-/// Request DTO cho approve contract document
-/// </summary>
 public record ApproveContractDocumentRequest
 {
-    /// <summary>
-    /// ID của user approve (Director/Manager)
-    /// </summary>
     public Guid? ApprovedBy { get; init; }
-
-    /// <summary>
-    /// Ghi chú khi approve
-    /// </summary>
     public string? Notes { get; init; }
 }

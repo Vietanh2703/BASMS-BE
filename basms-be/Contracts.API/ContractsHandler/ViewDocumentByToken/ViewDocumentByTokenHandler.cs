@@ -1,11 +1,6 @@
-using Contracts.API.Extensions;
-
 namespace Contracts.API.ContractsHandler.ViewDocumentByToken;
 
-/// <summary>
-/// Handler để lấy document bằng token bảo mật
-/// Validate token expiry và quyền truy cập
-/// </summary>
+
 internal class ViewDocumentByTokenHandler(
     IDbConnectionFactory connectionFactory,
     IS3Service s3Service,
@@ -20,7 +15,7 @@ internal class ViewDocumentByTokenHandler(
         {
             logger.LogInformation("Validating documentId {DocumentId} and token", request.DocumentId);
 
-            // VALIDATION 1: Token không được rỗng
+
             if (string.IsNullOrWhiteSpace(request.Token))
             {
                 logger.LogWarning("Token is null or empty");
@@ -34,7 +29,7 @@ internal class ViewDocumentByTokenHandler(
 
             using var connection = await connectionFactory.CreateConnectionAsync();
 
-            // BƯỚC 1: TÌM DOCUMENT BẰNG CẢ DOCUMENTID VÀ TOKEN
+
             var document = await connection.QueryFirstOrDefaultAsync<ContractDocument>(@"
                 SELECT * FROM contract_documents
                 WHERE Id = @DocumentId
@@ -42,7 +37,7 @@ internal class ViewDocumentByTokenHandler(
                 AND IsDeleted = 0
             ", new { DocumentId = request.DocumentId, Token = request.Token });
 
-            // VALIDATION 2: DocumentId và Token không khớp hoặc document đã bị xóa
+
             if (document == null)
             {
                 logger.LogWarning("Document not found or token mismatch. DocumentId: {DocumentId}, Token: {Token}",
@@ -58,7 +53,7 @@ internal class ViewDocumentByTokenHandler(
             logger.LogInformation("Found document: {DocumentId} - {DocumentName}",
                 document.Id, document.DocumentName);
 
-            // VALIDATION 3: Token đã hết hạn
+
             if (document.TokenExpiredDay < DateTime.UtcNow)
             {
                 logger.LogWarning("Token expired. Expiry: {ExpiryDate}, Current: {CurrentDate}",
@@ -73,8 +68,7 @@ internal class ViewDocumentByTokenHandler(
 
             logger.LogInformation("Token is valid. Expires: {ExpiryDate}",
                 document.TokenExpiredDay);
-
-            // BƯỚC 2: TẠO PRE-SIGNED URL TỪ S3
+            
             string presignedUrl;
             try
             {
@@ -91,11 +85,9 @@ internal class ViewDocumentByTokenHandler(
                     ErrorCode = "URL_GENERATION_FAILED"
                 };
             }
-
-            // BƯỚC 3: XÁC ĐỊNH CONTENT TYPE
+            
             var contentType = DetermineContentType(document.DocumentName);
-
-            // BƯỚC 4: LOG ACCESS (Audit Trail)
+            
             await LogDocumentAccess(connection, document.Id, request.Token);
 
             var urlExpiresAt = DateTime.UtcNow.AddMinutes(15);
@@ -123,9 +115,6 @@ internal class ViewDocumentByTokenHandler(
         }
     }
 
-    /// <summary>
-    /// Xác định Content-Type dựa trên extension
-    /// </summary>
     private string DetermineContentType(string fileName)
     {
         var extension = Path.GetExtension(fileName).ToLowerInvariant();
@@ -140,10 +129,6 @@ internal class ViewDocumentByTokenHandler(
         };
     }
 
-    /// <summary>
-    /// Log document access để audit
-    /// Có thể tạo table mới: document_access_log
-    /// </summary>
     private async Task LogDocumentAccess(IDbConnection connection, Guid documentId, string token)
     {
         try
@@ -153,15 +138,11 @@ internal class ViewDocumentByTokenHandler(
         }
         catch (Exception ex)
         {
-            // Không throw exception nếu log fail
             logger.LogWarning(ex, "Failed to log document access");
         }
     }
 
-    /// <summary>
-    /// Mask token để bảo mật trong log
-    /// Ví dụ: abc123-def456-ghi789 → abc***ghi789
-    /// </summary>
+
     private string MaskToken(string token)
     {
         if (string.IsNullOrEmpty(token) || token.Length < 10)

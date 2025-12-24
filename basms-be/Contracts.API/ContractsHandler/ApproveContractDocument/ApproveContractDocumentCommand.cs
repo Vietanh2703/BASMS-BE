@@ -1,20 +1,11 @@
-using BuildingBlocks.CQRS;
-
 namespace Contracts.API.ContractsHandler.ApproveContractDocument;
 
-/// <summary>
-/// Command để approve contract document
-/// Workflow: 2 bên ký xong → Director review → Approve → Document type = approved_document, version = completed
-/// </summary>
 public record ApproveContractDocumentCommand(
     Guid DocumentId,
     Guid? ApprovedBy = null,
     string? Notes = null
 ) : ICommand<ApproveContractDocumentResult>;
 
-/// <summary>
-/// Result sau khi approve contract document
-/// </summary>
 public record ApproveContractDocumentResult
 {
     public bool Success { get; init; }

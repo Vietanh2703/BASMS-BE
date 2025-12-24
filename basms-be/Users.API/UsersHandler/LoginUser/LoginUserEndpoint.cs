@@ -1,17 +1,14 @@
 ﻿namespace Users.API.UsersHandler.LoginUser;
 
-// Request DTO for email/password login
 public record LoginUserRequest(
     string Email,
     string Password
 );
 
-// Request DTO for Google login
 public record GoogleLoginRequest(
     string GoogleIdToken
 );
 
-// Response DTO to client
 public record LoginUserResponse(
     Guid UserId,
     string Email,
@@ -28,7 +25,6 @@ public class LoginUserEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        // Email/Password Login
         app.MapPost("/api/users/login", async (LoginUserRequest request, ISender sender) =>
         {
             var command = new LoginUserCommand(
@@ -50,8 +46,7 @@ public class LoginUserEndpoint : ICarterModule
         .ProducesProblem(StatusCodes.Status500InternalServerError)
         .WithSummary("Login with email and password")
         .WithDescription("Authenticates user with email/password and returns JWT tokens");
-
-        // Google Login
+        
         app.MapPost("/users/login/google", async (GoogleLoginRequest request, ISender sender) =>
         {
             var command = new LoginUserCommand(
@@ -71,7 +66,6 @@ public class LoginUserEndpoint : ICarterModule
         .ProducesProblem(StatusCodes.Status400BadRequest)
         .ProducesProblem(StatusCodes.Status401Unauthorized)
         .ProducesProblem(StatusCodes.Status500InternalServerError)
-        .WithSummary("Login with Google")
-        .WithDescription("Authenticates user with Google ID token and returns JWT tokens");
+        .WithSummary("Login with Google");
     }
 }

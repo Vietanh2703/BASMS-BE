@@ -8,15 +8,15 @@ public class AuditLogs
 
     public Guid? UserId { get; set; }
 
-    public string Action { get; set; } = string.Empty; // CREATE, UPDATE, DELETE, LOGIN, LOGOUT, etc.
+    public string Action { get; set; } = string.Empty;
 
-    public string? EntityType { get; set; } // User, Role, Token, etc.
+    public string? EntityType { get; set; }
 
     public Guid? EntityId { get; set; }
 
-    public string? OldValues { get; set; } // JSON
+    public string? OldValues { get; set; }
 
-    public string? NewValues { get; set; } // JSON
+    public string? NewValues { get; set; }
 
     public string? IpAddress { get; set; }
 
@@ -24,7 +24,7 @@ public class AuditLogs
 
     public string? DeviceId { get; set; }
 
-    public string Status { get; set; } = "success"; // success, failed
+    public string Status { get; set; } = "success";
 
     public string? ErrorMessage { get; set; }
 
@@ -33,8 +33,7 @@ public class AuditLogs
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }
-
-    // Navigation property - ignored by Dapper
+    
     [Write(false)]
     [Computed]
     public virtual Users? User { get; set; }

@@ -1,7 +1,3 @@
-using Carter;
-using MediatR;
-using Microsoft.AspNetCore.Mvc;
-
 namespace Users.API.UsersHandler.ConfirmPasswordChange;
 
 public record ConfirmPasswordChangeRequest(
@@ -33,8 +29,7 @@ public class ConfirmPasswordChangeEndpoint : ICarterModule
         .WithName("ConfirmPasswordChange")
         .Produces<ConfirmPasswordChangeResult>(StatusCodes.Status200OK)
         .ProducesProblem(StatusCodes.Status400BadRequest)
-        .WithSummary("Confirm password change with OTP")
-        .WithDescription("Verifies OTP and completes the password change process");
+        .WithSummary("Confirm password change with OTP");
     }
 }
 

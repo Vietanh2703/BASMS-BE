@@ -1,12 +1,5 @@
-using BuildingBlocks.Messaging.Events;
-using Dapper;
-
 namespace Contracts.API.Consumers;
 
-/// <summary>
-/// Consumer trả về thông tin contract
-/// Used by: Shifts.API background job để lấy contract info
-/// </summary>
 public class GetContractConsumer : IConsumer<GetContractRequest>
 {
     private readonly IDbConnectionFactory _dbFactory;
@@ -55,8 +48,6 @@ public class GetContractConsumer : IConsumer<GetContractRequest>
                 _logger.LogWarning(
                     "Contract {ContractId} not found",
                     request.ContractId);
-
-                // Return error response
                 await context.RespondAsync(new GetContractResponse
                 {
                     Success = false,
@@ -98,7 +89,7 @@ public class GetContractConsumer : IConsumer<GetContractRequest>
                 "Failed to get contract info for ContractId: {ContractId}",
                 request.ContractId);
 
-            throw; // Re-throw to trigger MassTransit retry
+            throw;
         }
     }
 }

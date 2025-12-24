@@ -1,17 +1,7 @@
 namespace Contracts.API.ContractsHandler.GetContractIdByCustomer;
 
-// ================================================================
-// QUERY & RESULT
-// ================================================================
-
-/// <summary>
-/// Query để lấy danh sách contract IDs theo customer ID
-/// </summary>
 public record GetContractIdByCustomerQuery(Guid CustomerId) : IQuery<GetContractIdByCustomerResult>;
 
-/// <summary>
-/// DTO cho Contract ID info
-/// </summary>
 public record ContractIdDto
 {
     public Guid Id { get; init; }
@@ -22,9 +12,6 @@ public record ContractIdDto
     public DateTime EndDate { get; init; }
 }
 
-/// <summary>
-/// Kết quả query
-/// </summary>
 public record GetContractIdByCustomerResult
 {
     public bool Success { get; init; }
@@ -34,13 +21,6 @@ public record GetContractIdByCustomerResult
     public List<ContractIdDto> Contracts { get; init; } = new();
 }
 
-// ================================================================
-// HANDLER
-// ================================================================
-
-/// <summary>
-/// Handler để lấy danh sách contract IDs theo customer ID
-/// </summary>
 internal class GetContractIdByCustomerHandler(
     IDbConnectionFactory connectionFactory,
     ILogger<GetContractIdByCustomerHandler> logger)
@@ -55,10 +35,6 @@ internal class GetContractIdByCustomerHandler(
             logger.LogInformation("Getting contract IDs for customer: {CustomerId}", request.CustomerId);
 
             using var connection = await connectionFactory.CreateConnectionAsync();
-
-            // ================================================================
-            // 1. CHECK IF CUSTOMER EXISTS
-            // ================================================================
             var customerQuery = @"
                 SELECT CustomerCode
                 FROM customers
@@ -67,7 +43,7 @@ internal class GetContractIdByCustomerHandler(
 
             var customerCode = await connection.QuerySingleOrDefaultAsync<string>(
                 customerQuery,
-                new { CustomerId = request.CustomerId });
+                new { request.CustomerId });
 
             if (customerCode == null)
             {
@@ -78,10 +54,7 @@ internal class GetContractIdByCustomerHandler(
                     ErrorMessage = $"Customer with ID {request.CustomerId} not found"
                 };
             }
-
-            // ================================================================
-            // 2. GET CONTRACT IDs
-            // ================================================================
+            
             var contractsQuery = @"
                 SELECT
                     Id,

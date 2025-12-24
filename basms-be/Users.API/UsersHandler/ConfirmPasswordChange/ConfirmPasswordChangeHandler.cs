@@ -19,7 +19,6 @@ internal class ConfirmPasswordChangeHandler(
 {
     public async Task<ConfirmPasswordChangeResult> Handle(ConfirmPasswordChangeCommand command, CancellationToken cancellationToken)
     {
-        // Validate command
         var validationResult = await validator.ValidateAsync(command, cancellationToken);
         if (!validationResult.IsValid)
         {
@@ -31,7 +30,6 @@ internal class ConfirmPasswordChangeHandler(
         {
             logger.LogInformation("Confirming password change for email: {Email}", command.Email);
 
-            // Step 1: Verify OTP using VerifyOtpHandler
             var verifyOtpCommand = new VerifyOtpCommand(
                 Email: command.Email,
                 OtpCode: command.OtpCode,
@@ -45,14 +43,12 @@ internal class ConfirmPasswordChangeHandler(
                 logger.LogWarning("OTP verification failed for password change: {Email}", command.Email);
                 return new ConfirmPasswordChangeResult(false, verifyResult.Message);
             }
-
-            // Step 2: OTP verified successfully, now update password
+            
             using var connection = await connectionFactory.CreateConnectionAsync();
             using var transaction = connection.BeginTransaction();
 
             try
             {
-                // Find user
                 var users = await connection.GetAllAsync<Models.Users>(transaction);
                 var user = users.FirstOrDefault(u => u.Email == command.Email && !u.IsDeleted);
 
@@ -60,8 +56,7 @@ internal class ConfirmPasswordChangeHandler(
                 {
                     throw new InvalidOperationException("User not found");
                 }
-
-                // Get pending password reset token
+                
                 var resetTokens = await connection.GetAllAsync<PasswordResetTokens>(transaction);
                 var pendingReset = resetTokens
                     .Where(t =>
@@ -76,19 +71,16 @@ internal class ConfirmPasswordChangeHandler(
                 {
                     throw new InvalidOperationException("Password reset session has expired. Please request a new password change.");
                 }
-
-                // Update password
-                user.Password = pendingReset.Token; // Token already contains hashed new password
+                
+                user.Password = pendingReset.Token; 
                 user.UpdatedAt = DateTime.UtcNow;
                 await connection.UpdateAsync(user, transaction);
-
-                // Mark reset token as used
+                
                 pendingReset.IsUsed = true;
                 pendingReset.UsedAt = DateTime.UtcNow;
                 pendingReset.UpdatedAt = DateTime.UtcNow;
                 await connection.UpdateAsync(pendingReset, transaction);
-
-                // Log audit
+                
                 await LogAuditAsync(connection, transaction, user.Id, "PASSWORD_CHANGED", 
                     "Password changed successfully via OTP confirmation");
 
@@ -113,8 +105,8 @@ internal class ConfirmPasswordChangeHandler(
     }
 
     private async Task LogAuditAsync(
-        System.Data.IDbConnection connection,
-        System.Data.IDbTransaction transaction,
+        IDbConnection connection,
+        IDbTransaction transaction,
         Guid userId,
         string action,
         string message)
@@ -126,7 +118,7 @@ internal class ConfirmPasswordChangeHandler(
             Action = action,
             EntityType = "User",
             EntityId = userId,
-            NewValues = System.Text.Json.JsonSerializer.Serialize(new { Message = message }),
+            NewValues = JsonSerializer.Serialize(new { Message = message }),
             Status = "success",
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow

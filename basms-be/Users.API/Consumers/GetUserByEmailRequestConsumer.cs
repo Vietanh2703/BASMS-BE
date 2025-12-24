@@ -1,12 +1,7 @@
 using BuildingBlocks.Messaging.Events;
-using Dapper;
 
 namespace Users.API.Consumers;
 
-/// <summary>
-/// Consumer xử lý request lấy user theo email từ các service khác (Contracts.API)
-/// Receives GetUserByEmailRequest từ BuildingBlocks.Messaging.Events
-/// </summary>
 public class GetUserByEmailRequestConsumer(
     IDbConnectionFactory connectionFactory,
     ILogger<GetUserByEmailRequestConsumer> logger)
@@ -34,10 +29,7 @@ public class GetUserByEmailRequestConsumer(
                 });
                 return;
             }
-
-            // ================================================================
-            // TÌM USER THEO EMAIL
-            // ================================================================
+            
             using var connection = await connectionFactory.CreateConnectionAsync();
 
             var sql = @"
@@ -66,10 +58,7 @@ public class GetUserByEmailRequestConsumer(
             logger.LogInformation(
                 "User found: {UserId} for email: {Email}",
                 user.Id, user.Email);
-
-            // ================================================================
-            // TRẢ VỀ RESPONSE THÀNH CÔNG
-            // ================================================================
+            
             await context.RespondAsync(new GetUserByEmailResponse
             {
                 Success = true,

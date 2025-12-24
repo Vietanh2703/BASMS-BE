@@ -4,10 +4,6 @@ using Dapper;
 
 namespace Users.API.Consumers;
 
-/// <summary>
-/// Consumer xử lý request tạo user từ các service khác (Contracts.API)
-/// Receives CreateUserRequest từ BuildingBlocks.Messaging.Contracts
-/// </summary>
 public class CreateUserRequestConsumer(
     IDbConnectionFactory connectionFactory,
     ILogger<CreateUserRequestConsumer> logger,
@@ -24,9 +20,6 @@ public class CreateUserRequestConsumer(
 
         try
         {
-            // ================================================================
-            // BƯỚC 1: VALIDATE EMAIL CHƯA TỒN TẠI
-            // ================================================================
             using var connection = await connectionFactory.CreateConnectionAsync();
 
             var existingUser = await connection.QueryFirstOrDefaultAsync<Models.Users>(
@@ -47,9 +40,6 @@ public class CreateUserRequestConsumer(
                 return;
             }
 
-            // ================================================================
-            // BƯỚC 2: LẤY ROLE ID
-            // ================================================================
             var role = await connection.QueryFirstOrDefaultAsync<Roles>(
                 "SELECT * FROM roles WHERE Name = @RoleName AND IsDeleted = 0 LIMIT 1",
                 new { RoleName = request.RoleName });
@@ -67,10 +57,7 @@ public class CreateUserRequestConsumer(
                 });
                 return;
             }
-
-            // ================================================================
-            // BƯỚC 3: TẠO FIREBASE USER
-            // ================================================================
+            
             UserRecord? firebaseUser = null;
             try
             {
@@ -106,18 +93,14 @@ public class CreateUserRequestConsumer(
                 });
                 return;
             }
-
-            // ================================================================
-            // BƯỚC 4: LƯU VÀO DATABASE
-            // ================================================================
+            
             using var transaction = connection.BeginTransaction();
 
             try
             {
-                // Xác định IsActive dựa trên RoleId
-                // RoleId ddbd630a-ba6e-11f0-bcac-00155dca8f48 (customer role) cần admin activate
+
                 var customerRoleId = Guid.Parse("ddbd630a-ba6e-11f0-bcac-00155dca8f48");
-                var isActive = role.Id != customerRoleId; // Customer = false, các role khác = true
+                var isActive = role.Id != customerRoleId; 
 
                 logger.LogInformation(
                     "Creating user via request with RoleId: {RoleId} ({RoleName}), IsActive: {IsActive}",
@@ -152,8 +135,7 @@ public class CreateUserRequestConsumer(
 
                 await connection.InsertAsync(user, transaction);
                 logger.LogInformation("User inserted into database: {UserId}", user.Id);
-
-                // Log audit
+                
                 var auditLog = new AuditLogs
                 {
                     Id = Guid.NewGuid(),
@@ -180,11 +162,7 @@ public class CreateUserRequestConsumer(
                 logger.LogInformation(
                     "User created successfully via request: {Email} (Role: {RoleName})",
                     user.Email, request.RoleName);
-
-                // ================================================================
-                // BƯỚC 5: PUBLISH UserCreatedEvent
-                // ================================================================
-                // ✅ FIX: Publish event để Shifts.API tạo Guard/Manager record
+                
                 try
                 {
                     await eventPublisher.PublishUserCreatedAsync(user, role, context.CancellationToken);
@@ -198,12 +176,8 @@ public class CreateUserRequestConsumer(
                         "Failed to publish UserCreatedEvent for User {UserId}. " +
                         "User was created but downstream services may not be notified.",
                         user.Id);
-                    // Don't fail the request - user was created successfully
                 }
-
-                // ================================================================
-                // BƯỚC 6: TRẢ VỀ RESPONSE THÀNH CÔNG
-                // ================================================================
+                
                 await context.RespondAsync(new CreateUserResponse
                 {
                     Success = true,
@@ -218,8 +192,7 @@ public class CreateUserRequestConsumer(
             {
                 transaction.Rollback();
                 logger.LogError(ex, "Error saving user to database: {Email}", request.Email);
-
-                // Cleanup Firebase user if DB fails
+                
                 if (firebaseUser != null)
                 {
                     try

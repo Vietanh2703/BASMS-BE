@@ -1,12 +1,6 @@
-using BuildingBlocks.CQRS;
-using BuildingBlocks.Messaging.Events;
-
 namespace Shifts.API.ShiftsHandler.ImportShiftTemplates;
 
-/// <summary>
-/// Command để import ShiftTemplates từ ContractActivatedEvent
-/// Workflow: Contract activated → Import shift schedules as templates
-/// </summary>
+
 public record ImportShiftTemplatesCommand(
     Guid ContractId,
     string ContractNumber,
@@ -16,9 +10,6 @@ public record ImportShiftTemplatesCommand(
     Guid? ImportedBy = null
 ) : ICommand<ImportShiftTemplatesResult>;
 
-/// <summary>
-/// Result sau khi import
-/// </summary>
 public record ImportShiftTemplatesResult
 {
     public bool Success { get; init; }
@@ -30,9 +21,6 @@ public record ImportShiftTemplatesResult
     public List<TemplateImportInfo> ImportDetails { get; init; } = new();
 }
 
-/// <summary>
-/// Chi tiết từng template được import
-/// </summary>
 public record TemplateImportInfo
 {
     public Guid TemplateId { get; init; }
@@ -43,9 +31,6 @@ public record TemplateImportInfo
     public TimeValidationResult TimeValidation { get; init; } = new();
 }
 
-/// <summary>
-/// Kết quả validation thời gian
-/// </summary>
 public record TimeValidationResult
 {
     public bool IsValid { get; init; }

@@ -66,8 +66,7 @@ public class CreateUserHandler(
                 throw new InvalidOperationException($"Email {command.Email} already exists");
             }
             Guid roleId = command.RoleId ?? await GetDefaultRoleIdAsync(connection, transaction);
-
-            // ✅ FIX: Lấy role object NGAY sau khi có roleId, trước khi commit transaction
+            
             var role = await connection.GetAsync<Roles>(roleId, transaction);
             if (role == null)
             {
@@ -125,9 +124,7 @@ public class CreateUserHandler(
             
             transaction.Commit();
             logger.LogDebug("Transaction committed successfully for user: {UserId}", user.Id);
-
-            // ✅ FIX: Sử dụng role object đã lấy từ trước (line 71), không cần fetch lại
-            // Publish UserCreatedEvent để các service khác (Contracts.API, Shifts.API) nhận được
+            
             try
             {
                 await eventPublisher.PublishUserCreatedAsync(user, role, cancellationToken);

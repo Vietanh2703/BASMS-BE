@@ -2,18 +2,8 @@ using Contracts.API.ContractsHandler.GetCustomerById;
 
 namespace Contracts.API.ContractsHandler.GetCustomerFromEmail;
 
-// ================================================================
-// QUERY & RESULT
-// ================================================================
-
-/// <summary>
-/// Query để lấy customer detail by email
-/// </summary>
 public record GetCustomerFromEmailQuery(string Email) : IQuery<GetCustomerFromEmailResult>;
 
-/// <summary>
-/// Kết quả query
-/// </summary>
 public record GetCustomerFromEmailResult
 {
     public bool Success { get; init; }
@@ -21,13 +11,6 @@ public record GetCustomerFromEmailResult
     public CustomerDetailDto? Customer { get; init; }
 }
 
-// ================================================================
-// HANDLER
-// ================================================================
-
-/// <summary>
-/// Handler để lấy customer detail theo email
-/// </summary>
 internal class GetCustomerFromEmailHandler(
     IDbConnectionFactory connectionFactory,
     ILogger<GetCustomerFromEmailHandler> logger)
@@ -42,8 +25,7 @@ internal class GetCustomerFromEmailHandler(
             logger.LogInformation("Getting customer by Email: {Email}", request.Email);
 
             using var connection = await connectionFactory.CreateConnectionAsync();
-
-            // Query customer by email
+            
             var query = @"
                 SELECT
                     Id, CustomerCode, CompanyName, ContactPersonName, ContactPersonTitle,
@@ -56,7 +38,7 @@ internal class GetCustomerFromEmailHandler(
                   AND IsDeleted = 0
             ";
 
-            var customer = await connection.QuerySingleOrDefaultAsync<Models.Customer>(
+            var customer = await connection.QuerySingleOrDefaultAsync<Customer>(
                 query,
                 new { Email = request.Email });
 
@@ -69,8 +51,7 @@ internal class GetCustomerFromEmailHandler(
                     ErrorMessage = $"Customer with Email {request.Email} not found"
                 };
             }
-
-            // Map to DTO
+            
             var customerDto = new CustomerDetailDto
             {
                 Id = customer.Id,

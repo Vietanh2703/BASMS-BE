@@ -1,29 +1,16 @@
 namespace Contracts.API.ContractsHandler.UpdateShiftSchedules;
 
-// ================================================================
-// COMMAND & RESULT
-// ================================================================
-
-/// <summary>
-/// Command để update shift schedule
-/// </summary>
 public record UpdateShiftSchedulesCommand : ICommand<UpdateShiftSchedulesResult>
 {
     public Guid ShiftScheduleId { get; init; }
     public string ScheduleName { get; init; } = string.Empty;
     public string ScheduleType { get; init; } = "regular";
-
-    // Time
     public TimeSpan ShiftStartTime { get; init; }
     public TimeSpan ShiftEndTime { get; init; }
     public bool CrossesMidnight { get; init; }
     public decimal DurationHours { get; init; }
     public int BreakMinutes { get; init; }
-
-    // Staff
     public int GuardsPerShift { get; init; }
-
-    // Recurrence
     public string RecurrenceType { get; init; } = "weekly";
     public bool AppliesMonday { get; init; }
     public bool AppliesTuesday { get; init; }
@@ -33,33 +20,22 @@ public record UpdateShiftSchedulesCommand : ICommand<UpdateShiftSchedulesResult>
     public bool AppliesSaturday { get; init; }
     public bool AppliesSunday { get; init; }
     public string? MonthlyDates { get; init; }
-
-    // Special Days
     public bool AppliesOnPublicHolidays { get; init; } = true;
     public bool AppliesOnCustomerHolidays { get; init; } = true;
     public bool AppliesOnWeekends { get; init; } = true;
     public bool SkipWhenLocationClosed { get; init; }
-
-    // Requirements
     public bool RequiresArmedGuard { get; init; }
     public bool RequiresSupervisor { get; init; }
     public int MinimumExperienceMonths { get; init; }
     public string? RequiredCertifications { get; init; }
-
-    // Auto Generate
     public bool AutoGenerateEnabled { get; init; } = true;
     public int GenerateAdvanceDays { get; init; } = 30;
-
-    // Effective Period
     public DateTime EffectiveFrom { get; init; }
     public DateTime? EffectiveTo { get; init; }
     public bool IsActive { get; init; } = true;
     public string? Notes { get; init; }
 }
 
-/// <summary>
-/// Kết quả update shift schedule
-/// </summary>
 public record UpdateShiftSchedulesResult
 {
     public bool Success { get; init; }
@@ -68,13 +44,6 @@ public record UpdateShiftSchedulesResult
     public string? ScheduleName { get; init; }
 }
 
-// ================================================================
-// HANDLER
-// ================================================================
-
-/// <summary>
-/// Handler để update shift schedule
-/// </summary>
 internal class UpdateShiftSchedulesHandler(
     IDbConnectionFactory connectionFactory,
     ILogger<UpdateShiftSchedulesHandler> logger)
@@ -90,9 +59,6 @@ internal class UpdateShiftSchedulesHandler(
 
             using var connection = await connectionFactory.CreateConnectionAsync();
 
-            // ================================================================
-            // 1. CHECK IF SHIFT SCHEDULE EXISTS
-            // ================================================================
             var existingSchedule = await connection.QuerySingleOrDefaultAsync<dynamic>(
                 "SELECT Id, ScheduleName FROM contract_shift_schedules WHERE Id = @Id AND IsDeleted = 0",
                 new { Id = request.ShiftScheduleId });
@@ -107,9 +73,6 @@ internal class UpdateShiftSchedulesHandler(
                 };
             }
 
-            // ================================================================
-            // 2. UPDATE SHIFT SCHEDULE
-            // ================================================================
             var updateQuery = @"
                 UPDATE contract_shift_schedules SET
                     ScheduleName = @ScheduleName,

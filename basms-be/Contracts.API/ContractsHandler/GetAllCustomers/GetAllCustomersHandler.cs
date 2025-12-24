@@ -1,17 +1,7 @@
 namespace Contracts.API.ContractsHandler.GetAllCustomers;
 
-// ================================================================
-// QUERY & RESULT
-// ================================================================
-
-/// <summary>
-/// Query để lấy tất cả customers
-/// </summary>
 public record GetAllCustomersQuery : IQuery<GetAllCustomersResult>;
 
-/// <summary>
-/// DTO cho Customer
-/// </summary>
 public record CustomerDto
 {
     public Guid Id { get; init; }
@@ -35,9 +25,6 @@ public record CustomerDto
     public DateTime CreatedAt { get; init; }
 }
 
-/// <summary>
-/// Kết quả query
-/// </summary>
 public record GetAllCustomersResult
 {
     public bool Success { get; init; }
@@ -46,9 +33,6 @@ public record GetAllCustomersResult
     public int TotalCount { get; init; }
 }
 
-/// <summary>
-/// Handler để lấy tất cả customers từ database
-/// </summary>
 internal class GetAllCustomersHandler(
     IDbConnectionFactory connectionFactory,
     ILogger<GetAllCustomersHandler> logger)
@@ -64,9 +48,6 @@ internal class GetAllCustomersHandler(
 
             using var connection = await connectionFactory.CreateConnectionAsync();
 
-            // ================================================================
-            // GET ALL CUSTOMERS FROM DATABASE
-            // ================================================================
             var query = @"
                 SELECT
                     Id,
@@ -97,10 +78,7 @@ internal class GetAllCustomersHandler(
             var customersList = customers.ToList();
 
             logger.LogInformation("Found {Count} customers", customersList.Count);
-
-            // ================================================================
-            // MAP TO DTOs
-            // ================================================================
+            
             var customerDtos = customersList.Select(c => new CustomerDto
             {
                 Id = c.Id,

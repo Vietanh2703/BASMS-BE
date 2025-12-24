@@ -35,8 +35,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             using (var tempConnection = new MySqlConnection(connectionStringBuilder.ConnectionString))
             {
                 await tempConnection.OpenAsync();
-
-                // Tạo database nếu chưa tồn tại
+                
                 await tempConnection.ExecuteAsync($@"
                     CREATE DATABASE IF NOT EXISTS `{databaseName}`
                     CHARACTER SET utf8mb4
@@ -47,14 +46,12 @@ public class MySqlConnectionFactory : IDbConnectionFactory
             }
             
             using var connection = await CreateConnectionAsync();
-
-            // Check if users table exists
+            
             var tableExists = await connection.ExecuteScalarAsync<bool>(
                 "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'users'");
 
             if (!tableExists)
             {
-                // Create users table
                 await connection.ExecuteAsync(@"
                     CREATE TABLE `users` (
                         `Id` CHAR(36) PRIMARY KEY,
@@ -91,8 +88,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                         INDEX `idx_is_deleted` (`IsDeleted`)
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
                 ");
-
-                // Create roles table if not exists
+                
                 var rolesTableExists = await connection.ExecuteScalarAsync<bool>(
                     "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'roles'");
 
@@ -113,8 +109,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                             INDEX `idx_name` (`Name`)
                         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
                     ");
-
-                    // Insert default roles
+                    
                     await connection.ExecuteAsync(@"
                         INSERT INTO `roles` (`Id`, `Name`, `DisplayName`, `Description`, `IsDeleted`, `CreatedAt`)
                         VALUES
@@ -125,8 +120,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                             ('ddbd630a-ba6e-11f0-bcac-00155dca8f48', 'customer', 'Customer', 'Đối tác thuê dịch vụ bảo vệ (nhà hàng, trường học, ...)', FALSE, NOW());
                     ");
                 }
-
-                // Create audit_logs table if not exists
+                
                 var auditLogsTableExists = await connection.ExecuteScalarAsync<bool>(
                     "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'audit_logs'");
 
@@ -156,8 +150,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
                     ");
                 }
-
-                // Create otp_logs table if not exists
+                
                 var otpLogsTableExists = await connection.ExecuteScalarAsync<bool>(
                     "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'otp_logs'");
 
@@ -192,7 +185,6 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     ");
                 }
                 
-                // Create refresh_token table if not exists
                 var refreshTokensTableExists = await connection.ExecuteScalarAsync<bool>(
                     "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'refresh_tokens'");
 
@@ -224,8 +216,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     ");
                 }
                 
-
-                // Create user_sessions table if not exists
+                
                 var userSessionsTableExists = await connection.ExecuteScalarAsync<bool>(
                     "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'user_sessions'");
 
@@ -254,8 +245,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
                     ");
                 }
-
-                // Create user_tokens table if not exists
+                
                 var userTokensTableExists = await connection.ExecuteScalarAsync<bool>(
                     "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'user_tokens'");
 
@@ -287,8 +277,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
                     ");
                 }
-
-                // Create password_reset_tokens table if not exists
+                
                 var passwordResetTokensTableExists = await connection.ExecuteScalarAsync<bool>(
                     "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'password_reset_tokens'");
 

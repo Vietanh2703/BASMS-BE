@@ -1,17 +1,7 @@
 namespace Contracts.API.ContractsHandler.GetShiftScheduleByContractId;
 
-// ================================================================
-// QUERY & RESULT
-// ================================================================
-
-/// <summary>
-/// Query để lấy danh sách shift schedules theo contract ID
-/// </summary>
 public record GetShiftScheduleByContractIdQuery(Guid ContractId) : IQuery<GetShiftScheduleByContractIdResult>;
 
-/// <summary>
-/// DTO cho Shift Schedule info
-/// </summary>
 public record ShiftScheduleDto
 {
     public Guid Id { get; init; }
@@ -19,18 +9,12 @@ public record ShiftScheduleDto
     public Guid? LocationId { get; init; }
     public string ScheduleName { get; init; } = string.Empty;
     public string ScheduleType { get; init; } = string.Empty;
-
-    // Time
     public TimeSpan ShiftStartTime { get; init; }
     public TimeSpan ShiftEndTime { get; init; }
     public bool CrossesMidnight { get; init; }
     public decimal DurationHours { get; init; }
     public int BreakMinutes { get; init; }
-
-    // Staff
     public int GuardsPerShift { get; init; }
-
-    // Recurrence
     public string RecurrenceType { get; init; } = string.Empty;
     public bool AppliesMonday { get; init; }
     public bool AppliesTuesday { get; init; }
@@ -40,33 +24,22 @@ public record ShiftScheduleDto
     public bool AppliesSaturday { get; init; }
     public bool AppliesSunday { get; init; }
     public string? MonthlyDates { get; init; }
-
-    // Special Days
     public bool AppliesOnPublicHolidays { get; init; }
     public bool AppliesOnCustomerHolidays { get; init; }
     public bool AppliesOnWeekends { get; init; }
     public bool SkipWhenLocationClosed { get; init; }
-
-    // Requirements
     public bool RequiresArmedGuard { get; init; }
     public bool RequiresSupervisor { get; init; }
     public int MinimumExperienceMonths { get; init; }
     public string? RequiredCertifications { get; init; }
-
-    // Auto Generate
     public bool AutoGenerateEnabled { get; init; }
     public int GenerateAdvanceDays { get; init; }
-
-    // Effective Period
     public DateTime EffectiveFrom { get; init; }
     public DateTime? EffectiveTo { get; init; }
     public bool IsActive { get; init; }
     public string? Notes { get; init; }
 }
 
-/// <summary>
-/// Kết quả query
-/// </summary>
 public record GetShiftScheduleByContractIdResult
 {
     public bool Success { get; init; }
@@ -76,13 +49,6 @@ public record GetShiftScheduleByContractIdResult
     public List<ShiftScheduleDto> ShiftSchedules { get; init; } = new();
 }
 
-// ================================================================
-// HANDLER
-// ================================================================
-
-/// <summary>
-/// Handler để lấy danh sách shift schedules theo contract ID
-/// </summary>
 internal class GetShiftScheduleByContractIdHandler(
     IDbConnectionFactory connectionFactory,
     ILogger<GetShiftScheduleByContractIdHandler> logger)
@@ -97,10 +63,6 @@ internal class GetShiftScheduleByContractIdHandler(
             logger.LogInformation("Getting shift schedules for contract: {ContractId}", request.ContractId);
 
             using var connection = await connectionFactory.CreateConnectionAsync();
-
-            // ================================================================
-            // 1. CHECK IF CONTRACT EXISTS
-            // ================================================================
             var contractQuery = @"
                 SELECT ContractNumber
                 FROM contracts
@@ -109,7 +71,7 @@ internal class GetShiftScheduleByContractIdHandler(
 
             var contractNumber = await connection.QuerySingleOrDefaultAsync<string>(
                 contractQuery,
-                new { ContractId = request.ContractId });
+                new { request.ContractId });
 
             if (contractNumber == null)
             {
@@ -120,10 +82,7 @@ internal class GetShiftScheduleByContractIdHandler(
                     ErrorMessage = $"Contract with ID {request.ContractId} not found"
                 };
             }
-
-            // ================================================================
-            // 2. GET SHIFT SCHEDULES
-            // ================================================================
+            
             var shiftSchedulesQuery = @"
                 SELECT
                     Id, ContractId, LocationId, ScheduleName, ScheduleType,
@@ -142,7 +101,7 @@ internal class GetShiftScheduleByContractIdHandler(
 
             var shiftSchedules = await connection.QueryAsync<ShiftScheduleDto>(
                 shiftSchedulesQuery,
-                new { ContractId = request.ContractId });
+                new { request.ContractId });
 
             var shiftSchedulesList = shiftSchedules.ToList();
 

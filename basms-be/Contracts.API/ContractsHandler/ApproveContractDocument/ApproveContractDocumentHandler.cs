@@ -1,15 +1,5 @@
-using BuildingBlocks.CQRS;
-using Contracts.API.Data;
-using Contracts.API.Models;
-using Dapper;
-using Dapper.Contrib.Extensions;
-
 namespace Contracts.API.ContractsHandler.ApproveContractDocument;
 
-/// <summary>
-/// Handler để approve contract document
-/// Update DocumentType thành "approved_document" và Version thành "completed"
-/// </summary>
 public class ApproveContractDocumentHandler(
     IDbConnectionFactory connectionFactory,
     ILogger<ApproveContractDocumentHandler> logger)
@@ -28,9 +18,6 @@ public class ApproveContractDocumentHandler(
 
         try
         {
-            // ================================================================
-            // BƯỚC 1: LẤY CONTRACT DOCUMENT VÀ VALIDATE
-            // ================================================================
             var document = await connection.QueryFirstOrDefaultAsync<ContractDocument>(
                 "SELECT * FROM contract_documents WHERE Id = @Id AND IsDeleted = 0",
                 new { Id = request.DocumentId },
@@ -51,7 +38,6 @@ public class ApproveContractDocumentHandler(
                 document.DocumentType,
                 document.Version);
 
-            // Check if already approved
             if (document.DocumentType == "approved_document" && document.Version == "completed")
             {
                 return new ApproveContractDocumentResult
@@ -60,23 +46,20 @@ public class ApproveContractDocumentHandler(
                     ErrorMessage = $"Contract document '{document.DocumentName}' is already approved"
                 };
             }
-
-            // ================================================================
-            // BƯỚC 2: UPDATE DOCUMENT TYPE, VERSION, APPROVED INFO
-            // ================================================================
+            
             var previousType = document.DocumentType;
             var previousVersion = document.Version;
-            var vietnamTime = Contracts.API.Extensions.DateTimeExtensions.GetVietnamTime();
+            var vietnamTime = DateTimeExtensions.GetVietnamTime();
 
             document.DocumentType = "approved_document";
             document.Version = "completed";
-            document.ApprovedAt = vietnamTime;  // Thời gian approve theo giờ Việt Nam (UTC+7)
-            document.ApprovedBy = request.ApprovedBy;  // User ID của người approve
+            document.ApprovedAt = vietnamTime;  
+            document.ApprovedBy = request.ApprovedBy;  
 
             await connection.UpdateAsync(document, transaction);
 
             logger.LogInformation(
-                @"✓ Contract document updated successfully:
+                @"Contract document updated successfully:
                   - Document: {DocumentName}
                   - Type: {PreviousType} → {NewType}
                   - Version: {PreviousVersion} → {NewVersion}
@@ -89,14 +72,11 @@ public class ApproveContractDocumentHandler(
                 document.Version,
                 vietnamTime,
                 request.ApprovedBy);
-
-            // ================================================================
-            // BƯỚC 3: COMMIT TRANSACTION
-            // ================================================================
+            
             transaction.Commit();
 
             logger.LogInformation(
-                "✓✓✓ Contract document '{DocumentName}' approved successfully!",
+                "Contract document '{DocumentName}' approved successfully!",
                 document.DocumentName);
 
             return new ApproveContractDocumentResult
@@ -106,7 +86,7 @@ public class ApproveContractDocumentHandler(
                 DocumentName = document.DocumentName,
                 DocumentType = document.DocumentType,
                 Version = document.Version,
-                ApprovedAt = vietnamTime  // Trả về Vietnam time
+                ApprovedAt = vietnamTime 
             };
         }
         catch (Exception ex)

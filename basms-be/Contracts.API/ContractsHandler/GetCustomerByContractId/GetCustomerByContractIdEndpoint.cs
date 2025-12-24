@@ -35,24 +35,6 @@ public class GetCustomerByContractIdEndpoint : ICarterModule
         .ProducesProblem(StatusCodes.Status401Unauthorized)
         .ProducesProblem(StatusCodes.Status404NotFound)
         .ProducesProblem(StatusCodes.Status500InternalServerError)
-        .WithSummary("Get customer ID by contract ID")
-        .WithDescription(@"
-            Retrieves the CustomerId associated with a specific ContractId.
-
-            **Use Case:**
-            This endpoint is used when you have a ContractId and need to find
-            the associated Customer. Useful for navigating from contract to customer
-            or for validating contract ownership.
-
-            **Response Structure:**
-            ```json
-            {
-              ""success"": true,
-              ""customerId"": ""660e8400-e29b-41d4-a716-446655440000"",
-              ""contractId"": ""770e8400-e29b-41d4-a716-446655440000"",
-              ""contractNumber"": ""CTR-2025-001""
-            }
-            ```
-        ");
+        .WithSummary("Get customer ID by contract ID");
     }
 }

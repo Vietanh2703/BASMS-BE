@@ -10,7 +10,7 @@ public class PasswordResetTokens
 
     public Guid UserId { get; set; }
 
-    public string Token { get; set; } = string.Empty; // Store hashed new password temporarily
+    public string Token { get; set; } = string.Empty;
 
     public DateTime ExpiresAt { get; set; }
 
@@ -27,8 +27,7 @@ public class PasswordResetTokens
     public DateTime CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
-
-    // Navigation property - ignored by Dapper
+    
     [Write(false)]
     [Computed]
     public virtual Users? User { get; set; }

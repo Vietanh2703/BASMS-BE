@@ -1,14 +1,5 @@
-using BuildingBlocks.CQRS;
-using Contracts.API.Data;
-using Contracts.API.Models;
-using Dapper;
-using Dapper.Contrib.Extensions;
-
 namespace Contracts.API.ContractsHandler.UpdateContractStatus;
 
-/// <summary>
-/// Handler để update contract status
-/// </summary>
 public class UpdateContractStatusHandler(
     IDbConnectionFactory connectionFactory,
     ILogger<UpdateContractStatusHandler> logger)
@@ -28,9 +19,6 @@ public class UpdateContractStatusHandler(
 
         try
         {
-            // ================================================================
-            // BƯỚC 1: LẤY CONTRACT
-            // ================================================================
             var contract = await connection.QueryFirstOrDefaultAsync<Contract>(
                 "SELECT * FROM contracts WHERE Id = @Id AND IsDeleted = 0",
                 new { Id = request.ContractId },
@@ -54,9 +42,6 @@ public class UpdateContractStatusHandler(
                 oldStatus,
                 request.NewStatus);
 
-            // ================================================================
-            // BƯỚC 2: UPDATE CONTRACT STATUS
-            // ================================================================
             contract.Status = request.NewStatus;
             contract.UpdatedAt = DateTime.UtcNow;
             contract.UpdatedBy = request.UpdatedBy;
@@ -69,9 +54,6 @@ public class UpdateContractStatusHandler(
                 oldStatus,
                 contract.Status);
 
-            // ================================================================
-            // BƯỚC 3: COMMIT TRANSACTION
-            // ================================================================
             transaction.Commit();
 
             return new UpdateContractStatusResult

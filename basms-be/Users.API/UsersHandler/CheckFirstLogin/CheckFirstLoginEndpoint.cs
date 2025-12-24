@@ -17,7 +17,6 @@ public class CheckFirstLoginEndpoint : ICarterModule
             .Produces<CheckFirstLoginResult>(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound)
-            .WithSummary("Check if user is logging in for the first time")
-            .WithDescription("Returns true if user's LoginCount is 1, false otherwise");
+            .WithSummary("Check if user is logging in for the first time");
     }
 }

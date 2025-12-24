@@ -1,13 +1,5 @@
-using Carter;
-using MediatR;
-using Microsoft.AspNetCore.Mvc;
-
 namespace Contracts.API.ContractsHandler.ActivateContract;
 
-/// <summary>
-/// Endpoint để activate contract
-/// Frontend gọi endpoint này để kích hoạt contract sau khi review
-/// </summary>
 public class ActivateContractEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
@@ -93,23 +85,9 @@ public class ActivateContractEndpoint : ICarterModule
     }
 }
 
-/// <summary>
-/// Request DTO cho activate contract
-/// </summary>
 public record ActivateContractRequest
 {
-    /// <summary>
-    /// ID của user activate (manager)
-    /// </summary>
     public Guid? ActivatedBy { get; init; }
-
-    /// <summary>
-    /// Manager ID phụ trách contract này (để điền vào ShiftTemplate)
-    /// </summary>
     public Guid? ManagerId { get; init; }
-
-    /// <summary>
-    /// Ghi chú khi activate
-    /// </summary>
     public string? Notes { get; init; }
 }

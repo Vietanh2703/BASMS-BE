@@ -37,12 +37,10 @@ internal class GetUsersHandler(
             logger.LogInformation("Getting all users from database");
 
             using var connection = await connectionFactory.CreateConnectionAsync();
-
-            // Get all users (not deleted)
+            
             var users = await connection.GetAllAsync<Models.Users>();
             var roles = await connection.GetAllAsync<Roles>();
-
-            // Filter out deleted users and map to DTO
+            
             var userDtos = users
                 .Where(u => !u.IsDeleted)
                 .Select(u =>

@@ -4,7 +4,6 @@ public class UpdateCustomerLocationGpsEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        // Route: PUT /api/locations/{locationId}/gps
         app.MapPut("/api/locations/{locationId:guid}/gps",
             async (Guid locationId, UpdateGpsRequest request, ISender sender) =>
             {
@@ -44,14 +43,11 @@ public class UpdateCustomerLocationGpsEndpoint : ICarterModule
         .Produces(StatusCodes.Status200OK)
         .Produces(StatusCodes.Status400BadRequest)
         .ProducesProblem(StatusCodes.Status500InternalServerError)
-        .WithSummary("Update location GPS coordinates")
-        .WithDescription("Update only latitude and longitude of a location. Does not allow changing other location information.");
+        .WithSummary("Update location GPS coordinates");
     }
 }
 
-/// <summary>
-/// Request body cho update GPS
-/// </summary>
+
 public record UpdateGpsRequest(
     decimal Latitude,
     decimal Longitude

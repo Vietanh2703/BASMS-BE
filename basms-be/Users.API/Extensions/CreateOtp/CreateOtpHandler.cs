@@ -1,14 +1,8 @@
-﻿using BuildingBlocks.CQRS;
-using Dapper.Contrib.Extensions;
-using Users.API.Data;
-using Users.API.Extensions;
-using Users.API.Models;
-
-namespace Users.API.UsersHandler.CreateOtp;
+﻿namespace Users.API.UsersHandler.CreateOtp;
 
 public record CreateOtpCommand(
     string Email,
-    string Purpose // login, verify_email, reset_password, change_password
+    string Purpose 
 ) : ICommand<CreateOtpResult>;
 
 public record CreateOtpResult(
@@ -31,7 +25,6 @@ internal class CreateOtpHandler(
 
     public async Task<CreateOtpResult> Handle(CreateOtpCommand command, CancellationToken cancellationToken)
     {
-        // Validate command
         var validationResult = await validator.ValidateAsync(command, cancellationToken);
         if (!validationResult.IsValid)
         {
@@ -49,7 +42,6 @@ internal class CreateOtpHandler(
 
             try
             {
-                // Step 1: Find user by email
                 var users = await connection.GetAllAsync<Models.Users>(transaction);
                 var user = users.FirstOrDefault(u => u.Email == command.Email && !u.IsDeleted);
 
@@ -58,8 +50,7 @@ internal class CreateOtpHandler(
                     logger.LogWarning("User not found with email: {Email}", command.Email);
                     throw new InvalidOperationException($"User with email {command.Email} not found");
                 }
-
-                // Step 2: Invalidate all previous active OTPs for this user and purpose
+                
                 var existingOtps = await connection.GetAllAsync<OTPLogs>(transaction);
                 var activeOtps = existingOtps.Where(o => 
                     o.UserId == user.Id && 
@@ -76,8 +67,7 @@ internal class CreateOtpHandler(
                 }
 
                 logger.LogDebug("Invalidated {Count} previous OTPs", activeOtps.Count);
-
-                // Step 3: Generate random 6-digit OTP
+                
                 var otpCode = GenerateOtpCode();
                 var expiresAt = DateTime.UtcNow.AddMinutes(OTP_EXPIRY_MINUTES);
 
@@ -92,7 +82,7 @@ internal class CreateOtpHandler(
                     IsUsed = false,
                     IsExpired = false,
                     ExpiresAt = DateTime.UtcNow.AddMinutes(OTP_EXPIRY_MINUTES),
-                    DeliveryMethod = "email", // Set delivery method
+                    DeliveryMethod = "email", 
                     IsDeleted = false,
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
@@ -102,8 +92,7 @@ internal class CreateOtpHandler(
                 logger.LogDebug("OTP created in database: {OtpId}", newOtp.Id);
 
                 transaction.Commit();
-
-                // Step 5: Send OTP via email
+                
                 try
                 {
                     await emailHandler.SendOtpEmailAsync(user.FullName, user.Email, otpCode, command.Purpose, OTP_EXPIRY_MINUTES);

@@ -1,22 +1,14 @@
-using BuildingBlocks.Extensions;
-
 var builder = WebApplication.CreateBuilder(args);
 
-// Đăng ký Carter - Library để tổ chức API endpoints theo module
 builder.Services.AddCarter();
 
-// Đăng ký MediatR - Library để implement CQRS pattern
-// Tự động scan và đăng ký tất cả handlers trong assembly
 builder.Services.AddMediatR(config =>
 {
     config.RegisterServicesFromAssembly(typeof(Program).Assembly);
 });
 
-// Đăng ký Dapper connection factory cho MySQL
-// Singleton vì connection factory có thể tái sử dụng
 builder.Services.AddSingleton<IDbConnectionFactory>(sp =>
 {
-    // Ưu tiên đọc từ environment variable trực tiếp
     var connectionString = builder.Configuration["DB_CONNECTION_STRING_SHIFTS"]
                         ?? builder.Configuration["ConnectionStrings__Database"]
                         ?? builder.Configuration.GetConnectionString("Database");
@@ -30,7 +22,6 @@ builder.Services.AddSingleton<IDbConnectionFactory>(sp =>
     return new MySqlConnectionFactory(connectionString);
 });
 
-// Helper method để extract server từ connection string cho logging
 static string ExtractServerFromConnectionString(string connStr)
 {
     try
@@ -42,20 +33,62 @@ static string ExtractServerFromConnectionString(string connStr)
     catch { return "unknown"; }
 }
 
-// Đăng ký EmailSettings từ appsettings.json
-builder.Services.Configure<Shifts.API.ExtendModels.EmailSettings>(
+builder.Services.Configure<EmailSettings>(
     builder.Configuration.GetSection("EmailSettings"));
+builder.Services.AddScoped<EmailHandler>();
+builder.Services.AddScoped<ShiftValidator>();
 
-// Đăng ký EmailHandler - Gửi email notifications cho guards
-builder.Services.AddScoped<Shifts.API.Extensions.EmailHandler>();
 
-// Đăng ký ShiftValidator - Validator cho shift validation (overlap, contract period)
-builder.Services.AddScoped<Shifts.API.Validators.ShiftValidator>();
+var awsBucketName = builder.Configuration["AWS_BUCKET_NAME"]
+                 ?? builder.Configuration["AWS:BucketName"];
+var awsRegion = builder.Configuration["AWS_REGION"]
+             ?? builder.Configuration["AWS:Region"];
+var awsAccessKey = builder.Configuration["AWS_ACCESS_KEY"]
+                ?? builder.Configuration["AWS:AccessKey"];
+var awsSecretKey = builder.Configuration["AWS_SECRET_KEY"]
+                ?? builder.Configuration["AWS:SecretKey"];
+var awsFolderPrefix = builder.Configuration["AWS:FolderPrefix"] ?? "shifts/evidence";
 
-// Đăng ký MassTransit with RabbitMQ and Consumers
+
+if (string.IsNullOrWhiteSpace(awsRegion))
+{
+    throw new InvalidOperationException("AWS_REGION is not configured. Please set AWS_REGION environment variable.");
+}
+if (string.IsNullOrWhiteSpace(awsBucketName))
+{
+    throw new InvalidOperationException("AWS_BUCKET_NAME is not configured. Please set AWS_BUCKET_NAME environment variable.");
+}
+if (string.IsNullOrWhiteSpace(awsAccessKey) || string.IsNullOrWhiteSpace(awsSecretKey))
+{
+    throw new InvalidOperationException("AWS credentials are not configured. Please set AWS_ACCESS_KEY and AWS_SECRET_KEY environment variables.");
+}
+
+
+builder.Services.Configure<AwsS3Settings>(options =>
+{
+    options.BucketName = awsBucketName;
+    options.Region = awsRegion;
+    options.AccessKey = awsAccessKey;
+    options.SecretKey = awsSecretKey;
+    options.FolderPrefix = awsFolderPrefix;
+});
+
+var awsOptions = new AWSOptions
+{
+    Credentials = new BasicAWSCredentials(awsAccessKey, awsSecretKey),
+    Region = RegionEndpoint.GetBySystemName(awsRegion)
+};
+
+if (awsOptions.Region == null)
+{
+    throw new InvalidOperationException($"Invalid AWS Region: '{awsRegion}'. Valid examples: ap-southeast-2, us-east-1, eu-west-1");
+}
+
+builder.Services.AddDefaultAWSOptions(awsOptions);
+builder.Services.AddAWSService<IAmazonS3>();
+builder.Services.AddScoped<IS3Service, S3Service>();
 builder.Services.AddMassTransit(x =>
 {
-    // Register all consumers
     x.AddConsumer<Shifts.API.Consumers.UserCreatedConsumer>();
     x.AddConsumer<Shifts.API.Consumers.UserUpdatedConsumer>();
     x.AddConsumer<Shifts.API.Consumers.UserDeletedConsumer>();
@@ -63,17 +96,16 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<Shifts.API.Consumers.UpdateGuardInfoConsumer>();
     x.AddConsumer<Shifts.API.Consumers.UpdateManagerInfoConsumer>();
     x.AddConsumer<Shifts.API.Consumers.DeactivateGuardConsumer>();
-
-    // Request Clients for Auto-Generate Shifts feature (from BuildingBlocks.Messaging.Contracts)
+    x.AddConsumer<Shifts.API.Consumers.GetShiftLocationConsumer>(); 
+    Console.WriteLine("Registered GetShiftLocationConsumer for Request/Response");
+    
     x.AddRequestClient<CheckPublicHolidayRequest>();
     x.AddRequestClient<CheckLocationClosedRequest>();
     x.AddRequestClient<GetContractShiftSchedulesRequest>();
-
-    // Configure RabbitMQ
+    x.AddRequestClient<GetCustomerByContractRequest>();
+    
     x.UsingRabbitMq((context, cfg) =>
     {
-        // Ưu tiên đọc từ environment variables trực tiếp (RABBITMQ_HOST)
-        // Fallback về RabbitMQ:Host (nested config) nếu không có
         var rabbitMqHost = builder.Configuration["RABBITMQ_HOST"]
                         ?? builder.Configuration["RabbitMQ__Host"]
                         ?? builder.Configuration["RabbitMQ:Host"]
@@ -88,10 +120,7 @@ builder.Services.AddMassTransit(x =>
                             ?? builder.Configuration["RabbitMQ__Password"]
                             ?? builder.Configuration["RabbitMQ:Password"]
                             ?? "guest";
-
-        Console.WriteLine($"RabbitMQ Config - Host: {rabbitMqHost}, Username: {rabbitMqUsername}");
-
-        // Validate host không empty
+        
         if (string.IsNullOrWhiteSpace(rabbitMqHost))
         {
             throw new InvalidOperationException("RabbitMQ Host is not configured properly");
@@ -103,7 +132,6 @@ builder.Services.AddMassTransit(x =>
             h.Password(rabbitMqPassword);
         });
         
-        // Mỗi service cần queue riêng để cùng nhận UserCreatedEvent (publish/subscribe pattern)
         cfg.ReceiveEndpoint("shifts-api-user-created", e =>
         {
             e.ConfigureConsumer<Shifts.API.Consumers.UserCreatedConsumer>(context);
@@ -123,24 +151,20 @@ builder.Services.AddMassTransit(x =>
         {
             e.ConfigureConsumer<Shifts.API.Consumers.ContractActivatedConsumer>(context);
         });
-
-        // Configure other endpoints
+        
         cfg.ConfigureEndpoints(context);
-
-        // Configure retry policy
+        
         cfg.UseMessageRetry(r => r.Interval(3, TimeSpan.FromSeconds(5)));
     });
 });
 
 
-// Cấu hình CORS cho frontend
-// Đọc từ ALLOWED_ORIGINS env var (string phân cách bằng dấu phẩy) hoặc AllowedOrigins section
 var allowedOriginsString = builder.Configuration["ALLOWED_ORIGINS"]
                          ?? builder.Configuration["AllowedOrigins"]
                          ?? "";
 
 var allowedOrigins = string.IsNullOrWhiteSpace(allowedOriginsString)
-    ? new[] { "http://localhost:3000" } // Fallback cho development
+    ? new[] { "http://localhost:3000" }
     : allowedOriginsString.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
 Console.WriteLine($"CORS Allowed Origins: {string.Join(", ", allowedOrigins)}");
@@ -150,7 +174,6 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowFrontend",
         policy =>
         {
-            // Thay đổi địa chỉ cấu hình frontend để backend kết nối được tới frontend
             policy.WithOrigins(allowedOrigins)
                 .AllowAnyMethod()
                 .AllowAnyHeader()
@@ -179,29 +202,18 @@ builder.Services.AddAuthentication(options =>
     });
 
 builder.Services.AddAuthorization();
-
-// ================================================================
-// BACKGROUND JOBS
-// ================================================================
-// Auto-generate shifts job - chạy daily lúc 2:00 AM để check và tạo shifts
-// OPTIMIZED version: không query shifts_db.contracts, mà query Contracts.API qua RabbitMQ
 builder.Services.AddHostedService<Shifts.API.BackgroundJobs.AutoGenerateShiftsJob>();
 
 var app = builder.Build();
-
-// Initialize database tables
 using (var scope = app.Services.CreateScope())
 {
     var dbFactory = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>();
     if (dbFactory is MySqlConnectionFactory mysqlFactory)
     {
         await mysqlFactory.EnsureTablesCreatedAsync();
-        Console.WriteLine("✓ Shifts database tables initialized successfully");
+        Console.WriteLine("Shifts database tables initialized successfully");
     }
 }
-
-// Thêm Global Exception Handler Middleware
-// Middleware này phải đặt đầu tiên để catch tất cả exceptions
 app.UseGlobalExceptionHandler();
 
 app.MapCarter();

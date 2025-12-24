@@ -1,13 +1,5 @@
-using BuildingBlocks.Messaging.Events;
-using Dapper;
-
 namespace Contracts.API.Consumers;
 
-/// <summary>
-/// Consumer nhận BATCH request kiểm tra nhiều ngày lễ cùng lúc
-/// Tối ưu hóa: 1 query cho 30 ngày thay vì 30 queries riêng lẻ
-/// Performance improvement: 30x faster
-/// </summary>
 public class BatchCheckPublicHolidaysConsumer : IConsumer<BatchCheckPublicHolidaysRequest>
 {
     private readonly IDbConnectionFactory _dbFactory;
@@ -33,9 +25,6 @@ public class BatchCheckPublicHolidaysConsumer : IConsumer<BatchCheckPublicHolida
         {
             using var connection = await _dbFactory.CreateConnectionAsync();
 
-            // ================================================================
-            // BATCH QUERY: Lấy tất cả ngày lễ trong khoảng cùng 1 lần
-            // ================================================================
             var holidays = await connection.QueryAsync<dynamic>(@"
                 SELECT
                     HolidayDate,
@@ -52,9 +41,6 @@ public class BatchCheckPublicHolidaysConsumer : IConsumer<BatchCheckPublicHolida
                 ORDER BY HolidayDate",
                 new { Dates = request.Dates });
 
-            // ================================================================
-            // TẠO DICTIONARY ĐỂ LOOKUP NHANH
-            // ================================================================
             var holidayDict = holidays
                 .ToDictionary(
                     h => ((DateTime)h.HolidayDate).Date,
@@ -68,9 +54,6 @@ public class BatchCheckPublicHolidaysConsumer : IConsumer<BatchCheckPublicHolida
                         TetDayNumber = h.TetDayNumber
                     });
 
-            // ================================================================
-            // TẠO RESPONSE CHO TẤT CẢ NGÀY (kể cả không phải ngày lễ)
-            // ================================================================
             var response = new Dictionary<DateTime, HolidayInfo?>();
 
             foreach (var date in request.Dates)
@@ -84,9 +67,6 @@ public class BatchCheckPublicHolidaysConsumer : IConsumer<BatchCheckPublicHolida
                 request.Dates.Count,
                 holidayDict.Count);
 
-            // ================================================================
-            // RESPOND VỚI DICTIONARY
-            // ================================================================
             await context.RespondAsync(new BatchCheckPublicHolidaysResponse
             {
                 Holidays = response
@@ -95,7 +75,7 @@ public class BatchCheckPublicHolidaysConsumer : IConsumer<BatchCheckPublicHolida
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to process BatchCheckPublicHolidaysRequest");
-            throw; // Re-throw to trigger MassTransit retry
+            throw;
         }
     }
 }

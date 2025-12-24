@@ -1,0 +1,186 @@
+var builder = WebApplication.CreateBuilder(args);
+
+// Đăng ký Carter
+builder.Services.AddCarter();
+
+// Đăng ký MediatR
+builder.Services.AddMediatR(config =>
+{
+    config.RegisterServicesFromAssembly(typeof(Program).Assembly);
+});
+
+// Đăng ký SignalR
+builder.Services.AddSignalR(options =>
+{
+    options.EnableDetailedErrors = true; // Enable for development
+    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
+});
+
+// Đăng ký SignalR-related services
+builder.Services.AddSingleton<IUserConnectionManager, UserConnectionManager>();
+builder.Services.AddScoped<IPresenceService, PresenceService>();
+
+// Đăng ký Dapper connection factory
+builder.Services.AddSingleton<IDbConnectionFactory>(sp =>
+{
+    var connectionString = builder.Configuration["DB_CONNECTION_STRING_CHATS"]
+                        ?? builder.Configuration["ConnectionStrings__Database"]
+                        ?? builder.Configuration.GetConnectionString("Database");
+
+    if (string.IsNullOrWhiteSpace(connectionString))
+    {
+        throw new InvalidOperationException("Database connection string is not configured properly");
+    }
+
+    Console.WriteLine($"Database Connection String: Server={ExtractServerFromConnectionString(connectionString)}");
+    return new MySqlConnectionFactory(connectionString);
+});
+
+static string ExtractServerFromConnectionString(string connStr)
+{
+    try
+    {
+        var parts = connStr.Split(';');
+        var serverPart = parts.FirstOrDefault(p => p.Trim().StartsWith("Server=", StringComparison.OrdinalIgnoreCase));
+        return serverPart?.Split('=')[1] ?? "unknown";
+    }
+    catch { return "unknown"; }
+}
+
+// Đăng ký AWS S3 Client
+builder.Services.AddDefaultAWSOptions(builder.Configuration.GetAWSOptions());
+builder.Services.AddAWSService<IAmazonS3>();
+
+// Đăng ký MassTransit with RabbitMQ
+builder.Services.AddMassTransit(x =>
+{
+    x.UsingRabbitMq((context, cfg) =>
+    {
+        var rabbitMqHost = builder.Configuration["RABBITMQ_HOST"] ?? builder.Configuration["RabbitMQ__Host"] ?? "localhost";
+        var rabbitMqUsername = builder.Configuration["RABBITMQ_USERNAME"] ?? builder.Configuration["RabbitMQ__Username"] ?? "guest";
+        var rabbitMqPassword = builder.Configuration["RABBITMQ_PASSWORD"] ?? builder.Configuration["RabbitMQ__Password"] ?? "guest";
+
+        if (string.IsNullOrWhiteSpace(rabbitMqHost))
+        {
+            throw new InvalidOperationException("RabbitMQ Host is not configured properly");
+        }
+
+        cfg.Host(rabbitMqHost, h =>
+        {
+            h.Username(rabbitMqUsername);
+            h.Password(rabbitMqPassword);
+        });
+
+        cfg.ConfigureEndpoints(context);
+    });
+});
+
+builder.Services.AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    })
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(
+                System.Text.Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
+        };
+
+        // ✅ FIX: Enable JWT authentication for SignalR
+        // SignalR sends token via query string or message, not Authorization header
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+
+                // If the request is for our SignalR hub...
+                var path = context.HttpContext.Request.Path;
+                if (!string.IsNullOrEmpty(accessToken) &&
+                    (path.StartsWithSegments("/chathub") || path.StartsWithSegments("/api/chathub")))
+                {
+                    // Read the token out of the query string
+                    context.Token = accessToken;
+                }
+
+                return Task.CompletedTask;
+            }
+        };
+    });
+
+builder.Services.AddAuthorization();
+
+// Cấu hình CORS cho frontend (giống Shifts.API)
+// Đọc từ ALLOWED_ORIGINS env var (string phân cách bằng dấu phẩy) hoặc AllowedOrigins section
+var allowedOriginsString = builder.Configuration["ALLOWED_ORIGINS"]
+                         ?? builder.Configuration["AllowedOrigins"]
+                         ?? "";
+
+var allowedOrigins = string.IsNullOrWhiteSpace(allowedOriginsString)
+    ? new[] { "http://localhost:3000", "http://localhost:5173" } // Fallback cho development
+    : allowedOriginsString.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+Console.WriteLine($"CORS Allowed Origins: {string.Join(", ", allowedOrigins)}");
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend",
+        policy =>
+        {
+            policy.WithOrigins(allowedOrigins)
+                .AllowAnyMethod()
+                .AllowAnyHeader()
+                .AllowCredentials();
+        });
+});
+
+// Swagger/OpenAPI
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+var app = builder.Build();
+
+// Initialize database tables
+using (var scope = app.Services.CreateScope())
+{
+    var dbFactory = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>();
+    if (dbFactory is MySqlConnectionFactory mysqlFactory)
+    {
+        await mysqlFactory.EnsureTablesCreatedAsync();
+        Console.WriteLine("✓ Chats database tables initialized successfully");
+    }
+}
+
+// Configure pipeline
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
+// Thêm Global Exception Handler Middleware
+// Middleware này phải đặt đầu tiên để catch tất cả exceptions
+app.UseGlobalExceptionHandler();
+
+app.MapCarter();
+app.UseCors("AllowFrontend");  // ✅ Apply named policy explicitly
+app.UseAuthentication();
+app.UseAuthorization();
+
+app.MapHub<ChatHub>("/api/chathub")
+    .RequireCors("AllowFrontend");  // ✅ Explicitly apply CORS to SignalR Hub
+
+app.MapGet("/", () => "Chats.API is running.");
+
+Console.WriteLine("✓ SignalR ChatHub mapped at /api/chathub with CORS policy: AllowFrontend");
+
+app.Run();

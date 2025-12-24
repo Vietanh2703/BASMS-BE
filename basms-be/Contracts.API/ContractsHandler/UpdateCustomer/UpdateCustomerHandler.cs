@@ -1,12 +1,5 @@
 namespace Contracts.API.ContractsHandler.UpdateCustomer;
 
-// ================================================================
-// COMMAND & RESULT
-// ================================================================
-
-/// <summary>
-/// Command để update thông tin customer
-/// </summary>
 public record UpdateCustomerCommand : ICommand<UpdateCustomerResult>
 {
     public Guid CustomerId { get; init; }
@@ -20,9 +13,6 @@ public record UpdateCustomerCommand : ICommand<UpdateCustomerResult>
     public string Address { get; init; } = string.Empty;
 }
 
-/// <summary>
-/// Kết quả update customer
-/// </summary>
 public record UpdateCustomerResult
 {
     public bool Success { get; init; }
@@ -31,13 +21,6 @@ public record UpdateCustomerResult
     public string? CustomerCode { get; init; }
 }
 
-// ================================================================
-// HANDLER
-// ================================================================
-
-/// <summary>
-/// Handler để update thông tin customer
-/// </summary>
 internal class UpdateCustomerHandler(
     IDbConnectionFactory connectionFactory,
     ILogger<UpdateCustomerHandler> logger)
@@ -53,9 +36,6 @@ internal class UpdateCustomerHandler(
 
             using var connection = await connectionFactory.CreateConnectionAsync();
 
-            // ================================================================
-            // 1. CHECK IF CUSTOMER EXISTS
-            // ================================================================
             var checkQuery = @"
                 SELECT CustomerCode
                 FROM customers
@@ -64,7 +44,7 @@ internal class UpdateCustomerHandler(
 
             var customerCode = await connection.QuerySingleOrDefaultAsync<string>(
                 checkQuery,
-                new { CustomerId = request.CustomerId });
+                new { request.CustomerId });
 
             if (customerCode == null)
             {
@@ -76,9 +56,6 @@ internal class UpdateCustomerHandler(
                 };
             }
 
-            // ================================================================
-            // 2. CHECK IDENTITY NUMBER UNIQUENESS (if changed)
-            // ================================================================
             var identityCheckQuery = @"
                 SELECT COUNT(*)
                 FROM customers
@@ -89,7 +66,7 @@ internal class UpdateCustomerHandler(
 
             var identityExists = await connection.ExecuteScalarAsync<int>(
                 identityCheckQuery,
-                new { IdentityNumber = request.IdentityNumber, CustomerId = request.CustomerId });
+                new { request.IdentityNumber, request.CustomerId });
 
             if (identityExists > 0)
             {
@@ -100,10 +77,7 @@ internal class UpdateCustomerHandler(
                     ErrorMessage = $"Identity number {request.IdentityNumber} is already in use by another customer"
                 };
             }
-
-            // ================================================================
-            // 3. UPDATE CUSTOMER
-            // ================================================================
+            
             var updateQuery = @"
                 UPDATE customers SET
                     CompanyName = @CompanyName,
@@ -120,15 +94,15 @@ internal class UpdateCustomerHandler(
 
             var rowsAffected = await connection.ExecuteAsync(updateQuery, new
             {
-                CustomerId = request.CustomerId,
-                CompanyName = request.CompanyName,
-                ContactPersonName = request.ContactPersonName,
-                ContactPersonTitle = request.ContactPersonTitle,
-                IdentityNumber = request.IdentityNumber,
-                IdentityIssueDate = request.IdentityIssueDate,
-                IdentityIssuePlace = request.IdentityIssuePlace,
-                DateOfBirth = request.DateOfBirth,
-                Address = request.Address,
+                request.CustomerId,
+                request.CompanyName,
+                request.ContactPersonName,
+                request.ContactPersonTitle,
+                request.IdentityNumber,
+                request.IdentityIssueDate,
+                request.IdentityIssuePlace,
+                request.DateOfBirth,
+                request.Address,
                 UpdatedAt = DateTime.UtcNow
             });
 

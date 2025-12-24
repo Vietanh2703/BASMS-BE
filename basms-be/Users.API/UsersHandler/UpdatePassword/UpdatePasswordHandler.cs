@@ -22,7 +22,6 @@ internal class UpdatePasswordHandler(
 {
     public async Task<UpdatePasswordResult> Handle(UpdatePasswordCommand command, CancellationToken cancellationToken)
     {
-        // Validate input
         var validationResult = await validator.ValidateAsync(command, cancellationToken);
         if (!validationResult.IsValid)
         {
@@ -42,7 +41,6 @@ internal class UpdatePasswordHandler(
 
         try
         {
-            // Tìm user theo email
             var users = await connection.GetAllAsync<Models.Users>(transaction);
             var user = users.FirstOrDefault(u => u.Email == command.Email && !u.IsDeleted);
 
@@ -51,16 +49,13 @@ internal class UpdatePasswordHandler(
                 logger.LogWarning("User not found with email: {Email}", command.Email);
                 throw new NotFoundException("User not found", "USER_NOT_FOUND");
             }
-
-            // Kiểm tra password mới khác password cũ
             if (BCrypt.Net.BCrypt.Verify(command.NewPassword, user.Password))
             {
                 throw new BadRequestException(
                     "New password must be different from current password",
                     "PASSWORD_SAME_AS_OLD");
             }
-
-            // Cập nhật password
+            
             user.Password = BCrypt.Net.BCrypt.HashPassword(command.NewPassword);
             user.UpdatedAt = DateTime.UtcNow;
             user.LoginCount += 1;
@@ -71,8 +66,7 @@ internal class UpdatePasswordHandler(
                 "Password updated for user: {UserId}. LoginCount increased to {LoginCount}",
                 user.Id,
                 user.LoginCount);
-
-            // Vô hiệu hóa các password reset tokens cũ (nếu có)
+            
             var existingTokens = await connection.GetAllAsync<PasswordResetTokens>(transaction);
             var activeTokens = existingTokens.Where(t =>
                 t.UserId == user.Id &&

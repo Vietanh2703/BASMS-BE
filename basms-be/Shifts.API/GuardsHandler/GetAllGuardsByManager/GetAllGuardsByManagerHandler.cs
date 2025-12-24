@@ -2,10 +2,8 @@ using Shifts.API.GuardsHandler.GetGuardById;
 
 namespace Shifts.API.GuardsHandler.GetAllGuardsByManager;
 
-// Query chứa ManagerId để lấy tất cả guards
 public record GetAllGuardsByManagerQuery(Guid ManagerId) : IQuery<GetAllGuardsByManagerResult>;
 
-// Result chứa danh sách guards
 public record GetAllGuardsByManagerResult(
     Guid ManagerId,
     int TotalGuards,
@@ -24,11 +22,8 @@ internal class GetAllGuardsByManagerHandler(
         try
         {
             logger.LogInformation("Getting all guards for Manager: {ManagerId}", request.ManagerId);
-
-            // Bước 1: Tạo kết nối database
+            
             using var connection = await connectionFactory.CreateConnectionAsync();
-
-            // Bước 2: Lấy tất cả guards có DirectManagerId trùng với ManagerId
             var allGuards = await connection.GetAllAsync<Guards>();
             var guards = allGuards
                 .Where(g => g.DirectManagerId == request.ManagerId && !g.IsDeleted)
@@ -39,8 +34,6 @@ internal class GetAllGuardsByManagerHandler(
                 "Found {Count} guards for Manager {ManagerId}",
                 guards.Count,
                 request.ManagerId);
-
-            // Bước 3: Map entities sang DTOs
             var guardDtos = guards.Select(guard => new GuardDetailDto(
                 Id: guard.Id,
                 IdentityNumber: guard.IdentityNumber,
@@ -55,6 +48,7 @@ internal class GetAllGuardsByManagerHandler(
                 EmploymentStatus: guard.EmploymentStatus,
                 HireDate: guard.HireDate,
                 ContractType: guard.ContractType,
+                CertificationLevel: guard.CertificationLevel,
                 TerminationDate: guard.TerminationDate,
                 TerminationReason: guard.TerminationReason,
                 MaxWeeklyHours: guard.MaxWeeklyHours,
@@ -74,8 +68,6 @@ internal class GetAllGuardsByManagerHandler(
                 "Successfully retrieved {Count} guards for Manager {ManagerId}",
                 guardDtos.Count,
                 request.ManagerId);
-
-            // Bước 4: Trả về kết quả
             return new GetAllGuardsByManagerResult(
                 ManagerId: request.ManagerId,
                 TotalGuards: guardDtos.Count,

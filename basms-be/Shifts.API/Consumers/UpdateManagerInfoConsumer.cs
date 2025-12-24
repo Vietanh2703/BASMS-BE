@@ -1,9 +1,5 @@
 namespace Shifts.API.Consumers;
 
-/// <summary>
-/// Consumer for UpdateManagerInfoEvent
-/// Updates Manager's CertificationLevel and StandardWage when working contract is imported
-/// </summary>
 public class UpdateManagerInfoConsumer : IConsumer<UpdateManagerInfoEvent>
 {
     private readonly IDbConnectionFactory _dbFactory;
@@ -32,7 +28,6 @@ public class UpdateManagerInfoConsumer : IConsumer<UpdateManagerInfoEvent>
         {
             using var connection = await _dbFactory.CreateConnectionAsync();
 
-            // Check if manager exists
             var manager = await connection.GetAsync<Managers>(@event.ManagerId);
 
             if (manager == null)
@@ -42,8 +37,7 @@ public class UpdateManagerInfoConsumer : IConsumer<UpdateManagerInfoEvent>
                     @event.ManagerId);
                 return;
             }
-
-            // Update manager with new info
+            
             manager.CertificationLevel = @event.CertificationLevel;
             manager.StandardWage = @event.StandardWage;
             manager.TotalGuardsSupervised = @event.TotalGuardsSupervised ?? manager.TotalGuardsSupervised;
@@ -64,7 +58,7 @@ public class UpdateManagerInfoConsumer : IConsumer<UpdateManagerInfoEvent>
                 "Failed to process UpdateManagerInfoEvent for Manager {ManagerId}",
                 @event.ManagerId);
 
-            throw; // Re-throw to trigger MassTransit retry
+            throw;
         }
     }
 }

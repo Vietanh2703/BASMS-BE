@@ -1,17 +1,7 @@
 namespace Contracts.API.ContractsHandler.GetCustomerByContractId;
 
-// ================================================================
-// QUERY & RESULT
-// ================================================================
-
-/// <summary>
-/// Query để lấy CustomerId từ ContractId
-/// </summary>
 public record GetCustomerByContractIdQuery(Guid ContractId) : IQuery<GetCustomerByContractIdResult>;
 
-/// <summary>
-/// Kết quả query
-/// </summary>
 public record GetCustomerByContractIdResult
 {
     public bool Success { get; init; }
@@ -21,15 +11,7 @@ public record GetCustomerByContractIdResult
     public string? ContractNumber { get; init; }
 }
 
-// ================================================================
-// HANDLER
-// ================================================================
-
-/// <summary>
-/// Handler để lấy CustomerId từ ContractId
-/// </summary>
-internal class 
-    GetCustomerByContractIdHandler(
+internal class GetCustomerByContractIdHandler(
     IDbConnectionFactory connectionFactory,
     ILogger<GetCustomerByContractIdHandler> logger)
     : IQueryHandler<GetCustomerByContractIdQuery, GetCustomerByContractIdResult>
@@ -43,8 +25,7 @@ internal class
             logger.LogInformation("Getting CustomerId for ContractId: {ContractId}", request.ContractId);
 
             using var connection = await connectionFactory.CreateConnectionAsync();
-
-            // Query contract to get CustomerId
+            
             var query = @"
                 SELECT
                     Id,
@@ -54,9 +35,9 @@ internal class
                 WHERE Id = @ContractId AND IsDeleted = 0
             ";
 
-            var contract = await connection.QuerySingleOrDefaultAsync<Models.Contract>(
+            var contract = await connection.QuerySingleOrDefaultAsync<Contract>(
                 query,
-                new { ContractId = request.ContractId });
+                new { request.ContractId });
 
             if (contract == null)
             {

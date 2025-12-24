@@ -1,18 +1,11 @@
 namespace Contracts.API.ContractsHandler.UpdateCustomerLocationGps;
 
-/// <summary>
-/// Command để cập nhật GPS coordinates (Latitude, Longitude) của location
-/// Chỉ cho phép cập nhật GPS, không cho thay đổi thông tin khác
-/// </summary>
 public record UpdateCustomerLocationGpsCommand(
     Guid LocationId,
     decimal Latitude,
     decimal Longitude
 ) : ICommand<UpdateCustomerLocationGpsResult>;
 
-/// <summary>
-/// Result của việc cập nhật GPS
-/// </summary>
 public record UpdateCustomerLocationGpsResult
 {
     public bool Success { get; init; }
@@ -41,7 +34,6 @@ internal class UpdateCustomerLocationGpsHandler(
                 request.Latitude,
                 request.Longitude);
 
-            // Validate GPS coordinates
             if (request.Latitude < -90 || request.Latitude > 90)
             {
                 return new UpdateCustomerLocationGpsResult
@@ -65,7 +57,6 @@ internal class UpdateCustomerLocationGpsHandler(
 
             try
             {
-                // Lấy location hiện tại
                 var location = await connection.GetAsync<CustomerLocation>(request.LocationId, transaction);
 
                 if (location == null || location.IsDeleted)
@@ -77,12 +68,10 @@ internal class UpdateCustomerLocationGpsHandler(
                     };
                 }
 
-                // Lưu GPS cũ để log
+
                 var oldLatitude = location.Latitude;
                 var oldLongitude = location.Longitude;
-
-                // Chỉ cập nhật Latitude, Longitude và UpdatedAt
-                // KHÔNG cho phép thay đổi thông tin khác
+                
                 location.Latitude = request.Latitude;
                 location.Longitude = request.Longitude;
                 location.UpdatedAt = DateTime.UtcNow;
@@ -92,7 +81,7 @@ internal class UpdateCustomerLocationGpsHandler(
                 transaction.Commit();
 
                 logger.LogInformation(
-                    "✓ Updated GPS for location {LocationCode} ({LocationName}): ({OldLat}, {OldLng}) → ({NewLat}, {NewLng})",
+                    "Updated GPS for location {LocationCode} ({LocationName}): ({OldLat}, {OldLng}) → ({NewLat}, {NewLng})",
                     location.LocationCode,
                     location.LocationName,
                     oldLatitude?.ToString() ?? "null",

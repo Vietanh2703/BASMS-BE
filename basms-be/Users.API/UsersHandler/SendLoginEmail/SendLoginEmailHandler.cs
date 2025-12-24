@@ -1,9 +1,6 @@
 namespace Users.API.UsersHandler.SendLoginEmail;
 
-/// <summary>
-/// Handler để gửi email chứa thông tin đăng nhập
-/// Tạo password tạm thời mới, hash và update vào DB, sau đó gửi email
-/// </summary>
+
 public class SendLoginEmailHandler(
     IDbConnectionFactory connectionFactory,
     EmailHandler emailHandler,
@@ -56,20 +53,13 @@ public class SendLoginEmailHandler(
                 user.Id,
                 user.Email,
                 user.FullName);
-
-            // ================================================================
-            // BƯỚC 2: TẠO PASSWORD TẠM THỜI MỚI
-            // Password format: TEMP + 8 ký tự random (chữ hoa + số)
-            // ================================================================
+            
             var tempPassword = GenerateTemporaryPassword();
 
             logger.LogInformation(
                 "Generated temporary password for user {UserId}",
                 user.Id);
-
-            // ================================================================
-            // BƯỚC 3: HASH VÀ UPDATE PASSWORD VÀO DATABASE
-            // ================================================================
+            
             var hashedPassword = BCrypt.Net.BCrypt.HashPassword(tempPassword);
             user.Password = hashedPassword;
             user.UpdatedAt = DateTime.UtcNow;
@@ -79,10 +69,7 @@ public class SendLoginEmailHandler(
             logger.LogInformation(
                 "Password updated for user {UserId}",
                 user.Id);
-
-            // ================================================================
-            // BƯỚC 4: GỬI EMAIL
-            // ================================================================
+            
             await emailHandler.SendLoginCredentialsEmailAsync(
                 user.FullName,
                 user.Email,
@@ -116,10 +103,6 @@ public class SendLoginEmailHandler(
         }
     }
 
-    /// <summary>
-    /// Tạo password tạm thời: TEMP + 8 ký tự random
-    /// Format: TEMPxxxx1234 (chữ hoa + số)
-    /// </summary>
     private string GenerateTemporaryPassword()
     {
         const string uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";

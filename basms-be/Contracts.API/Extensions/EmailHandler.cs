@@ -1,8 +1,3 @@
-using MailKit.Net.Smtp;
-using MailKit.Security;
-using Microsoft.Extensions.Options;
-using MimeKit;
-
 namespace Contracts.API.Extensions;
 
 public class EmailHandler
@@ -22,7 +17,6 @@ public class EmailHandler
     {
         try
         {
-            // Validate email settings
             if (string.IsNullOrEmpty(_emailSettings.Sender))
             {
                 throw new InvalidOperationException("EMAIL_SENDER environment variable is not set");
@@ -52,7 +46,6 @@ public class EmailHandler
         }
         catch
         {
-            // Suppress email errors silently
             throw;
         }
     }
@@ -116,7 +109,7 @@ public class EmailHandler
 
                             <div style=""background-color: #f8f9fa; border-left: 4px solid #667eea; padding: 20px; margin: 20px 0; border-radius: 4px;"">
                                 <h2 style=""color: #667eea; margin: 0 0 15px 0; font-size: 18px;"">
-                                    📋 Thông tin đăng nhập
+                                    Thông tin đăng nhập
                                 </h2>
                                 
                                 <table style=""width: 100%; border-collapse: collapse;"">
@@ -165,10 +158,7 @@ public class EmailHandler
                                 </p>
                                 <div style=""margin: 20px 0;"">
                                     <p style=""margin: 10px 0;"">
-                                        <strong>📲 Android:</strong> Tìm kiếm ""BASMS"" trên Google Play Store
-                                    </p>
-                                    <p style=""margin: 10px 0;"">
-                                        <strong>📲 iOS:</strong> Tìm kiếm ""BASMS"" trên App Store
+                                        <strong>Android:</strong> Tìm kiếm ""BASMS"" trên Google Play Store
                                     </p>
                                 </div>
                                 <p style=""color: #666666; font-size: 13px; margin: 0; font-style: italic;"">
@@ -178,7 +168,7 @@ public class EmailHandler
 
                             <div style=""background-color: #e8f5e9; border-left: 4px solid #4CAF50; padding: 15px; margin: 20px 0; border-radius: 4px;"">
                                 <h3 style=""color: #4CAF50; margin: 0 0 10px 0; font-size: 16px;"">
-                                    🎯 Chức năng của ứng dụng
+                                        Chức năng của ứng dụng
                                 </h3>
                                 <ul style=""color: #333333; font-size: 14px; line-height: 1.8; margin: 0; padding-left: 20px;"">
                                     <li>Xem lịch trực và ca làm việc của bạn</li>
@@ -199,11 +189,11 @@ public class EmailHandler
                     <tr>
                         <td style=""background-color: #f8f9fa; padding: 20px 30px; border-radius: 0 0 8px 8px;"">
                             <p style=""color: #666666; font-size: 12px; line-height: 1.6; margin: 0 0 10px 0; text-align: center;"">
-                                Email này được gửi tự động từ hệ thống BASMS<br>
+                                Email này được gửi tự động từ hệ thống <br>
                                 Vui lòng không trả lời email này
                             </p>
                             <p style=""color: #999999; font-size: 11px; margin: 0; text-align: center;"">
-                                © 2025 BASMS - Building & Apartment Security Management System
+                                © 2025 - Biometric And Security Management System
                             </p>
                         </td>
                     </tr>
@@ -258,10 +248,10 @@ public class EmailHandler
                     <tr>
                         <td style=""background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 8px 8px 0 0;"">
                             <h1 style=""color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;"">
-                                🎉 Chào mừng đến với BASMS
+                                Chào mừng đến với BASMS
                             </h1>
                             <p style=""color: #ffffff; margin: 10px 0 0 0; font-size: 16px;"">
-                                Hệ thống quản lý bảo vệ thông minh
+                                Hệ thống quản lý bảo vệ và chấm công bảo vệ
                             </p>
                         </td>
                     </tr>
@@ -280,7 +270,7 @@ public class EmailHandler
 
                             <div style=""background-color: #f8f9fa; border-left: 4px solid #667eea; padding: 20px; margin: 20px 0; border-radius: 4px;"">
                                 <h2 style=""color: #667eea; margin: 0 0 15px 0; font-size: 18px;"">
-                                    📋 Thông tin đăng nhập
+                                       Thông tin đăng nhập
                                 </h2>
                                 
                                 <table style=""width: 100%; border-collapse: collapse;"">
@@ -315,7 +305,7 @@ public class EmailHandler
 
                             <div style=""background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 4px;"">
                                 <p style=""color: #856404; margin: 0; font-size: 14px; line-height: 1.6;"">
-                                    <strong>⚠️ Quan trọng:</strong> Đây là mật khẩu tạm thời. 
+                                    <strong>Quan trọng:</strong> Đây là mật khẩu tạm thời. 
                                     Vui lòng đổi mật khẩu ngay sau khi đăng nhập lần đầu để đảm bảo bảo mật tài khoản.
                                 </p>
                             </div>

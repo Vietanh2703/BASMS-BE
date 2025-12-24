@@ -1,13 +1,5 @@
-using Amazon.S3;
-using Amazon.S3.Model;
-using Amazon.S3.Transfer;
-using Microsoft.Extensions.Options;
-
 namespace Contracts.API.Extensions;
 
-/// <summary>
-/// Service để tương tác với AWS S3
-/// </summary>
 public interface IS3Service
 {
     Task<(bool Success, string? FileUrl, string? ErrorMessage)> UploadFileAsync(
@@ -16,9 +8,6 @@ public interface IS3Service
         string contentType,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Upload file với custom S3 key (không thêm prefix/timestamp tự động)
-    /// </summary>
     Task<(bool Success, string? FileUrl, string? ErrorMessage)> UploadFileWithCustomKeyAsync(
         Stream fileStream,
         string s3Key,
@@ -31,9 +20,7 @@ public interface IS3Service
         string fileUrl,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Tạo pre-signed URL cho file (URL tạm thời để download trực tiếp từ S3)
-    /// </summary>
+   
     string GetPresignedUrl(string fileUrlOrKey, int expirationMinutes = 30, string? downloadFileName = null);
 }
 
@@ -61,7 +48,6 @@ public class S3Service : IS3Service
     {
         try
         {
-            // Tạo key cho file trong S3 (path/to/file.pdf)
             var fileKey = $"{_settings.FolderPrefix}/{DateTime.UtcNow:yyyy/MM/dd}/{Guid.NewGuid()}_{fileName}";
 
             _logger.LogInformation("Uploading file to S3: {FileKey}", fileKey);
@@ -72,16 +58,15 @@ public class S3Service : IS3Service
                 Key = fileKey,
                 BucketName = _settings.BucketName,
                 ContentType = contentType,
-                CannedACL = S3CannedACL.Private // File private, chỉ access qua presigned URL
+                CannedACL = S3CannedACL.Private 
             };
 
             var transferUtility = new TransferUtility(_s3Client);
             await transferUtility.UploadAsync(uploadRequest, cancellationToken);
-
-            // Tạo file URL
+            
             var fileUrl = $"https://{_settings.BucketName}.s3.{_settings.Region}.amazonaws.com/{fileKey}";
 
-            _logger.LogInformation("✓ File uploaded successfully to S3: {FileUrl}", fileUrl);
+            _logger.LogInformation("File uploaded successfully to S3: {FileUrl}", fileUrl);
 
             return (true, fileUrl, null);
         }
@@ -97,10 +82,7 @@ public class S3Service : IS3Service
         }
     }
 
-    /// <summary>
-    /// Upload file với custom S3 key - KHÔNG thêm prefix/timestamp
-    /// Sử dụng khi muốn kiểm soát hoàn toàn đường dẫn file trên S3
-    /// </summary>
+
     public async Task<(bool Success, string? FileUrl, string? ErrorMessage)> UploadFileWithCustomKeyAsync(
         Stream fileStream,
         string s3Key,
@@ -122,11 +104,10 @@ public class S3Service : IS3Service
 
             var transferUtility = new TransferUtility(_s3Client);
             await transferUtility.UploadAsync(uploadRequest, cancellationToken);
-
-            // Tạo file URL từ custom key
+            
             var fileUrl = $"https://{_settings.BucketName}.s3.{_settings.Region}.amazonaws.com/{s3Key}";
 
-            _logger.LogInformation("✓ File uploaded successfully to S3: {FileUrl}", fileUrl);
+            _logger.LogInformation("File uploaded successfully to S3: {FileUrl}", fileUrl);
 
             return (true, fileUrl, null);
         }
@@ -146,23 +127,18 @@ public class S3Service : IS3Service
     {
         try
         {
-            // Extract key: support both full URL and S3 key
             string fileKey;
             if (fileUrlOrKey.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
                 fileUrlOrKey.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             {
-                // Full URL: extract key from URL
                 try
                 {
-                    // Decode URL-encoded characters first
                     var decodedUrl = Uri.UnescapeDataString(fileUrlOrKey);
                     var uri = new Uri(decodedUrl);
                     fileKey = uri.AbsolutePath.TrimStart('/');
                 }
                 catch (UriFormatException)
                 {
-                    // If URL parsing fails, try to extract key manually
-                    // Format: https://bucket.s3.region.amazonaws.com/key/path/file.ext
                     var parts = fileUrlOrKey.Split(new[] { ".amazonaws.com/" }, StringSplitOptions.None);
                     if (parts.Length >= 2)
                     {
@@ -177,7 +153,6 @@ public class S3Service : IS3Service
             }
             else
             {
-                // Already an S3 key - use directly
                 fileKey = fileUrlOrKey;
             }
 
@@ -191,7 +166,7 @@ public class S3Service : IS3Service
 
             await _s3Client.DeleteObjectAsync(deleteRequest, cancellationToken);
 
-            _logger.LogInformation("✓ File deleted from S3: {FileKey}", fileKey);
+            _logger.LogInformation("File deleted from S3: {FileKey}", fileKey);
             return true;
         }
         catch (Exception ex)
@@ -207,17 +182,14 @@ public class S3Service : IS3Service
     {
         try
         {
-            // Extract key: support both full URL and S3 key
             string fileKey;
             if (fileUrlOrKey.StartsWith("http://") || fileUrlOrKey.StartsWith("https://"))
             {
-                // Full URL: extract key from URL
                 var uri = new Uri(fileUrlOrKey);
                 fileKey = uri.AbsolutePath.TrimStart('/');
             }
             else
             {
-                // Already an S3 key
                 fileKey = fileUrlOrKey;
             }
 
@@ -230,13 +202,11 @@ public class S3Service : IS3Service
             };
 
             var response = await _s3Client.GetObjectAsync(getRequest, cancellationToken);
-
-            // Copy to MemoryStream để có thể sử dụng sau khi dispose response
             var memoryStream = new MemoryStream();
             await response.ResponseStream.CopyToAsync(memoryStream, cancellationToken);
             memoryStream.Position = 0;
 
-            _logger.LogInformation("✓ File downloaded successfully from S3: {FileKey}", fileKey);
+            _logger.LogInformation("File downloaded successfully from S3: {FileKey}", fileKey);
 
             return (true, memoryStream, null);
         }
@@ -251,33 +221,25 @@ public class S3Service : IS3Service
             return (false, null, $"Download failed: {ex.Message}");
         }
     }
-
-    /// <summary>
-    /// Tạo pre-signed URL cho file - URL tạm thời cho phép download trực tiếp từ S3
-    /// </summary>
+    
     public string GetPresignedUrl(string fileUrlOrKey, int expirationMinutes = 15, string? downloadFileName = null)
     {
         try
         {
-            // Extract key: support both full URL and S3 key
             string fileKey;
             if (fileUrlOrKey.StartsWith("http://") || fileUrlOrKey.StartsWith("https://"))
             {
-                // Full URL: extract key from URL
                 var uri = new Uri(fileUrlOrKey);
                 fileKey = uri.AbsolutePath.TrimStart('/');
             }
             else
             {
-                // Already an S3 key
                 fileKey = fileUrlOrKey;
             }
 
             _logger.LogInformation("Generating pre-signed URL for {FileKey}, expires in {Minutes} minutes",
                 fileKey, expirationMinutes);
-
-            // Tạo Content-Disposition header với tên file tùy chỉnh nếu có
-            // Encode filename theo chuẩn RFC 5987 để hỗ trợ Unicode và ký tự đặc biệt
+            
             string contentDisposition;
             if (string.IsNullOrEmpty(downloadFileName))
             {
@@ -285,11 +247,7 @@ public class S3Service : IS3Service
             }
             else
             {
-                // Sanitize filename: remove/replace characters that might cause issues
                 var sanitizedFileName = SanitizeFileName(downloadFileName);
-
-                // Use RFC 5987 encoding for better Unicode support
-                // Format: attachment; filename="simple.docx"; filename*=UTF-8''encoded%20name.docx
                 var encodedFileName = Uri.EscapeDataString(sanitizedFileName);
                 contentDisposition = $"attachment; filename=\"{sanitizedFileName}\"; filename*=UTF-8''{encodedFileName}";
             }
@@ -319,33 +277,25 @@ public class S3Service : IS3Service
             throw;
         }
     }
-
-    /// <summary>
-    /// Sanitize filename to remove characters that might cause issues with HTTP headers or Word
-    /// </summary>
+    
     private static string SanitizeFileName(string fileName)
     {
         if (string.IsNullOrEmpty(fileName))
             return fileName;
-
-        // Remove or replace problematic characters
-        // Keep: letters, numbers, dots, hyphens, underscores, spaces
-        // Remove: quotes, backslashes, and other special characters that can break HTTP headers
+        
         var sanitized = fileName
-            .Replace("\"", "") // Remove quotes
-            .Replace("\\", "") // Remove backslashes
-            .Replace("/", "_") // Replace forward slashes with underscores
-            .Replace(":", "_") // Replace colons
-            .Replace("*", "_") // Replace asterisks
-            .Replace("?", "_") // Replace question marks
-            .Replace("<", "_") // Replace less than
-            .Replace(">", "_") // Replace greater than
-            .Replace("|", "_"); // Replace pipes
-
-        // Trim whitespace
+            .Replace("\"", "") 
+            .Replace("\\", "") 
+            .Replace("/", "_") 
+            .Replace(":", "_") 
+            .Replace("*", "_") 
+            .Replace("?", "_") 
+            .Replace("<", "_") 
+            .Replace(">", "_") 
+            .Replace("|", "_"); 
+        
         sanitized = sanitized.Trim();
-
-        // If filename becomes empty after sanitization, use a default
+        
         if (string.IsNullOrEmpty(sanitized))
         {
             sanitized = "document.docx";

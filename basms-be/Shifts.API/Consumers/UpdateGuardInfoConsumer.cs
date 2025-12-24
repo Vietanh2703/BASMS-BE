@@ -1,9 +1,5 @@
 namespace Shifts.API.Consumers;
 
-/// <summary>
-/// Consumer for UpdateGuardInfoEvent
-/// Updates Guard's CertificationLevel and StandardWage when working contract is imported
-/// </summary>
 public class UpdateGuardInfoConsumer : IConsumer<UpdateGuardInfoEvent>
 {
     private readonly IDbConnectionFactory _dbFactory;
@@ -30,8 +26,7 @@ public class UpdateGuardInfoConsumer : IConsumer<UpdateGuardInfoEvent>
         try
         {
             using var connection = await _dbFactory.CreateConnectionAsync();
-
-            // Check if guard exists
+            
             var guard = await connection.GetAsync<Guards>(@event.GuardId);
 
             if (guard == null)
@@ -41,8 +36,7 @@ public class UpdateGuardInfoConsumer : IConsumer<UpdateGuardInfoEvent>
                     @event.GuardId);
                 return;
             }
-
-            // Update guard with new info
+            
             guard.CertificationLevel = @event.CertificationLevel;
             guard.StandardWage = @event.StandardWage;
             guard.UpdatedAt = DateTime.UtcNow;
@@ -61,7 +55,7 @@ public class UpdateGuardInfoConsumer : IConsumer<UpdateGuardInfoEvent>
                 "Failed to process UpdateGuardInfoEvent for Guard {GuardId}",
                 @event.GuardId);
 
-            throw; // Re-throw to trigger MassTransit retry
+            throw;
         }
     }
 }

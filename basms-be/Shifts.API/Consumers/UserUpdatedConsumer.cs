@@ -1,9 +1,5 @@
 namespace Shifts.API.Consumers;
 
-/// <summary>
-/// Consumer for UserUpdatedEvent
-/// Updates manager/guard cache when user information changes
-/// </summary>
 public class UserUpdatedConsumer : IConsumer<UserUpdatedEvent>
 {
     private readonly IDbConnectionFactory _dbFactory;
@@ -84,13 +80,10 @@ public class UserUpdatedConsumer : IConsumer<UserUpdatedEvent>
                 @event.UserId);
             return;
         }
-
-        // Update fields
+        
         manager.AvatarUrl = @event.AvatarUrl;
         manager.PhoneNumber = @event.Phone;
         manager.EmploymentStatus = MapStatus(@event.Status);
-
-        // Update sync metadata
         manager.LastSyncedAt = DateTime.UtcNow;
         manager.SyncStatus = "SYNCED";
         manager.UserServiceVersion = @event.Version;
@@ -113,8 +106,7 @@ public class UserUpdatedConsumer : IConsumer<UserUpdatedEvent>
                 @event.UserId);
             return;
         }
-
-        // Update fields
+        
         guard.AvatarUrl = @event.AvatarUrl ?? guard.AvatarUrl;
         guard.PhoneNumber = @event.Phone ?? guard.PhoneNumber;
         guard.CurrentAddress = @event.Address;
@@ -122,8 +114,6 @@ public class UserUpdatedConsumer : IConsumer<UserUpdatedEvent>
         guard.ContractType = @event.ContractType;
         guard.TerminationDate = @event.TerminationDate;
         guard.TerminationReason = @event.TerminationReason;
-
-        // Update sync metadata
         guard.LastSyncedAt = DateTime.UtcNow;
         guard.SyncStatus = "SYNCED";
         guard.UserServiceVersion = @event.Version;

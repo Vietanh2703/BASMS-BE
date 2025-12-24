@@ -1,9 +1,7 @@
 namespace Contracts.API.ContractsHandler.CheckPublicHoliday;
 
-// Query để check ngày lễ
 public record CheckPublicHolidayQuery(DateTime Date) : IQuery<CheckPublicHolidayResult>;
 
-// Result
 public record CheckPublicHolidayResult(
     bool IsHoliday,
     string? HolidayName,

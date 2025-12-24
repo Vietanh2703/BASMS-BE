@@ -1,17 +1,7 @@
 namespace Contracts.API.ContractsHandler.GetAllContractsByCustomerId;
 
-// ================================================================
-// QUERY & RESULT
-// ================================================================
-
-/// <summary>
-/// Query để lấy tất cả contracts (full details) theo customer ID
-/// </summary>
 public record GetAllContractsByCustomerIdQuery(Guid CustomerId) : IQuery<GetAllContractsByCustomerIdResult>;
 
-/// <summary>
-/// DTO cho Contract details
-/// </summary>
 public record ContractDetailDto
 {
     public Guid Id { get; init; }
@@ -22,62 +12,44 @@ public record ContractDetailDto
     public string ContractType { get; init; } = string.Empty;
     public string ServiceScope { get; init; } = string.Empty;
 
-    // Thời hạn
     public DateTime StartDate { get; init; }
     public DateTime EndDate { get; init; }
     public int DurationMonths { get; init; }
 
-    // Gia hạn
     public bool IsRenewable { get; init; }
     public bool AutoRenewal { get; init; }
     public int RenewalNoticeDays { get; init; }
     public int RenewalCount { get; init; }
 
-    // Mô hình
     public string CoverageModel { get; init; } = string.Empty;
 
-    // Lịch làm việc
     public bool FollowsCustomerCalendar { get; init; }
     public bool WorkOnPublicHolidays { get; init; }
     public bool WorkOnCustomerClosedDays { get; init; }
-
-    // Tự động tạo ca
     public bool AutoGenerateShifts { get; init; }
     public int GenerateShiftsAdvanceDays { get; init; }
-
-    // Trạng thái
     public string Status { get; init; } = string.Empty;
     public Guid? ApprovedBy { get; init; }
     public DateTime? ApprovedAt { get; init; }
     public DateTime? ActivatedAt { get; init; }
-
-    // Chấm dứt
     public DateTime? TerminationDate { get; init; }
     public string? TerminationType { get; init; }
     public string? TerminationReason { get; init; }
     public Guid? TerminatedBy { get; init; }
-
-    // Tài liệu
     public string? ContractFileUrl { get; init; }
     public DateTime? SignedDate { get; init; }
     public string? Notes { get; init; }
-
-    // Working contract fields
     public decimal? MonthlyWage { get; init; }
     public string? MonthlyWageInWords { get; init; }
     public string? CertificationLevel { get; init; }
     public string? JobTitle { get; init; }
-
-    // Metadata
     public DateTime CreatedAt { get; init; }
     public DateTime? UpdatedAt { get; init; }
     public Guid? CreatedBy { get; init; }
     public Guid? UpdatedBy { get; init; }
 }
 
-/// <summary>
-/// Kết quả query
-/// </summary>
+
 public record GetAllContractsByCustomerIdResult
 {
     public bool Success { get; init; }
@@ -89,13 +61,7 @@ public record GetAllContractsByCustomerIdResult
     public List<ContractDetailDto> Contracts { get; init; } = new();
 }
 
-// ================================================================
-// HANDLER
-// ================================================================
 
-/// <summary>
-/// Handler để lấy tất cả contracts (full details) theo customer ID
-/// </summary>
 internal class GetAllContractsByCustomerIdHandler(
     IDbConnectionFactory connectionFactory,
     ILogger<GetAllContractsByCustomerIdHandler> logger)
@@ -111,9 +77,6 @@ internal class GetAllContractsByCustomerIdHandler(
 
             using var connection = await connectionFactory.CreateConnectionAsync();
 
-            // ================================================================
-            // 1. CHECK IF CUSTOMER EXISTS AND GET INFO
-            // ================================================================
             var customerQuery = @"
                 SELECT
                     CustomerCode,
@@ -124,7 +87,7 @@ internal class GetAllContractsByCustomerIdHandler(
 
             var customer = await connection.QuerySingleOrDefaultAsync<(string CustomerCode, string CustomerName)>(
                 customerQuery,
-                new { CustomerId = request.CustomerId });
+                new { request.CustomerId });
 
             if (customer.CustomerCode == null)
             {
@@ -136,9 +99,6 @@ internal class GetAllContractsByCustomerIdHandler(
                 };
             }
 
-            // ================================================================
-            // 2. GET ALL CONTRACTS WITH FULL DETAILS
-            // ================================================================
             var contractsQuery = @"
                 SELECT
                     Id,
@@ -187,7 +147,7 @@ internal class GetAllContractsByCustomerIdHandler(
 
             var contracts = await connection.QueryAsync<ContractDetailDto>(
                 contractsQuery,
-                new { CustomerId = request.CustomerId });
+                new { request.CustomerId });
 
             var contractsList = contracts.ToList();
 

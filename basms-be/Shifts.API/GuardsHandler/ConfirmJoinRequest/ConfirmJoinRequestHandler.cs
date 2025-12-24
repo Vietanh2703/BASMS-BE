@@ -1,19 +1,8 @@
-// Handler xử lý logic confirm join request
-// Update ContractType từ "join_in_request" sang "joined_in"
 namespace Shifts.API.GuardsHandler.ConfirmJoinRequest;
 
-// ================================================================
-// COMMAND & RESULT
-// ================================================================
-
-/// <summary>
-/// Command để confirm join request - update ContractType sang "joined_in"
-/// </summary>
 public record ConfirmJoinRequestCommand(Guid GuardId) : ICommand<ConfirmJoinRequestResult>;
 
-/// <summary>
-/// Result chứa kết quả confirm
-/// </summary>
+
 public record ConfirmJoinRequestResult
 {
     public bool Success { get; init; }
@@ -24,10 +13,6 @@ public record ConfirmJoinRequestResult
     public string? NewContractType { get; init; }
     public DateTime? UpdatedAt { get; init; }
 }
-
-// ================================================================
-// HANDLER
-// ================================================================
 
 internal class ConfirmJoinRequestHandler(
     IDbConnectionFactory connectionFactory,

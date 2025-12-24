@@ -1,4 +1,3 @@
-// Global usings cho Contracts.API
 global using System.Data;
 global using Dapper;
 global using Dapper.Contrib.Extensions;
@@ -31,3 +30,6 @@ global using MailKit.Net.Smtp;
 global using MailKit.Security;
 global using MimeKit;
 global using FluentValidation;
+global using System.Security.Cryptography.X509Certificates;
+global using Amazon.Extensions.NETCore.Setup;
+global using BuildingBlocks.Extensions;

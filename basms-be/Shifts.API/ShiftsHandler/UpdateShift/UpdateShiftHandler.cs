@@ -1,12 +1,8 @@
-using Shifts.API.Validators;
-using Shifts.API.Handlers.SendNotification;
-
 namespace Shifts.API.ShiftsHandler.UpdateShift;
 
-// Command để update shift
 public record UpdateShiftCommand(
     Guid ShiftId,
-    DateTime? ShiftDate,        // Optional - chỉ update nếu khác null
+    DateTime? ShiftDate,       
     TimeSpan? StartTime,
     TimeSpan? EndTime,
     int? RequiredGuards,
@@ -14,7 +10,6 @@ public record UpdateShiftCommand(
     Guid UpdatedBy
 ) : ICommand<UpdateShiftResult>;
 
-// Result
 public record UpdateShiftResult(bool Success, string Message);
 
 internal class UpdateShiftHandler(
@@ -33,10 +28,7 @@ internal class UpdateShiftHandler(
             logger.LogInformation("Updating shift {ShiftId}", request.ShiftId);
 
             using var connection = await dbFactory.CreateConnectionAsync();
-
-            // ================================================================
-            // BƯỚC 1: LẤY SHIFT HIỆN TẠI
-            // ================================================================
+            
             var shift = await connection.GetAsync<Models.Shifts>(request.ShiftId);
 
             if (shift == null || shift.IsDeleted)
@@ -49,10 +41,7 @@ internal class UpdateShiftHandler(
                 "Found shift {ShiftId} at location {LocationId}",
                 shift.Id,
                 shift.LocationId);
-
-            // ================================================================
-            // BƯỚC 2: NẾU THAY ĐỔI NGÀY -> UPDATE DATE FIELDS
-            // ================================================================
+            
             if (request.ShiftDate.HasValue && request.ShiftDate.Value.Date != shift.ShiftDate.Date)
             {
                 logger.LogInformation(
@@ -60,7 +49,6 @@ internal class UpdateShiftHandler(
                     shift.ShiftDate,
                     request.ShiftDate.Value);
 
-                // Update date fields
                 shift.ShiftDate = request.ShiftDate.Value.Date;
                 shift.ShiftDay = request.ShiftDate.Value.Day;
                 shift.ShiftMonth = request.ShiftDate.Value.Month;
@@ -71,15 +59,11 @@ internal class UpdateShiftHandler(
                 shift.IsSunday = request.ShiftDate.Value.DayOfWeek == DayOfWeek.Sunday;
                 shift.IsRegularWeekday = request.ShiftDate.Value.DayOfWeek >= DayOfWeek.Monday &&
                                         request.ShiftDate.Value.DayOfWeek <= DayOfWeek.Friday;
-
-                // Reset holiday flags (có thể enhance bằng RabbitMQ call sau)
+                
                 shift.IsPublicHoliday = false;
                 shift.IsTetHoliday = false;
             }
-
-            // ================================================================
-            // BƯỚC 3: VALIDATE SHIFT TIME OVERLAP (nếu có thay đổi về thời gian)
-            // ================================================================
+            
             var finalShiftDate = request.ShiftDate ?? shift.ShiftDate;
             var finalStartTime = request.StartTime ?? shift.ShiftStart.TimeOfDay;
             var finalEndTime = request.EndTime ?? shift.ShiftEnd.TimeOfDay;
@@ -93,7 +77,7 @@ internal class UpdateShiftHandler(
                     finalShiftDate,
                     finalStartTime,
                     finalEndTime,
-                    shift.Id); // Loại trừ shift hiện tại
+                    shift.Id);
 
                 if (!overlapValidation.IsValid)
                 {
@@ -105,12 +89,9 @@ internal class UpdateShiftHandler(
                         $"Có {overlapValidation.OverlappingShifts.Count} ca trực trùng thời gian.");
                 }
 
-                logger.LogInformation("✓ No shift time overlap detected");
+                logger.LogInformation("No shift time overlap detected");
             }
-
-            // ================================================================
-            // BƯỚC 4: VALIDATE CONTRACT PERIOD (nếu có thay đổi ngày và có contract) - VIA RABBITMQ
-            // ================================================================
+            
             if (request.ShiftDate.HasValue && shift.ContractId.HasValue)
             {
                 logger.LogInformation("Validating shift within contract period via RabbitMQ");
@@ -129,13 +110,10 @@ internal class UpdateShiftHandler(
                 }
 
                 logger.LogInformation(
-                    "✓ Shift date is within contract period ({ContractNumber})",
+                    "Shift date is within contract period ({ContractNumber})",
                     periodValidation.ContractNumber);
             }
-
-            // ================================================================
-            // BƯỚC 5: UPDATE CÁC FIELDS KHÁC
-            // ================================================================
+            
             bool hasChanges = false;
             var changesList = new List<string>();
 
@@ -154,16 +132,13 @@ internal class UpdateShiftHandler(
                 hasChanges = true;
                 changesList.Add($"Giờ kết thúc: {oldTime} → {request.EndTime.Value:hh\\:mm}");
             }
-
-            // Recalculate duration if time changed
+            
             if (request.StartTime.HasValue || request.EndTime.HasValue)
             {
                 var duration = shift.ShiftEnd - shift.ShiftStart;
                 shift.TotalDurationMinutes = (int)duration.TotalMinutes;
                 shift.WorkDurationMinutes = shift.TotalDurationMinutes - shift.BreakDurationMinutes;
                 shift.WorkDurationHours = (decimal)shift.WorkDurationMinutes / 60m;
-
-                // Check night shift
                 shift.IsNightShift = shift.ShiftStart.Hour >= 22 || shift.ShiftEnd.Hour <= 6;
             }
 
@@ -192,32 +167,22 @@ internal class UpdateShiftHandler(
                 logger.LogInformation("No changes to update for shift {ShiftId}", shift.Id);
                 return new UpdateShiftResult(true, "No changes detected");
             }
-
-            // ================================================================
-            // BƯỚC 6: SAVE CHANGES
-            // ================================================================
+            
             shift.UpdatedAt = DateTime.UtcNow;
             shift.UpdatedBy = request.UpdatedBy;
-            shift.Version++; // Optimistic locking
+            shift.Version++;
 
             await connection.UpdateAsync(shift);
 
-            logger.LogInformation("✓ Successfully updated shift {ShiftId}", shift.Id);
-
-            // ================================================================
-            // BƯỚC 7: GỬI NOTIFICATIONS CHO GUARDS VÀ STAKEHOLDERS (nếu có thay đổi)
-            // ================================================================
+            logger.LogInformation("Successfully updated shift {ShiftId}", shift.Id);
+            
             if (changesList.Any())
             {
                 logger.LogInformation("Sending notifications for shift update");
 
                 var changesDescription = string.Join(", ", changesList);
 
-                // Gửi notification cho guards đã được assign vào shift này
-                // Gửi notification cho director và customer (nếu có contract)
-                // Sẽ implement sau khi có full integration
-
-                logger.LogInformation("✓ Notifications queued (changes: {Changes})", changesDescription);
+                logger.LogInformation("Notifications queued (changes: {Changes})", changesDescription);
             }
 
             return new UpdateShiftResult(true, "Shift updated successfully");

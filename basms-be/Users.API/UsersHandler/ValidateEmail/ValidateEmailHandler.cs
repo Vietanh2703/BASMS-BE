@@ -1,6 +1,6 @@
 namespace Users.API.UsersHandler.ValidateEmail;
 
-// Command để validate email có tồn tại trong hệ thống hay không
+
 public record ValidateEmailCommand(
     string Email
 ) : ICommand<ValidateEmailResult>;
@@ -20,7 +20,6 @@ internal class ValidateEmailHandler(
 {
     public async Task<ValidateEmailResult> Handle(ValidateEmailCommand command, CancellationToken cancellationToken)
     {
-        // Validate command
         var validationResult = await validator.ValidateAsync(command, cancellationToken);
         if (!validationResult.IsValid)
         {
@@ -44,8 +43,7 @@ internal class ValidateEmailHandler(
                     "Email address not found in our system."
                 );
             }
-
-            // Check if account is active
+            
             if (!user.IsActive)
             {
                 logger.LogWarning("Email found but account is inactive: {Email}", command.Email);

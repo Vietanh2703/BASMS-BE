@@ -1,8 +1,5 @@
 namespace Shifts.API.ShiftsHandler.CreateShift;
 
-/// <summary>
-/// Request DTO từ client
-/// </summary>
 public record CreateShiftRequest(
     Guid? ContractId,
     Guid LocationId,
@@ -18,18 +15,14 @@ public class CreateShiftEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        // Route: POST /shifts
         app.MapPost("/api/shifts", async (CreateShiftRequest req, ISender sender, HttpContext context) =>
         {
-            // Lấy userId từ claims (giả sử đã authenticate)
             var userIdClaim = context.User.FindFirst("userId")?.Value;
             if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
             {
-                // Fallback for testing
                 userId = Guid.NewGuid();
             }
-
-            // Map request DTO sang command
+            
             var command = new CreateShiftCommand(
                 ContractId: req.ContractId,
                 LocationId: req.LocationId,
@@ -41,11 +34,8 @@ public class CreateShiftEndpoint : ICarterModule
                 Description: req.Description,
                 CreatedBy: userId
             );
-
-            // Gửi command đến handler
+            
             var result = await sender.Send(command);
-
-            // Trả về 201 Created với shift ID
             return Results.Created($"/shifts/{result.ShiftId}", result);
         })
         .RequireAuthorization()
@@ -54,12 +44,6 @@ public class CreateShiftEndpoint : ICarterModule
         .Produces<CreateShiftResult>(StatusCodes.Status201Created)
         .ProducesProblem(StatusCodes.Status400BadRequest)
         .ProducesProblem(StatusCodes.Status500InternalServerError)
-        .WithSummary("Create a new shift")
-        .WithDescription(@"Creates a new shift with validation from Contracts.API.
-            Validates:
-            - Contract exists and is active (if ContractId provided)
-            - Location belongs to contract and is active
-            - Checks if date is public holiday
-            - Checks if location is closed on that date");
+        .WithSummary("Create a new shift");
     }
 }

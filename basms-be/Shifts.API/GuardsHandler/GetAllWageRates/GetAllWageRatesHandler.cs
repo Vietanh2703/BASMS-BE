@@ -32,11 +32,7 @@ internal class GetAllWageRatesHandler(
             logger.LogInformation("Getting all wage rates from database");
 
             using var connection = await connectionFactory.CreateConnectionAsync();
-
-            // Get all wage rates
             var wageRates = await connection.GetAllAsync<WageRates>();
-
-            // Filter active wage rates and map to DTO
             var wageRateDtos = wageRates
                 .Where(w => w.IsActive)
                 .Select(w => new WageRateDto(

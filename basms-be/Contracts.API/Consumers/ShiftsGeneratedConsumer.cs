@@ -1,12 +1,5 @@
-using BuildingBlocks.Messaging.Events;
-using System.Text.Json;
-
 namespace Contracts.API.Consumers;
 
-/// <summary>
-/// Consumer nhận ShiftsGeneratedEvent từ Shifts.API
-/// Update shift_generation_log để tracking và audit
-/// </summary>
 public class ShiftsGeneratedConsumer : IConsumer<ShiftsGeneratedEvent>
 {
     private readonly IDbConnectionFactory _dbFactory;
@@ -32,8 +25,6 @@ public class ShiftsGeneratedConsumer : IConsumer<ShiftsGeneratedEvent>
         try
         {
             using var connection = await _dbFactory.CreateConnectionAsync();
-
-            // Tạo log entry
             var log = new ShiftGenerationLog
             {
                 Id = Guid.NewGuid(),
@@ -54,7 +45,7 @@ public class ShiftsGeneratedConsumer : IConsumer<ShiftsGeneratedEvent>
             await connection.InsertAsync(log);
 
             _logger.LogInformation(
-                @"✓ Shift generation logged for Contract {ContractNumber}:
+                @"Shift generation logged for Contract {ContractNumber}:
                   - Generation Date: {GenerationDate:yyyy-MM-dd}
                   - Created: {Created} shifts
                   - Skipped: {Skipped} shifts
@@ -68,8 +59,7 @@ public class ShiftsGeneratedConsumer : IConsumer<ShiftsGeneratedEvent>
                 @event.Status,
                 @event.GenerationDurationMs,
                 @event.GeneratedByJob);
-
-            // Log chi tiết nếu có shifts được tạo
+            
             if (@event.GeneratedShifts.Any())
             {
                 _logger.LogInformation(
@@ -77,16 +67,14 @@ public class ShiftsGeneratedConsumer : IConsumer<ShiftsGeneratedEvent>
                     string.Join(", ", @event.GeneratedShifts.Select(s =>
                         $"{s.LocationName} {s.ShiftDate:yyyy-MM-dd} {s.ShiftStartTime}-{s.ShiftEndTime}")));
             }
-
-            // Log skip reasons nếu có
+            
             if (@event.ShiftsSkippedCount > 0 && !string.IsNullOrEmpty(@event.SkipReasons.ToString()))
             {
                 _logger.LogInformation(
                     "Skipped shifts reasons: {Reasons}",
                     @event.SkipReasons);
             }
-
-            // Nếu failed, log error
+            
             if (@event.Status == "failed" && !string.IsNullOrEmpty(@event.ErrorMessage))
             {
                 _logger.LogError(
@@ -101,7 +89,7 @@ public class ShiftsGeneratedConsumer : IConsumer<ShiftsGeneratedEvent>
                 "Failed to process ShiftsGeneratedEvent for Contract {ContractNumber}",
                 @event.ContractNumber);
 
-            throw; // Re-throw to trigger MassTransit retry
+            throw; 
         }
     }
 }

@@ -25,7 +25,6 @@ public class DeleteUserEndpoint : ICarterModule
         .ProducesProblem(StatusCodes.Status403Forbidden)
         .ProducesProblem(StatusCodes.Status404NotFound)
         .ProducesProblem(StatusCodes.Status500InternalServerError)
-        .WithSummary("Delete user")
-        .WithDescription("Soft deletes a user by setting IsDeleted flag to true");
+        .WithSummary("Delete user");
     }
 }

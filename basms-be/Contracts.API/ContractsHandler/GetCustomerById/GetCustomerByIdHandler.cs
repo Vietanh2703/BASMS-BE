@@ -1,21 +1,7 @@
 namespace Contracts.API.ContractsHandler.GetCustomerById;
 
-// ================================================================
-// QUERY & RESULT
-// ================================================================
-
-/// <summary>
-/// Query để lấy customer detail by ID
-/// </summary>
 public record GetCustomerByIdQuery(Guid CustomerId) : IQuery<GetCustomerByIdResult>;
 
-// ================================================================
-// DTOs
-// ================================================================
-
-/// <summary>
-/// DTO chi tiết cho Customer
-/// </summary>
 public record CustomerDetailDto
 {
     public Guid Id { get; init; }
@@ -43,9 +29,7 @@ public record CustomerDetailDto
     public DateTime CreatedAt { get; init; }
 }
 
-/// <summary>
-/// DTO cho Customer Location
-/// </summary>
+
 public record CustomerLocationDto
 {
     public Guid Id { get; init; }
@@ -68,9 +52,6 @@ public record CustomerLocationDto
     public bool IsActive { get; init; }
 }
 
-/// <summary>
-/// DTO cho Contract Document
-/// </summary>
 public record ContractDocumentDto
 {
     public Guid Id { get; init; }
@@ -104,9 +85,6 @@ public record ContractDocumentDto
     }
 }
 
-/// <summary>
-/// DTO cho Contract Location
-/// </summary>
 public record ContractLocationDto
 {
     public Guid Id { get; init; }
@@ -122,9 +100,6 @@ public record ContractLocationDto
     public bool IsActive { get; init; }
 }
 
-/// <summary>
-/// DTO cho Contract Shift Schedule
-/// </summary>
 public record ContractShiftScheduleDto
 {
     public Guid Id { get; init; }
@@ -132,16 +107,12 @@ public record ContractShiftScheduleDto
     public Guid? LocationId { get; init; }
     public string ScheduleName { get; init; } = string.Empty;
     public string ScheduleType { get; init; } = string.Empty;
-
-    // Time
     public TimeSpan ShiftStartTime { get; init; }
     public TimeSpan ShiftEndTime { get; init; }
     public bool CrossesMidnight { get; init; }
     public decimal DurationHours { get; init; }
     public int BreakMinutes { get; init; }
     public int GuardsPerShift { get; init; }
-
-    // Recurrence
     public string RecurrenceType { get; init; } = string.Empty;
     public bool AppliesMonday { get; init; }
     public bool AppliesTuesday { get; init; }
@@ -151,24 +122,16 @@ public record ContractShiftScheduleDto
     public bool AppliesSaturday { get; init; }
     public bool AppliesSunday { get; init; }
     public string? MonthlyDates { get; init; }
-
-    // Special Days
     public bool AppliesOnPublicHolidays { get; init; }
     public bool AppliesOnCustomerHolidays { get; init; }
     public bool AppliesOnWeekends { get; init; }
     public bool SkipWhenLocationClosed { get; init; }
-
-    // Requirements
     public bool RequiresArmedGuard { get; init; }
     public bool RequiresSupervisor { get; init; }
     public int MinimumExperienceMonths { get; init; }
     public string? RequiredCertifications { get; init; }
-
-    // Auto Generate
     public bool AutoGenerateEnabled { get; init; }
     public int GenerateAdvanceDays { get; init; }
-
-    // Effective Period
     public DateTime EffectiveFrom { get; init; }
     public DateTime? EffectiveTo { get; init; }
     public bool IsActive { get; init; }
@@ -176,9 +139,6 @@ public record ContractShiftScheduleDto
     public Guid? CreatedBy { get; init; }
 }
 
-/// <summary>
-/// DTO cho Public Holiday
-/// </summary>
 public record PublicHolidayDto
 {
     public Guid Id { get; init; }
@@ -187,36 +147,24 @@ public record PublicHolidayDto
     public string HolidayName { get; init; } = string.Empty;
     public string? HolidayNameEn { get; init; }
     public string HolidayCategory { get; init; } = string.Empty;
-
-    // Tet Period
     public bool IsTetPeriod { get; init; }
     public bool IsTetHoliday { get; init; }
     public int? TetDayNumber { get; init; }
     public DateTime? HolidayStartDate { get; init; }
     public DateTime? HolidayEndDate { get; init; }
     public int? TotalHolidayDays { get; init; }
-
-    // Official & Observed
     public bool IsOfficialHoliday { get; init; }
     public bool IsObserved { get; init; }
     public DateTime? OriginalDate { get; init; }
     public DateTime? ObservedDate { get; init; }
-
-    // Scope
     public bool AppliesNationwide { get; init; }
     public string? AppliesToRegions { get; init; }
-
-    // Impact
     public bool StandardWorkplacesClosed { get; init; }
     public bool EssentialServicesOperating { get; init; }
-
     public string? Description { get; init; }
     public int Year { get; init; }
 }
 
-/// <summary>
-/// DTO cho Contract với đầy đủ thông tin liên quan
-/// </summary>
 public record ContractDto
 {
     public Guid Id { get; init; }
@@ -229,51 +177,35 @@ public record ContractDto
     public DateTime StartDate { get; init; }
     public DateTime EndDate { get; init; }
     public int DurationMonths { get; init; }
-
-    // Coverage & Calendar
     public string CoverageModel { get; init; } = string.Empty;
     public bool FollowsCustomerCalendar { get; init; }
     public bool WorkOnPublicHolidays { get; init; }
     public bool WorkOnCustomerClosedDays { get; init; }
-
-    // Renewal
     public bool IsRenewable { get; init; }
     public bool AutoRenewal { get; init; }
     public int RenewalNoticeDays { get; init; }
     public int RenewalCount { get; init; }
-
-    // Auto Generate Shifts
     public bool AutoGenerateShifts { get; init; }
     public int GenerateShiftsAdvanceDays { get; init; }
-
-    // Status & Approval
     public string Status { get; init; } = string.Empty;
     public Guid? ApprovedBy { get; init; }
     public DateTime? ApprovedAt { get; init; }
     public DateTime? SignedDate { get; init; }
     public DateTime? ActivatedAt { get; init; }
-
-    // Termination
     public DateTime? TerminationDate { get; init; }
     public string? TerminationType { get; init; }
     public string? TerminationReason { get; init; }
     public Guid? TerminatedBy { get; init; }
-
-    // Files & Notes
     public string? ContractFileUrl { get; init; }
     public string? Notes { get; init; }
     public DateTime CreatedAt { get; init; }
-
-    // Related data
     public ContractDocumentDto? Document { get; init; }
     public List<ContractLocationDto> Locations { get; init; } = new();
     public List<ContractShiftScheduleDto> ShiftSchedules { get; init; } = new();
     public List<PublicHolidayDto> PublicHolidays { get; init; } = new();
 }
 
-/// <summary>
-/// Kết quả query
-/// </summary>
+
 public record GetCustomerByIdResult
 {
     public bool Success { get; init; }
@@ -283,13 +215,6 @@ public record GetCustomerByIdResult
     public List<ContractDto> Contracts { get; init; } = new();
 }
 
-// ================================================================
-// HANDLER
-// ================================================================
-
-/// <summary>
-/// Handler để lấy customer detail với đầy đủ thông tin liên quan
-/// </summary>
 internal class GetCustomerByIdHandler(
     IDbConnectionFactory connectionFactory,
     ILogger<GetCustomerByIdHandler> logger)
@@ -304,10 +229,7 @@ internal class GetCustomerByIdHandler(
             logger.LogInformation("Getting customer detail for ID: {CustomerId}", request.CustomerId);
 
             using var connection = await connectionFactory.CreateConnectionAsync();
-
-            // ================================================================
-            // 1. GET CUSTOMER
-            // ================================================================
+            
             var customerQuery = @"
                 SELECT
                     Id, CustomerCode, CompanyName, ContactPersonName, ContactPersonTitle,
@@ -319,9 +241,9 @@ internal class GetCustomerByIdHandler(
                 WHERE Id = @CustomerId AND IsDeleted = 0
             ";
 
-            var customer = await connection.QuerySingleOrDefaultAsync<Models.Customer>(
+            var customer = await connection.QuerySingleOrDefaultAsync<Customer>(
                 customerQuery,
-                new { CustomerId = request.CustomerId });
+                new { request.CustomerId });
 
             if (customer == null)
             {
@@ -332,10 +254,7 @@ internal class GetCustomerByIdHandler(
                     ErrorMessage = $"Customer with ID {request.CustomerId} not found"
                 };
             }
-
-            // ================================================================
-            // 2. GET CUSTOMER LOCATIONS
-            // ================================================================
+            
             var locationsQuery = @"
                 SELECT
                     Id, CustomerId, LocationCode, LocationName, LocationType,
@@ -349,13 +268,10 @@ internal class GetCustomerByIdHandler(
                 ORDER BY LocationCode
             ";
 
-            var locations = await connection.QueryAsync<Models.CustomerLocation>(
+            var locations = await connection.QueryAsync<CustomerLocation>(
                 locationsQuery,
-                new { CustomerId = request.CustomerId });
-
-            // ================================================================
-            // 3. GET CONTRACTS
-            // ================================================================
+                new { request.CustomerId });
+            
             var contractsQuery = @"
                 SELECT
                     Id, CustomerId, DocumentId, ContractNumber, ContractTitle,
@@ -371,20 +287,16 @@ internal class GetCustomerByIdHandler(
                 ORDER BY CreatedAt DESC
             ";
 
-            var contracts = await connection.QueryAsync<Models.Contract>(
+            var contracts = await connection.QueryAsync<Contract>(
                 contractsQuery,
-                new { CustomerId = request.CustomerId });
+                new { request.CustomerId });
 
             var contractsList = contracts.ToList();
-
-            // ================================================================
-            // 4. GET RELATED DATA FOR EACH CONTRACT
-            // ================================================================
+            
             var contractDtos = new List<ContractDto>();
 
             foreach (var contract in contractsList)
             {
-                // Get contract document if exists
                 ContractDocumentDto? documentDto = null;
                 if (contract.DocumentId.HasValue)
                 {
@@ -396,7 +308,7 @@ internal class GetCustomerByIdHandler(
                         WHERE Id = @DocumentId AND IsDeleted = 0
                     ";
 
-                    var document = await connection.QuerySingleOrDefaultAsync<Models.ContractDocument>(
+                    var document = await connection.QuerySingleOrDefaultAsync<ContractDocument>(
                         documentQuery,
                         new { DocumentId = contract.DocumentId.Value });
 
@@ -419,8 +331,6 @@ internal class GetCustomerByIdHandler(
                         };
                     }
                 }
-
-                // Get contract locations
                 var contractLocationsQuery = @"
                     SELECT
                         Id, ContractId, LocationId, GuardsRequired, CoverageType,
@@ -431,7 +341,7 @@ internal class GetCustomerByIdHandler(
                     ORDER BY IsPrimaryLocation DESC, PriorityLevel
                 ";
 
-                var contractLocations = await connection.QueryAsync<Models.ContractLocation>(
+                var contractLocations = await connection.QueryAsync<ContractLocation>(
                     contractLocationsQuery,
                     new { ContractId = contract.Id });
 
@@ -449,8 +359,7 @@ internal class GetCustomerByIdHandler(
                     AutoGenerateShifts = cl.AutoGenerateShifts,
                     IsActive = cl.IsActive
                 }).ToList();
-
-                // Get shift schedules
+                
                 var shiftSchedulesQuery = @"
                     SELECT
                         Id, ContractId, LocationId, ScheduleName, ScheduleType,
@@ -467,7 +376,7 @@ internal class GetCustomerByIdHandler(
                     ORDER BY ScheduleName
                 ";
 
-                var shiftSchedules = await connection.QueryAsync<Models.ContractShiftSchedule>(
+                var shiftSchedules = await connection.QueryAsync<ContractShiftSchedule>(
                     shiftSchedulesQuery,
                     new { ContractId = contract.Id });
 
@@ -509,8 +418,7 @@ internal class GetCustomerByIdHandler(
                     Notes = ss.Notes,
                     CreatedBy = ss.CreatedBy
                 }).ToList();
-
-                // Get public holidays for this contract
+                
                 var publicHolidaysQuery = @"
                     SELECT
                         Id, ContractId, HolidayDate, HolidayName, HolidayNameEn,
@@ -526,7 +434,7 @@ internal class GetCustomerByIdHandler(
                     ORDER BY HolidayDate
                 ";
 
-                var publicHolidays = await connection.QueryAsync<Models.PublicHoliday>(
+                var publicHolidays = await connection.QueryAsync<PublicHoliday>(
                     publicHolidaysQuery,
                     new { ContractId = contract.Id });
 
@@ -597,9 +505,6 @@ internal class GetCustomerByIdHandler(
                 });
             }
 
-            // ================================================================
-            // 5. MAP TO RESULT
-            // ================================================================
             var customerDto = new CustomerDetailDto
             {
                 Id = customer.Id,

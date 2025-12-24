@@ -1,9 +1,5 @@
 namespace Shifts.API.Consumers;
 
-/// <summary>
-/// Consumer for DeactivateGuardEvent
-/// Deactivates Guard record khi contract hết hạn
-/// </summary>
 public class DeactivateGuardConsumer : IConsumer<DeactivateGuardEvent>
 {
     private readonly IDbConnectionFactory _dbFactory;
@@ -30,8 +26,7 @@ public class DeactivateGuardConsumer : IConsumer<DeactivateGuardEvent>
         try
         {
             using var connection = await _dbFactory.CreateConnectionAsync();
-
-            // Find guard by ID or email
+            
             Guards? guard = null;
 
             if (@event.GuardId != Guid.Empty)
@@ -54,8 +49,7 @@ public class DeactivateGuardConsumer : IConsumer<DeactivateGuardEvent>
                     @event.Email);
                 return;
             }
-
-            // Deactivate guard
+            
             guard.IsActive = false;
             guard.EmploymentStatus = "TERMINATED";
             guard.CurrentAvailability = "UNAVAILABLE";
@@ -75,7 +69,7 @@ public class DeactivateGuardConsumer : IConsumer<DeactivateGuardEvent>
                 "Failed to deactivate Guard {GuardId}",
                 @event.GuardId);
 
-            throw; // Re-throw to trigger MassTransit retry
+            throw;
         }
     }
 }

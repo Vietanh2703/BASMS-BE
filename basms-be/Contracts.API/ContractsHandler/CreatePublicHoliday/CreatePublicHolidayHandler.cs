@@ -1,12 +1,5 @@
 namespace Contracts.API.ContractsHandler.CreatePublicHoliday;
 
-// ================================================================
-// COMMAND & RESULT
-// ================================================================
-
-/// <summary>
-/// Command để tạo mới public holiday
-/// </summary>
 public record CreatePublicHolidayCommand : ICommand<CreatePublicHolidayResult>
 {
     public Guid? ContractId { get; init; }
@@ -14,36 +7,24 @@ public record CreatePublicHolidayCommand : ICommand<CreatePublicHolidayResult>
     public string HolidayName { get; init; } = string.Empty;
     public string? HolidayNameEn { get; init; }
     public string HolidayCategory { get; init; } = string.Empty;
-
-    // Tet Period
     public bool IsTetPeriod { get; init; }
     public bool IsTetHoliday { get; init; }
     public int? TetDayNumber { get; init; }
     public DateTime? HolidayStartDate { get; init; }
     public DateTime? HolidayEndDate { get; init; }
     public int? TotalHolidayDays { get; init; }
-
-    // Official & Observed
     public bool IsOfficialHoliday { get; init; } = true;
     public bool IsObserved { get; init; } = true;
     public DateTime? OriginalDate { get; init; }
     public DateTime? ObservedDate { get; init; }
-
-    // Scope
     public bool AppliesNationwide { get; init; } = true;
     public string? AppliesToRegions { get; init; }
-
-    // Impact
     public bool StandardWorkplacesClosed { get; init; } = true;
     public bool EssentialServicesOperating { get; init; } = true;
-
     public string? Description { get; init; }
     public int Year { get; init; }
 }
 
-/// <summary>
-/// Kết quả create holiday
-/// </summary>
 public record CreatePublicHolidayResult
 {
     public bool Success { get; init; }
@@ -53,13 +34,7 @@ public record CreatePublicHolidayResult
     public DateTime? HolidayDate { get; init; }
 }
 
-// ================================================================
-// HANDLER
-// ================================================================
 
-/// <summary>
-/// Handler để tạo mới public holiday
-/// </summary>
 internal class CreatePublicHolidayHandler(
     IDbConnectionFactory connectionFactory,
     ILogger<CreatePublicHolidayHandler> logger)
@@ -77,9 +52,6 @@ internal class CreatePublicHolidayHandler(
 
             using var connection = await connectionFactory.CreateConnectionAsync();
 
-            // ================================================================
-            // 1. VALIDATE CONTRACT EXISTS (if provided)
-            // ================================================================
             if (request.ContractId.HasValue)
             {
                 var contractCheckQuery = @"
@@ -102,10 +74,7 @@ internal class CreatePublicHolidayHandler(
                     };
                 }
             }
-
-            // ================================================================
-            // 2. CHECK HOLIDAY DATE UNIQUENESS
-            // ================================================================
+            
             var dateCheckQuery = @"
                 SELECT COUNT(*)
                 FROM public_holidays
@@ -136,9 +105,6 @@ internal class CreatePublicHolidayHandler(
                 };
             }
 
-            // ================================================================
-            // 3. CREATE PUBLIC HOLIDAY
-            // ================================================================
             var holidayId = Guid.NewGuid();
 
             var insertQuery = @"

@@ -23,13 +23,6 @@ public class CheckExpiredContractByIdEndpoint : ICarterModule
         .ProducesProblem(StatusCodes.Status401Unauthorized)
         .ProducesProblem(StatusCodes.Status404NotFound)
         .ProducesProblem(StatusCodes.Status500InternalServerError)
-        .WithSummary("Kiểm tra số ngày còn lại của hợp đồng")
-        .WithDescription(@"
-Endpoint để kiểm tra trạng thái và số ngày còn lại của một hợp đồng cụ thể:
-- Tính số ngày từ hôm nay đến EndDate (timezone Vietnam UTC+7)
-- Số ngày dương: Còn thời gian
-- Số ngày âm: Đã quá hạn
-- Trả về status: expired, expired_today, near_expired, expiring_soon, active
-        ");
+        .WithSummary("Kiểm tra số ngày còn lại của hợp đồng");
     }
 }

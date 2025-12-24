@@ -1,13 +1,9 @@
 namespace Contracts.API.ContractsHandler.UpdateCustomer;
 
-/// <summary>
-/// Endpoint để update thông tin customer
-/// </summary>
 public class UpdateCustomerEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        // Route: PUT /api/contracts/customers/{customerId}
         app.MapPut("/api/contracts/customers/{customerId}", async (
             Guid customerId,
             UpdateCustomerRequest request,
@@ -17,8 +13,7 @@ public class UpdateCustomerEndpoint : ICarterModule
             try
             {
                 logger.LogInformation("Update customer request for ID: {CustomerId}", customerId);
-
-                // Map request to command
+                
                 var command = new UpdateCustomerCommand
                 {
                     CustomerId = customerId,
@@ -70,9 +65,6 @@ public class UpdateCustomerEndpoint : ICarterModule
     }
 }
 
-/// <summary>
-/// Request model cho UpdateCustomer endpoint
-/// </summary>
 public record UpdateCustomerRequest
 {
     public string CompanyName { get; init; } = string.Empty;

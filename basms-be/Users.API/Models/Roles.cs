@@ -12,7 +12,7 @@ public class Roles
 
     public string? Description { get; set; }
 
-    public string? Permissions { get; set; } // JSON string
+    public string? Permissions { get; set; }
 
     public bool IsDeleted { get; set; } = false;
 
@@ -23,8 +23,7 @@ public class Roles
     public Guid? CreatedBy { get; set; }
 
     public Guid? UpdatedBy { get; set; }
-
-    // Navigation properties - ignored by Dapper
+    
     [Write(false)]
     [Computed]
     public virtual ICollection<Users> Users { get; set; } = new List<Users>();

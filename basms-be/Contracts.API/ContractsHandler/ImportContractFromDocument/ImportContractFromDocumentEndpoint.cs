@@ -1,25 +1,14 @@
-using Microsoft.AspNetCore.Mvc;
-
 namespace Contracts.API.ContractsHandler.ImportContractFromDocument;
 
-/// <summary>
-/// Request để import contract từ document đã upload
-/// Email, IdentityNumber, PhoneNumber sẽ được extract từ document
-/// </summary>
 public record ImportContractFromDocumentRequest
 {
     public Guid DocumentId { get; init; }
 }
 
-/// <summary>
-/// Endpoint để import contract từ document đã upload lên S3
-/// Import contract from uploaded document on S3
-/// </summary>
 public class ImportContractFromDocumentEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        // Route: POST /api/contracts/import-from-document
         app.MapPost("/api/contracts/import-from-document", async (
                 [FromBody] ImportContractFromDocumentRequest request,
                 ISender sender,
@@ -27,7 +16,6 @@ public class ImportContractFromDocumentEndpoint : ICarterModule
             {
                 try
                 {
-                    // Validate DocumentId
                     if (request.DocumentId == Guid.Empty)
                     {
                         return Results.BadRequest(new
@@ -40,8 +28,7 @@ public class ImportContractFromDocumentEndpoint : ICarterModule
                     logger.LogInformation(
                         "Importing contract from DocumentId: {DocumentId} (will extract customer info from document)",
                         request.DocumentId);
-
-                    // Tạo command và gửi (chỉ cần DocumentId, các thông tin khác sẽ extract từ document)
+                    
                     var command = new ImportContractFromDocumentCommand(
                         DocumentId: request.DocumentId
                     );

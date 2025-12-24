@@ -2,9 +2,6 @@ using Shifts.API.Extensions;
 
 namespace Shifts.API.Handlers.SendEmailNotification;
 
-/// <summary>
-/// Command để gửi email notification
-/// </summary>
 public record SendEmailNotificationCommand(
     string GuardName,
     string GuardEmail,
@@ -12,8 +9,8 @@ public record SendEmailNotificationCommand(
     TimeSpan StartTime,
     TimeSpan EndTime,
     string Location,
-    string EmailType,           // CANCELLATION | CREATED | UPDATED
-    string? AdditionalInfo = null  // Cancellation reason hoặc changes
+    string EmailType,          
+    string? AdditionalInfo = null  
 ) : ICommand<SendEmailNotificationResult>;
 
 public record SendEmailNotificationResult(bool Success, string Message);
@@ -67,6 +64,38 @@ internal class SendEmailNotificationHandler(
                         request.EndTime,
                         request.Location,
                         request.AdditionalInfo ?? "Ca trực đã được cập nhật");
+                    break;
+
+                case "CUSTOMER_CANCELLATION":
+                    var customerParts = (request.AdditionalInfo ?? "|||").Split('|');
+                    await emailHandler.SendCustomerShiftCancellationEmailAsync(
+                        request.GuardName, 
+                        request.GuardEmail,
+                        request.ShiftDate,
+                        request.StartTime,
+                        request.EndTime,
+                        request.Location,
+                        customerParts[0],
+                        customerParts[1], 
+                        customerParts[2]  
+                    );
+                    break;
+
+                case "DIRECTOR_CANCELLATION":
+                    var directorParts = (request.AdditionalInfo ?? "||||||").Split('|');
+                    await emailHandler.SendDirectorShiftCancellationEmailAsync(
+                        request.ShiftDate,
+                        request.StartTime,
+                        request.EndTime,
+                        request.Location,
+                        directorParts[0],
+                        directorParts[1], 
+                        directorParts[2],
+                        directorParts[3], 
+                        directorParts[4], 
+                        int.TryParse(directorParts[5], out var count) ? count : 0, 
+                        directorParts[6]
+                    );
                     break;
 
                 default:

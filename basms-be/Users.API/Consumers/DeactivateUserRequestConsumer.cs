@@ -2,10 +2,6 @@ using BuildingBlocks.Messaging.Events;
 
 namespace Users.API.Consumers;
 
-/// <summary>
-/// Consumer xử lý event deactivate user từ Contracts.API
-/// Deactivate user khi contract hết hạn
-/// </summary>
 public class DeactivateUserEventConsumer : IConsumer<DeactivateUserEvent>
 {
     private readonly IDbConnectionFactory _dbFactory;
@@ -32,8 +28,7 @@ public class DeactivateUserEventConsumer : IConsumer<DeactivateUserEvent>
         try
         {
             using var connection = await _dbFactory.CreateConnectionAsync();
-
-            // Find user by email
+            
             var user = await connection.QueryFirstOrDefaultAsync<dynamic>(@"
                 SELECT id, email, full_name, status
                 FROM users
@@ -50,8 +45,7 @@ public class DeactivateUserEventConsumer : IConsumer<DeactivateUserEvent>
             }
 
             var userId = (Guid)user.id;
-
-            // Deactivate user
+            
             await connection.ExecuteAsync(@"
                 UPDATE users
                 SET status = 'inactive',
@@ -76,7 +70,7 @@ public class DeactivateUserEventConsumer : IConsumer<DeactivateUserEvent>
                 "Failed to deactivate user: Email={Email}",
                 @event.Email);
 
-            throw; // Re-throw to trigger MassTransit retry
+            throw;
         }
     }
 }

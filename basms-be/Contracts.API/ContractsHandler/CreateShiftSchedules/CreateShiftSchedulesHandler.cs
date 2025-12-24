@@ -1,30 +1,17 @@
 namespace Contracts.API.ContractsHandler.CreateShiftSchedules;
 
-// ================================================================
-// COMMAND & RESULT
-// ================================================================
-
-/// <summary>
-/// Command để tạo mới shift schedule
-/// </summary>
 public record CreateShiftSchedulesCommand : ICommand<CreateShiftSchedulesResult>
 {
     public Guid ContractId { get; init; }
     public Guid? LocationId { get; init; }
     public string ScheduleName { get; init; } = string.Empty;
     public string ScheduleType { get; init; } = "regular";
-
-    // Time
     public TimeSpan ShiftStartTime { get; init; }
     public TimeSpan ShiftEndTime { get; init; }
     public bool CrossesMidnight { get; init; }
     public decimal DurationHours { get; init; }
     public int BreakMinutes { get; init; }
-
-    // Staff
     public int GuardsPerShift { get; init; }
-
-    // Recurrence
     public string RecurrenceType { get; init; } = "weekly";
     public bool AppliesMonday { get; init; }
     public bool AppliesTuesday { get; init; }
@@ -34,33 +21,22 @@ public record CreateShiftSchedulesCommand : ICommand<CreateShiftSchedulesResult>
     public bool AppliesSaturday { get; init; }
     public bool AppliesSunday { get; init; }
     public string? MonthlyDates { get; init; }
-
-    // Special Days
     public bool AppliesOnPublicHolidays { get; init; } = true;
     public bool AppliesOnCustomerHolidays { get; init; } = true;
     public bool AppliesOnWeekends { get; init; } = true;
     public bool SkipWhenLocationClosed { get; init; }
-
-    // Requirements
     public bool RequiresArmedGuard { get; init; }
     public bool RequiresSupervisor { get; init; }
     public int MinimumExperienceMonths { get; init; }
     public string? RequiredCertifications { get; init; }
-
-    // Auto Generate
     public bool AutoGenerateEnabled { get; init; } = true;
     public int GenerateAdvanceDays { get; init; } = 30;
-
-    // Effective Period
     public DateTime EffectiveFrom { get; init; }
     public DateTime? EffectiveTo { get; init; }
     public bool IsActive { get; init; } = true;
     public string? Notes { get; init; }
 }
 
-/// <summary>
-/// Kết quả tạo shift schedule
-/// </summary>
 public record CreateShiftSchedulesResult
 {
     public bool Success { get; init; }
@@ -69,13 +45,6 @@ public record CreateShiftSchedulesResult
     public string? ScheduleName { get; init; }
 }
 
-// ================================================================
-// HANDLER
-// ================================================================
-
-/// <summary>
-/// Handler để tạo mới shift schedule
-/// </summary>
 internal class CreateShiftSchedulesHandler(
     IDbConnectionFactory connectionFactory,
     ILogger<CreateShiftSchedulesHandler> logger)
@@ -92,9 +61,6 @@ internal class CreateShiftSchedulesHandler(
 
             using var connection = await connectionFactory.CreateConnectionAsync();
 
-            // ================================================================
-            // 1. CHECK IF CONTRACT EXISTS
-            // ================================================================
             var contractExists = await connection.ExecuteScalarAsync<bool>(
                 "SELECT COUNT(*) > 0 FROM contracts WHERE Id = @ContractId AND IsDeleted = 0",
                 new { ContractId = request.ContractId });
@@ -108,10 +74,7 @@ internal class CreateShiftSchedulesHandler(
                     ErrorMessage = $"Contract with ID {request.ContractId} not found"
                 };
             }
-
-            // ================================================================
-            // 2. CHECK IF LOCATION EXISTS (if provided)
-            // ================================================================
+            
             if (request.LocationId.HasValue)
             {
                 var locationExists = await connection.ExecuteScalarAsync<bool>(
@@ -129,9 +92,6 @@ internal class CreateShiftSchedulesHandler(
                 }
             }
 
-            // ================================================================
-            // 3. INSERT SHIFT SCHEDULE
-            // ================================================================
             var shiftScheduleId = Guid.NewGuid();
             var insertQuery = @"
                 INSERT INTO contract_shift_schedules (
