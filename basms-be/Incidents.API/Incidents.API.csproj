@@ -33,6 +33,7 @@
 
     <ItemGroup>
       <Folder Include="IncidentHandler\GetAllIncidentsByReporterId\" />
+      <Folder Include="IncidentHandler\ResponseIncident\" />
     </ItemGroup>
 
 </Project>
