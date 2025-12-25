@@ -403,8 +403,8 @@ internal class ImportContractFromDocumentHandler(
                 foreach (var holidayInfo in dieu3Info.PublicHolidays)
                 {
                     var existingHoliday = await connection.QueryFirstOrDefaultAsync<PublicHoliday>(
-                        "SELECT * FROM public_holidays WHERE HolidayDate = @Date AND Year = @Year LIMIT 1",
-                        new { Date = holidayInfo.HolidayDate, holidayInfo.Year },
+                        "SELECT * FROM public_holidays WHERE HolidayDate = @Date AND Year = @Year AND ContractId = @ContractId LIMIT 1",
+                        new { Date = holidayInfo.HolidayDate, holidayInfo.Year, ContractId = contract.Id },
                         transaction);
 
                     if (existingHoliday == null)
@@ -438,8 +438,8 @@ internal class ImportContractFromDocumentHandler(
                     }
                     else
                     {
-                        logger.LogInformation("Public holiday already exists: {Name} on {Date}",
-                            existingHoliday.HolidayName, existingHoliday.HolidayDate.ToShortDateString());
+                        logger.LogInformation("Public holiday already exists for this contract: {Name} on {Date} for Contract {ContractId}",
+                            existingHoliday.HolidayName, existingHoliday.HolidayDate.ToShortDateString(), contract.Id);
                     }
                 }
                 
