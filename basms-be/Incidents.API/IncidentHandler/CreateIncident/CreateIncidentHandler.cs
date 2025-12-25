@@ -53,10 +53,10 @@ public class CreateIncidentHandler(
                 ShiftId = command.ShiftId,
                 ShiftAssignmentId = command.ShiftAssignmentId,
                 ReporterId = command.ReporterId,
-                ReportedTime = DateTime.UtcNow,
+                ReportedTime = Incidents.API.Extensions.DateTimeExtensions.GetVietnamTime(),
                 Status = "REPORTED",
                 IsDeleted = false,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = Incidents.API.Extensions.DateTimeExtensions.GetVietnamTime(),
                 CreatedBy = command.ReporterId
             };
 
@@ -102,7 +102,7 @@ public class CreateIncidentHandler(
                                 DisplayOrder = mediaFilesUploaded + 1,
                                 UploadedBy = command.ReporterId,
                                 IsDeleted = false,
-                                CreatedAt = DateTime.UtcNow
+                                CreatedAt = Incidents.API.Extensions.DateTimeExtensions.GetVietnamTime()
                             };
 
                             await connection.InsertAsync(incidentMedia);

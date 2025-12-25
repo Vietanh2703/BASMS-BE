@@ -38,17 +38,17 @@ public class CreateIncidentEndpoint : ICarterModule
                 {
                     if (TimeOnly.TryParse(incidentTimeStr, out var timeOnly))
                     {
-                        var today = DateTime.UtcNow.Date;
+                        var today = Incidents.API.Extensions.DateTimeExtensions.GetVietnamTime().Date;
                         incidentTime = today.Add(timeOnly.ToTimeSpan());
                     }
                     else if (!DateTime.TryParse(incidentTimeStr, out incidentTime))
                     {
-                        incidentTime = DateTime.UtcNow;
+                        incidentTime = Incidents.API.Extensions.DateTimeExtensions.GetVietnamTime();
                     }
                 }
                 else
                 {
-                    incidentTime = DateTime.UtcNow;
+                    incidentTime = Incidents.API.Extensions.DateTimeExtensions.GetVietnamTime();
                 }
 
                 Guid? shiftId = Guid.TryParse(shiftIdStr, out var sId) ? sId : null;

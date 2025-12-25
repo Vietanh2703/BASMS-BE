@@ -21,7 +21,7 @@ public class CreateIncidentValidator : AbstractValidator<CreateIncidentCommand>
 
         RuleFor(x => x.IncidentTime)
             .NotEmpty().WithMessage("IncidentTime is required")
-            .LessThanOrEqualTo(DateTime.UtcNow).WithMessage("IncidentTime cannot be in the future");
+            .LessThanOrEqualTo(Incidents.API.Extensions.DateTimeExtensions.GetVietnamTime()).WithMessage("IncidentTime cannot be in the future");
 
         RuleFor(x => x.Location)
             .NotEmpty().WithMessage("Location is required");
