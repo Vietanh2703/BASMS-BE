@@ -402,45 +402,32 @@ internal class ImportContractFromDocumentHandler(
                 
                 foreach (var holidayInfo in dieu3Info.PublicHolidays)
                 {
-                    var existingHoliday = await connection.QueryFirstOrDefaultAsync<PublicHoliday>(
-                        "SELECT * FROM public_holidays WHERE HolidayDate = @Date AND Year = @Year AND ContractId = @ContractId LIMIT 1",
-                        new { Date = holidayInfo.HolidayDate, holidayInfo.Year, ContractId = contract.Id },
-                        transaction);
-
-                    if (existingHoliday == null)
+                    var holiday = new PublicHoliday
                     {
-                        var holiday = new PublicHoliday
-                        {
-                            Id = Guid.NewGuid(),
-                            ContractId = contract.Id,
-                            HolidayDate = holidayInfo.HolidayDate,
-                            HolidayName = holidayInfo.HolidayName,
-                            HolidayNameEn = holidayInfo.HolidayNameEn,
-                            HolidayCategory = holidayInfo.HolidayCategory,
-                            IsTetPeriod = holidayInfo.IsTetPeriod,
-                            IsTetHoliday = holidayInfo.IsTetHoliday,
-                            TetDayNumber = holidayInfo.TetDayNumber,
-                            HolidayStartDate = holidayInfo.HolidayStartDate,
-                            HolidayEndDate = holidayInfo.HolidayEndDate,
-                            TotalHolidayDays = holidayInfo.TotalHolidayDays,
-                            IsOfficialHoliday = true,
-                            IsObserved = true,
-                            AppliesNationwide = true,
-                            StandardWorkplacesClosed = true,
-                            EssentialServicesOperating = true,
-                            Year = holidayInfo.Year,
-                            CreatedAt = DateTime.UtcNow
-                        };
+                        Id = Guid.NewGuid(),
+                        ContractId = contract.Id,
+                        HolidayDate = holidayInfo.HolidayDate,
+                        HolidayName = holidayInfo.HolidayName,
+                        HolidayNameEn = holidayInfo.HolidayNameEn,
+                        HolidayCategory = holidayInfo.HolidayCategory,
+                        IsTetPeriod = holidayInfo.IsTetPeriod,
+                        IsTetHoliday = holidayInfo.IsTetHoliday,
+                        TetDayNumber = holidayInfo.TetDayNumber,
+                        HolidayStartDate = holidayInfo.HolidayStartDate,
+                        HolidayEndDate = holidayInfo.HolidayEndDate,
+                        TotalHolidayDays = holidayInfo.TotalHolidayDays,
+                        IsOfficialHoliday = true,
+                        IsObserved = true,
+                        AppliesNationwide = true,
+                        StandardWorkplacesClosed = true,
+                        EssentialServicesOperating = true,
+                        Year = holidayInfo.Year,
+                        CreatedAt = DateTime.UtcNow
+                    };
 
-                        await connection.InsertAsync(holiday, transaction);
-                        logger.LogInformation("Public holiday created: {Name} on {Date} for Contract {ContractId}",
-                            holiday.HolidayName, holiday.HolidayDate.ToShortDateString(), contract.Id);
-                    }
-                    else
-                    {
-                        logger.LogInformation("Public holiday already exists for this contract: {Name} on {Date} for Contract {ContractId}",
-                            existingHoliday.HolidayName, existingHoliday.HolidayDate.ToShortDateString(), contract.Id);
-                    }
+                    await connection.InsertAsync(holiday, transaction);
+                    logger.LogInformation("Public holiday created: {Name} on {Date} for Contract {ContractId}",
+                        holiday.HolidayName, holiday.HolidayDate.ToShortDateString(), contract.Id);
                 }
                 
                 foreach (var subInfo in dieu3Info.SubstituteWorkDays)
