@@ -13,9 +13,8 @@ public class CreateIncidentHandler(
         CancellationToken cancellationToken)
     {
         logger.LogInformation(
-            "Creating incident: {Title} by {ReporterName}",
-            command.Title,
-            command.ReporterName);
+            "Creating incident: {Title}",
+            command.Title);
 
         using var connection = await connectionFactory.CreateConnectionAsync();
 
@@ -54,8 +53,6 @@ public class CreateIncidentHandler(
                 ShiftId = command.ShiftId,
                 ShiftAssignmentId = command.ShiftAssignmentId,
                 ReporterId = command.ReporterId,
-                ReporterName = command.ReporterName,
-                ReporterEmail = command.ReporterEmail,
                 ReportedTime = DateTime.UtcNow,
                 Status = "REPORTED",
                 IsDeleted = false,
@@ -104,7 +101,6 @@ public class CreateIncidentHandler(
                                 Caption = mediaFile.Caption,
                                 DisplayOrder = mediaFilesUploaded + 1,
                                 UploadedBy = command.ReporterId,
-                                UploadedByName = command.ReporterName,
                                 IsDeleted = false,
                                 CreatedAt = DateTime.UtcNow
                             };

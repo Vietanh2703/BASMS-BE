@@ -28,13 +28,6 @@ public class CreateIncidentValidator : AbstractValidator<CreateIncidentCommand>
 
         RuleFor(x => x.ReporterId)
             .NotEmpty().WithMessage("ReporterId is required");
-
-        RuleFor(x => x.ReporterName)
-            .NotEmpty().WithMessage("ReporterName is required");
-
-        RuleFor(x => x.ReporterEmail)
-            .NotEmpty().WithMessage("ReporterEmail is required")
-            .EmailAddress().WithMessage("Invalid email format");
     }
 
     private bool BeValidIncidentType(string type)

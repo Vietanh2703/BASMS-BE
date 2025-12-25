@@ -32,8 +32,6 @@ public class CreateIncidentEndpoint : ICarterModule
                 var shiftIdStr = form["shiftId"].ToString();
                 var shiftAssignmentIdStr = form["shiftAssignmentId"].ToString();
                 var reporterIdStr = form["reporterId"].ToString();
-                var reporterName = form["reporterName"].ToString();
-                var reporterEmail = form["reporterEmail"].ToString();
 
                 DateTime incidentTime;
                 if (!string.IsNullOrEmpty(incidentTimeStr))
@@ -107,8 +105,6 @@ public class CreateIncidentEndpoint : ICarterModule
                     shiftId,
                     shiftAssignmentId,
                     reporterId,
-                    reporterName,
-                    reporterEmail,
                     mediaFiles.Any() ? mediaFiles : null
                 );
 
