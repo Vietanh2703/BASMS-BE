@@ -76,27 +76,24 @@ builder.Services.AddMassTransit(x =>
 });
 
 // JWT Authentication
-var jwtKey = builder.Configuration["JWT_SECRET_KEY"] ?? builder.Configuration["Jwt__Key"];
-var jwtIssuer = builder.Configuration["JWT_ISSUER"] ?? builder.Configuration["Jwt__Issuer"];
-var jwtAudience = builder.Configuration["JWT_AUDIENCE"] ?? builder.Configuration["Jwt__Audience"];
-
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+builder.Services.AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    })
     .AddJwtBearer(options =>
     {
-        if (!string.IsNullOrWhiteSpace(jwtKey))
+        options.TokenValidationParameters = new TokenValidationParameters
         {
-            options.TokenValidationParameters = new TokenValidationParameters
-            {
-                ValidateIssuer = !string.IsNullOrWhiteSpace(jwtIssuer),
-                ValidateAudience = !string.IsNullOrWhiteSpace(jwtAudience),
-                ValidateLifetime = true,
-                ValidateIssuerSigningKey = true,
-                ValidIssuer = jwtIssuer,
-                ValidAudience = jwtAudience,
-                IssuerSigningKey = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(jwtKey)),
-                ClockSkew = TimeSpan.FromMinutes(5)
-            };
-        }
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(
+                System.Text.Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
+        };
     });
 
 builder.Services.AddAuthorization();
