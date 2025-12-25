@@ -61,8 +61,14 @@ public class GetIncidentByIdEndpoint : ICarterModule
             - Time and location details
             - Reporter information
             - Response information (if responded)
-            - All media files (images, videos) with metadata
+            - All media files (images, videos) with metadata and pre-signed URLs
             - Audit information (created/updated timestamps)
+
+            Media File URLs:
+            - fileUrl: Original S3 URL (permanent reference)
+            - presignedUrl: Pre-signed URL valid for 60 minutes (use this to display images/videos)
+            - Use presignedUrl to display media in web/mobile apps
+            - Pre-signed URLs expire after 60 minutes for security
 
             Incident Types:
             - INTRUSION: Security breach/intrusion

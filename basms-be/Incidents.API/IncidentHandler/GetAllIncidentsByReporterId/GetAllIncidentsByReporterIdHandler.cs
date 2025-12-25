@@ -1,3 +1,5 @@
+using Incidents.API.Extensions;
+
 namespace Incidents.API.IncidentHandler.GetAllIncidentsByReporterId;
 
 public record GetAllIncidentsByReporterIdQuery(Guid ReporterId) : IQuery<GetAllIncidentsByReporterIdResult>;
@@ -41,6 +43,7 @@ public record IncidentMediaDto
     public Guid Id { get; init; }
     public string MediaType { get; init; } = string.Empty;
     public string FileUrl { get; init; } = string.Empty;
+    public string? PresignedUrl { get; set; }
     public string FileName { get; init; } = string.Empty;
     public long FileSize { get; init; }
     public string? Caption { get; init; }
@@ -49,6 +52,7 @@ public record IncidentMediaDto
 
 internal class GetAllIncidentsByReporterIdHandler(
     IDbConnectionFactory dbFactory,
+    IS3Service s3Service,
     ILogger<GetAllIncidentsByReporterIdHandler> logger)
     : IQueryHandler<GetAllIncidentsByReporterIdQuery, GetAllIncidentsByReporterIdResult>
 {
@@ -163,6 +167,51 @@ internal class GetAllIncidentsByReporterIdHandler(
                 logger.LogInformation(
                     "Retrieved media files for {Count} incidents",
                     incidentsList.Count);
+
+                // ================================================================
+                // GENERATE PRE-SIGNED URLs FOR S3 FILES
+                // ================================================================
+
+                var totalMediaCount = 0;
+                var presignedUrlCount = 0;
+
+                foreach (var incident in incidentsList)
+                {
+                    foreach (var media in incident.MediaFiles)
+                    {
+                        totalMediaCount++;
+
+                        if (!string.IsNullOrEmpty(media.FileUrl))
+                        {
+                            try
+                            {
+                                // Generate pre-signed URL valid for 60 minutes
+                                var presignedUrl = s3Service.GetPresignedUrl(media.FileUrl, expirationMinutes: 60);
+                                media.PresignedUrl = presignedUrl;
+                                presignedUrlCount++;
+
+                                logger.LogDebug(
+                                    "Generated pre-signed URL for media {MediaId} ({FileName})",
+                                    media.Id,
+                                    media.FileName);
+                            }
+                            catch (Exception ex)
+                            {
+                                logger.LogWarning(
+                                    ex,
+                                    "Failed to generate pre-signed URL for media {MediaId} ({FileUrl})",
+                                    media.Id,
+                                    media.FileUrl);
+                                media.PresignedUrl = null;
+                            }
+                        }
+                    }
+                }
+
+                logger.LogInformation(
+                    "Generated {PresignedCount}/{TotalCount} pre-signed URLs for media files",
+                    presignedUrlCount,
+                    totalMediaCount);
             }
 
             logger.LogInformation(
