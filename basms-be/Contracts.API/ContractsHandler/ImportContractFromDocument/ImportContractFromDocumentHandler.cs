@@ -295,17 +295,19 @@ internal class ImportContractFromDocumentHandler(
                             warnings.Add($"Lỗi khi lấy tọa độ GPS: {gpsEx.Message}");
                         }
 
+                    var locationCode = await GenerateLocationCodeAsync(connection, customerId, transaction);
+
                     var location = new CustomerLocation
                     {
                         Id = Guid.NewGuid(),
                         CustomerId = customerId,
-                        LocationCode = $"LOC-{DateTime.Now:yyyyMMdd}-001",
+                        LocationCode = locationCode,
                         LocationName = finalLocationName,
                         LocationType = "office",
                         Address = finalLocationAddress,
                         Latitude = latitude,
                         Longitude = longitude,
-                        GeofenceRadiusMeters = 100, 
+                        GeofenceRadiusMeters = 100,
                         OperatingHoursType = "24/7",
                         FollowsStandardWorkweek = true,
                         Requires24x7Coverage = false,
@@ -1235,6 +1237,41 @@ internal class ImportContractFromDocumentHandler(
             logger.LogError(ex, "GPS lookup error: {Address}", address);
             return null;
         }
+    }
+
+    private async Task<string> GenerateLocationCodeAsync(
+        IDbConnection connection,
+        Guid customerId,
+        IDbTransaction? transaction = null)
+    {
+        var today = DateTime.Now.ToString("yyyyMMdd");
+        var prefix = $"LOC-{today}-";
+
+        var existingLocations = await connection.QueryAsync<string>(
+            @"SELECT LocationCode
+              FROM customer_locations
+              WHERE CustomerId = @CustomerId
+                AND LocationCode LIKE @Prefix
+                AND IsDeleted = 0
+              ORDER BY LocationCode DESC
+              LIMIT 1",
+            new { CustomerId = customerId, Prefix = $"{prefix}%" },
+            transaction);
+
+        var lastCode = existingLocations.FirstOrDefault();
+
+        if (string.IsNullOrEmpty(lastCode))
+        {
+            return $"{prefix}001";
+        }
+
+        var lastNumberStr = lastCode.Substring(prefix.Length);
+        if (int.TryParse(lastNumberStr, out var lastNumber))
+        {
+            return $"{prefix}{(lastNumber + 1):D3}";
+        }
+
+        return $"{prefix}001";
     }
 
     private async Task CreateOrUpdateContractPeriodAsync(
