@@ -35,7 +35,20 @@ public class CreateIncidentEndpoint : ICarterModule
                 var reporterName = form["reporterName"].ToString();
                 var reporterEmail = form["reporterEmail"].ToString();
 
-                if (!DateTime.TryParse(incidentTimeStr, out var incidentTime))
+                DateTime incidentTime;
+                if (!string.IsNullOrEmpty(incidentTimeStr))
+                {
+                    if (TimeOnly.TryParse(incidentTimeStr, out var timeOnly))
+                    {
+                        var today = DateTime.UtcNow.Date;
+                        incidentTime = today.Add(timeOnly.ToTimeSpan());
+                    }
+                    else if (!DateTime.TryParse(incidentTimeStr, out incidentTime))
+                    {
+                        incidentTime = DateTime.UtcNow;
+                    }
+                }
+                else
                 {
                     incidentTime = DateTime.UtcNow;
                 }
