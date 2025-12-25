@@ -81,6 +81,8 @@ public class CreateIncidentHandler(
                 {
                     try
                     {
+                        var fileSize = mediaFile.FileStream.Length;
+
                         var uploadResult = await s3Service.UploadFileAsync(
                             mediaFile.FileStream,
                             mediaFile.FileName,
@@ -96,7 +98,7 @@ public class CreateIncidentHandler(
                                 MediaType = mediaFile.MediaType.ToUpper(),
                                 FileUrl = uploadResult.FileUrl,
                                 FileName = mediaFile.FileName,
-                                FileSize = mediaFile.FileStream.Length,
+                                FileSize = fileSize,
                                 MimeType = mediaFile.ContentType,
                                 Caption = mediaFile.Caption,
                                 DisplayOrder = mediaFilesUploaded + 1,
