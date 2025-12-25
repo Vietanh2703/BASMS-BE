@@ -36,19 +36,53 @@ static string ExtractServerFromConnectionString(string connStr)
     catch { return "unknown"; }
 }
 
-// Đăng ký AWS S3 Client
-builder.Services.AddDefaultAWSOptions(builder.Configuration.GetAWSOptions());
-builder.Services.AddAWSService<IAmazonS3>();
+var awsBucketName = builder.Configuration["AWS_BUCKET_NAME"]
+                 ?? builder.Configuration["AWS:BucketName"];
+var awsRegion = builder.Configuration["AWS_REGION"]
+             ?? builder.Configuration["AWS:Region"];
+var awsAccessKey = builder.Configuration["AWS_ACCESS_KEY"]
+                ?? builder.Configuration["AWS:AccessKey"];
+var awsSecretKey = builder.Configuration["AWS_SECRET_KEY"]
+                ?? builder.Configuration["AWS:SecretKey"];
+var awsFolderPrefix = builder.Configuration["AWS:FolderPrefix"] ?? "incidents/media";
+
+
+if (string.IsNullOrWhiteSpace(awsRegion))
+{
+    throw new InvalidOperationException("AWS_REGION is not configured. Please set AWS_REGION environment variable.");
+}
+if (string.IsNullOrWhiteSpace(awsBucketName))
+{
+    throw new InvalidOperationException("AWS_BUCKET_NAME is not configured. Please set AWS_BUCKET_NAME environment variable.");
+}
+if (string.IsNullOrWhiteSpace(awsAccessKey) || string.IsNullOrWhiteSpace(awsSecretKey))
+{
+    throw new InvalidOperationException("AWS credentials are not configured. Please set AWS_ACCESS_KEY and AWS_SECRET_KEY environment variables.");
+}
+
 
 builder.Services.Configure<Incidents.API.Extensions.AwsS3Settings>(options =>
 {
-    options.BucketName = builder.Configuration["AWS_BUCKET_NAME"] ?? builder.Configuration["AWS__BucketName"] ?? "basms-files";
-    options.Region = builder.Configuration["AWS_REGION"] ?? builder.Configuration["AWS__Region"] ?? "ap-southeast-2";
-    options.AccessKey = builder.Configuration["AWS_ACCESS_KEY"] ?? builder.Configuration["AWS__AccessKey"] ?? string.Empty;
-    options.SecretKey = builder.Configuration["AWS_SECRET_KEY"] ?? builder.Configuration["AWS__SecretKey"] ?? string.Empty;
-    options.FolderPrefix = "incidents/media";
+    options.BucketName = awsBucketName;
+    options.Region = awsRegion;
+    options.AccessKey = awsAccessKey;
+    options.SecretKey = awsSecretKey;
+    options.FolderPrefix = awsFolderPrefix;
 });
 
+var awsOptions = new AWSOptions
+{
+    Credentials = new BasicAWSCredentials(awsAccessKey, awsSecretKey),
+    Region = RegionEndpoint.GetBySystemName(awsRegion)
+};
+
+if (awsOptions.Region == null)
+{
+    throw new InvalidOperationException($"Invalid AWS Region: '{awsRegion}'. Valid examples: ap-southeast-2, us-east-1, eu-west-1");
+}
+
+builder.Services.AddDefaultAWSOptions(awsOptions);
+builder.Services.AddAWSService<IAmazonS3>();
 builder.Services.AddScoped<Incidents.API.Extensions.IS3Service, Incidents.API.Extensions.S3Service>();
 
 // Đăng ký MassTransit with RabbitMQ
