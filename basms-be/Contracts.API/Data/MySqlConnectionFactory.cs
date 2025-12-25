@@ -239,7 +239,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                 CREATE TABLE IF NOT EXISTS `public_holidays` (
                     `Id` CHAR(36) PRIMARY KEY,
                     `ContractId` CHAR(36) NULL COMMENT 'Hợp đồng quy định ngày lễ này (nếu có)',
-                    `HolidayDate` DATE UNIQUE NOT NULL,
+                    `HolidayDate` DATE NOT NULL,
                     `HolidayName` VARCHAR(200) NOT NULL,
                     `HolidayNameEn` VARCHAR(200) NULL,
                     `HolidayCategory` VARCHAR(50) NOT NULL COMMENT 'national, tet, regional, substitute',
@@ -267,6 +267,7 @@ public class MySqlConnectionFactory : IDbConnectionFactory
                     INDEX `idx_holiday_tet` (`IsTetPeriod`, `Year`),
                     INDEX `idx_holiday_tet_main` (`IsTetHoliday`, `Year`),
                     INDEX `idx_holiday_date_range` (`HolidayStartDate`, `HolidayEndDate`),
+                    UNIQUE INDEX `uk_holiday_contract_date` (`ContractId`, `HolidayDate`),
                     FOREIGN KEY (`ContractId`) REFERENCES `contracts`(`Id`) ON DELETE CASCADE
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 COMMENT='Ngày lễ quốc gia Việt Nam - bao gồm Tết và các ngày lễ khác';
