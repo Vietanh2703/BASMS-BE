@@ -1,8 +1,6 @@
 namespace Chats.API.ChatHandler.CreateConversation;
 
-/// <summary>
-/// Endpoint để tạo conversation mới
-/// </summary>
+
 public class CreateConversationEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
