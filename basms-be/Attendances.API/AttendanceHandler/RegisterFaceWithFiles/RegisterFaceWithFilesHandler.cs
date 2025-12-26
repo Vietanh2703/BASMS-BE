@@ -303,11 +303,27 @@ internal class RegisterFaceWithFilesHandler(
                     _ => LogLevel.Debug
                 };
 
-                logger.Log(logLevel,
-                    "[Python API] [{Step}] {Message} {PoseType}",
-                    log.Step,
-                    log.Message,
-                    log.PoseType != null ? $"(pose: {log.PoseType})" : "");
+                var logMessage = $"[{log.Status.ToUpper()}] [{log.Step}] {log.Message}";
+                if (log.PoseType != null)
+                {
+                    logMessage += $" (pose: {log.PoseType})";
+                }
+
+                if (log.Details != null && log.Details.Count > 0)
+                {
+                    if (log.Step == "quality_assessment" && log.Details.ContainsKey("resolution"))
+                    {
+                        logMessage += $"\nResolution: {log.Details["resolution"]}, " +
+                                     $"Confidence: {log.Details["confidence"]}%, " +
+                                     $"Sharpness raw: {log.Details["sharpness_raw"]} (/{log.Details["sharpness_divisor"]}), " +
+                                     $"Sharpness score: {log.Details["sharpness_score"]}, " +
+                                     $"Brightness: {log.Details["brightness"]}, " +
+                                     $"Brightness score: {log.Details["brightness_score"]}, " +
+                                     $"Min threshold: {log.Details["min_threshold"]}";
+                    }
+                }
+
+                logger.Log(logLevel, logMessage);
             }
 
             return new RegisterFaceWithFilesResult

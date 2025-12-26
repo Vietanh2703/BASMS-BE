@@ -13,9 +13,8 @@ public class CreateIncidentHandler(
         CancellationToken cancellationToken)
     {
         logger.LogInformation(
-            "Creating incident: {Title} by {ReporterName}",
-            command.Title,
-            command.ReporterName);
+            "Creating incident: {Title}",
+            command.Title);
 
         using var connection = await connectionFactory.CreateConnectionAsync();
 
@@ -54,12 +53,10 @@ public class CreateIncidentHandler(
                 ShiftId = command.ShiftId,
                 ShiftAssignmentId = command.ShiftAssignmentId,
                 ReporterId = command.ReporterId,
-                ReporterName = command.ReporterName,
-                ReporterEmail = command.ReporterEmail,
-                ReportedTime = DateTime.UtcNow,
+                ReportedTime = Incidents.API.Extensions.DateTimeExtensions.GetVietnamTime(),
                 Status = "REPORTED",
                 IsDeleted = false,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = Incidents.API.Extensions.DateTimeExtensions.GetVietnamTime(),
                 CreatedBy = command.ReporterId
             };
 
@@ -84,6 +81,8 @@ public class CreateIncidentHandler(
                 {
                     try
                     {
+                        var fileSize = mediaFile.FileStream.Length;
+
                         var uploadResult = await s3Service.UploadFileAsync(
                             mediaFile.FileStream,
                             mediaFile.FileName,
@@ -99,14 +98,13 @@ public class CreateIncidentHandler(
                                 MediaType = mediaFile.MediaType.ToUpper(),
                                 FileUrl = uploadResult.FileUrl,
                                 FileName = mediaFile.FileName,
-                                FileSize = mediaFile.FileStream.Length,
+                                FileSize = fileSize,
                                 MimeType = mediaFile.ContentType,
                                 Caption = mediaFile.Caption,
                                 DisplayOrder = mediaFilesUploaded + 1,
                                 UploadedBy = command.ReporterId,
-                                UploadedByName = command.ReporterName,
                                 IsDeleted = false,
-                                CreatedAt = DateTime.UtcNow
+                                CreatedAt = Incidents.API.Extensions.DateTimeExtensions.GetVietnamTime()
                             };
 
                             await connection.InsertAsync(incidentMedia);

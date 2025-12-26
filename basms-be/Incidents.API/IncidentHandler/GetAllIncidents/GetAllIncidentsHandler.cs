@@ -112,7 +112,7 @@ internal class GetAllIncidentsHandler(
                     Severity,
                     IncidentTime,
                     Location,
-                    LocationId,
+                    ShiftLocation,
                     ShiftId,
                     ShiftAssignmentId,
                     ReporterId,

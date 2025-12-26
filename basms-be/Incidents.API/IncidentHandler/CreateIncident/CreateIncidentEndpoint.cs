@@ -4,7 +4,7 @@ public class CreateIncidentEndpoint : ICarterModule
 {
     public void AddRoutes(IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/incidents", async (
+        app.MapPost("/api/incidents/create", async (
             HttpRequest request,
             ISender sender,
             ILogger<CreateIncidentEndpoint> logger) =>
@@ -32,12 +32,23 @@ public class CreateIncidentEndpoint : ICarterModule
                 var shiftIdStr = form["shiftId"].ToString();
                 var shiftAssignmentIdStr = form["shiftAssignmentId"].ToString();
                 var reporterIdStr = form["reporterId"].ToString();
-                var reporterName = form["reporterName"].ToString();
-                var reporterEmail = form["reporterEmail"].ToString();
 
-                if (!DateTime.TryParse(incidentTimeStr, out var incidentTime))
+                DateTime incidentTime;
+                if (!string.IsNullOrEmpty(incidentTimeStr))
                 {
-                    incidentTime = DateTime.UtcNow;
+                    if (TimeOnly.TryParse(incidentTimeStr, out var timeOnly))
+                    {
+                        var today = Incidents.API.Extensions.DateTimeExtensions.GetVietnamTime().Date;
+                        incidentTime = today.Add(timeOnly.ToTimeSpan());
+                    }
+                    else if (!DateTime.TryParse(incidentTimeStr, out incidentTime))
+                    {
+                        incidentTime = Incidents.API.Extensions.DateTimeExtensions.GetVietnamTime();
+                    }
+                }
+                else
+                {
+                    incidentTime = Incidents.API.Extensions.DateTimeExtensions.GetVietnamTime();
                 }
 
                 Guid? shiftId = Guid.TryParse(shiftIdStr, out var sId) ? sId : null;
@@ -94,8 +105,6 @@ public class CreateIncidentEndpoint : ICarterModule
                     shiftId,
                     shiftAssignmentId,
                     reporterId,
-                    reporterName,
-                    reporterEmail,
                     mediaFiles.Any() ? mediaFiles : null
                 );
 
