@@ -295,17 +295,19 @@ internal class ImportContractFromDocumentHandler(
                             warnings.Add($"Lỗi khi lấy tọa độ GPS: {gpsEx.Message}");
                         }
 
+                    var locationCode = await GenerateLocationCodeAsync(connection, customerId, transaction);
+
                     var location = new CustomerLocation
                     {
                         Id = Guid.NewGuid(),
                         CustomerId = customerId,
-                        LocationCode = $"LOC-{DateTime.Now:yyyyMMdd}-001",
+                        LocationCode = locationCode,
                         LocationName = finalLocationName,
                         LocationType = "office",
                         Address = finalLocationAddress,
                         Latitude = latitude,
                         Longitude = longitude,
-                        GeofenceRadiusMeters = 100, 
+                        GeofenceRadiusMeters = 100,
                         OperatingHoursType = "24/7",
                         FollowsStandardWorkweek = true,
                         Requires24x7Coverage = false,
@@ -402,45 +404,32 @@ internal class ImportContractFromDocumentHandler(
                 
                 foreach (var holidayInfo in dieu3Info.PublicHolidays)
                 {
-                    var existingHoliday = await connection.QueryFirstOrDefaultAsync<PublicHoliday>(
-                        "SELECT * FROM public_holidays WHERE HolidayDate = @Date AND Year = @Year LIMIT 1",
-                        new { Date = holidayInfo.HolidayDate, holidayInfo.Year },
-                        transaction);
-
-                    if (existingHoliday == null)
+                    var holiday = new PublicHoliday
                     {
-                        var holiday = new PublicHoliday
-                        {
-                            Id = Guid.NewGuid(),
-                            ContractId = contract.Id,
-                            HolidayDate = holidayInfo.HolidayDate,
-                            HolidayName = holidayInfo.HolidayName,
-                            HolidayNameEn = holidayInfo.HolidayNameEn,
-                            HolidayCategory = holidayInfo.HolidayCategory,
-                            IsTetPeriod = holidayInfo.IsTetPeriod,
-                            IsTetHoliday = holidayInfo.IsTetHoliday,
-                            TetDayNumber = holidayInfo.TetDayNumber,
-                            HolidayStartDate = holidayInfo.HolidayStartDate,
-                            HolidayEndDate = holidayInfo.HolidayEndDate,
-                            TotalHolidayDays = holidayInfo.TotalHolidayDays,
-                            IsOfficialHoliday = true,
-                            IsObserved = true,
-                            AppliesNationwide = true,
-                            StandardWorkplacesClosed = true,
-                            EssentialServicesOperating = true,
-                            Year = holidayInfo.Year,
-                            CreatedAt = DateTime.UtcNow
-                        };
+                        Id = Guid.NewGuid(),
+                        ContractId = contract.Id,
+                        HolidayDate = holidayInfo.HolidayDate,
+                        HolidayName = holidayInfo.HolidayName,
+                        HolidayNameEn = holidayInfo.HolidayNameEn,
+                        HolidayCategory = holidayInfo.HolidayCategory,
+                        IsTetPeriod = holidayInfo.IsTetPeriod,
+                        IsTetHoliday = holidayInfo.IsTetHoliday,
+                        TetDayNumber = holidayInfo.TetDayNumber,
+                        HolidayStartDate = holidayInfo.HolidayStartDate,
+                        HolidayEndDate = holidayInfo.HolidayEndDate,
+                        TotalHolidayDays = holidayInfo.TotalHolidayDays,
+                        IsOfficialHoliday = true,
+                        IsObserved = true,
+                        AppliesNationwide = true,
+                        StandardWorkplacesClosed = true,
+                        EssentialServicesOperating = true,
+                        Year = holidayInfo.Year,
+                        CreatedAt = DateTime.UtcNow
+                    };
 
-                        await connection.InsertAsync(holiday, transaction);
-                        logger.LogInformation("Public holiday created: {Name} on {Date} for Contract {ContractId}",
-                            holiday.HolidayName, holiday.HolidayDate.ToShortDateString(), contract.Id);
-                    }
-                    else
-                    {
-                        logger.LogInformation("Public holiday already exists: {Name} on {Date}",
-                            existingHoliday.HolidayName, existingHoliday.HolidayDate.ToShortDateString());
-                    }
+                    await connection.InsertAsync(holiday, transaction);
+                    logger.LogInformation("Public holiday created: {Name} on {Date} for Contract {ContractId}",
+                        holiday.HolidayName, holiday.HolidayDate.ToShortDateString(), contract.Id);
                 }
                 
                 foreach (var subInfo in dieu3Info.SubstituteWorkDays)
@@ -1250,6 +1239,41 @@ internal class ImportContractFromDocumentHandler(
         }
     }
 
+    private async Task<string> GenerateLocationCodeAsync(
+        IDbConnection connection,
+        Guid customerId,
+        IDbTransaction? transaction = null)
+    {
+        var today = DateTime.Now.ToString("yyyyMMdd");
+        var prefix = $"LOC-{today}-";
+
+        var existingLocations = await connection.QueryAsync<string>(
+            @"SELECT LocationCode
+              FROM customer_locations
+              WHERE CustomerId = @CustomerId
+                AND LocationCode LIKE @Prefix
+                AND IsDeleted = 0
+              ORDER BY LocationCode DESC
+              LIMIT 1",
+            new { CustomerId = customerId, Prefix = $"{prefix}%" },
+            transaction);
+
+        var lastCode = existingLocations.FirstOrDefault();
+
+        if (string.IsNullOrEmpty(lastCode))
+        {
+            return $"{prefix}001";
+        }
+
+        var lastNumberStr = lastCode.Substring(prefix.Length);
+        if (int.TryParse(lastNumberStr, out var lastNumber))
+        {
+            return $"{prefix}{(lastNumber + 1):D3}";
+        }
+
+        return $"{prefix}001";
+    }
+
     private async Task CreateOrUpdateContractPeriodAsync(
         IDbConnection connection,
         IDbTransaction transaction,
@@ -1487,8 +1511,8 @@ internal class ImportContractFromDocumentHandler(
         
         var patterns = new[]
         {
-            @"[•\-]\s*Ca\s+(sáng|chiều|tối|đêm|khuya)\s*[:：]\s*(\d{1,2})h(\d{2})?\s*[–\-—]\s*(\d{1,2})h(\d{2})?(?:\s+ngày\s+hôm\s+sau)?",
-            @"Ca\s+(sáng|chiều|tối|đêm|khuya)\s*[:：]\s*(\d{1,2})h(\d{2})?\s*[–\-—]\s*(\d{1,2})h(\d{2})?(?:\s+ngày\s+hôm\s+sau)?"
+            @"[•\-]\s*Ca\s+(sáng|chiều|tối|đêm|khuya)\s*[:：]\s*(?:Từ\s+)?(\d{1,2})h(\d{2})?\s*[–\-—]\s*(\d{1,2})h(\d{2})?(?:\s+ngày\s+hôm\s+sau)?",
+            @"Ca\s+(sáng|chiều|tối|đêm|khuya)\s*[:：]\s*(?:Từ\s+)?(\d{1,2})h(\d{2})?\s*[–\-—]\s*(\d{1,2})h(\d{2})?(?:\s+ngày\s+hôm\s+sau)?"
         };
 
         foreach (var pattern in patterns)

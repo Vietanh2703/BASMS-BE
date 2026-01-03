@@ -44,40 +44,11 @@ public class GetAllIncidentsEndpoint : ICarterModule
         message = "Incidents sorted by incident time (newest first)"
     });
 })
-        // .RequireAuthorization()
+        .RequireAuthorization()
         .WithName("GetAllIncidents")
         .WithTags("Incidents")
         .Produces(200)
         .Produces(400)
-        .WithSummary("Get all incidents")
-        .WithDescription(@"
-            Returns all incidents sorted by incident time (newest first).
-
-            Incident Types:
-            - INTRUSION: Security breach/intrusion
-            - THEFT: Theft incident
-            - FIRE: Fire incident
-            - MEDICAL: Medical emergency
-            - EQUIPMENT_FAILURE: Equipment malfunction
-            - VANDALISM: Vandalism
-            - DISPUTE: Dispute/conflict
-            - OTHER: Other types
-
-            Severity Levels:
-            - LOW: Low severity
-            - MEDIUM: Medium severity
-            - HIGH: High severity
-            - CRITICAL: Critical severity
-
-            Status:
-            - REPORTED: Newly reported
-            - IN_PROGRESS: Being handled
-            - RESOLVED: Resolved
-            - ESCALATED: Escalated to higher authority
-            - CLOSED: Closed
-
-            Examples:
-            GET /api/incidents/get-all
-        ");
+        .WithSummary("Get all incidents");
     }
 }

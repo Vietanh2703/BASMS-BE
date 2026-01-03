@@ -21,20 +21,13 @@ public class CreateIncidentValidator : AbstractValidator<CreateIncidentCommand>
 
         RuleFor(x => x.IncidentTime)
             .NotEmpty().WithMessage("IncidentTime is required")
-            .LessThanOrEqualTo(DateTime.UtcNow).WithMessage("IncidentTime cannot be in the future");
+            .LessThanOrEqualTo(Incidents.API.Extensions.DateTimeExtensions.GetVietnamTime()).WithMessage("IncidentTime cannot be in the future");
 
         RuleFor(x => x.Location)
             .NotEmpty().WithMessage("Location is required");
 
         RuleFor(x => x.ReporterId)
             .NotEmpty().WithMessage("ReporterId is required");
-
-        RuleFor(x => x.ReporterName)
-            .NotEmpty().WithMessage("ReporterName is required");
-
-        RuleFor(x => x.ReporterEmail)
-            .NotEmpty().WithMessage("ReporterEmail is required")
-            .EmailAddress().WithMessage("Invalid email format");
     }
 
     private bool BeValidIncidentType(string type)

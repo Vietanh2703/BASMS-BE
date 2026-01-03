@@ -80,8 +80,8 @@ public class UpdateShiftSchedulesValidation : AbstractValidator<UpdateShiftSched
             .WithMessage("Effective from date is required");
 
         RuleFor(x => x)
-            .Must(x => !x.EffectiveTo.HasValue || x.EffectiveTo.Value > x.EffectiveFrom)
-            .WithMessage("Effective to date must be after effective from date")
+            .Must(x => !x.EffectiveTo.HasValue || x.EffectiveTo.Value >= x.EffectiveFrom)
+            .WithMessage("Effective to date must be on or after effective from date")
             .When(x => x.EffectiveTo.HasValue);
 
         RuleFor(x => x.Notes)

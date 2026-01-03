@@ -20,8 +20,6 @@ public record CreateIncidentCommand(
     Guid? ShiftId,
     Guid? ShiftAssignmentId,
     Guid ReporterId,
-    string ReporterName,
-    string ReporterEmail,
     List<MediaFileDto>? MediaFiles
 ) : ICommand<CreateIncidentResult>;
 
