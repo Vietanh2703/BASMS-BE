@@ -56,20 +56,13 @@ internal class GetManagerByIdHandler(
         {
             logger.LogInformation("Getting manager by ID: {ManagerId}", request.Id);
 
-            // Bước 1: Tạo kết nối database
-            using var connection = await connectionFactory.CreateConnectionAsync();
+            // Sử dụng ExecuteQueryAsync helper để clean code
+            var manager = await connectionFactory.ExecuteQueryAsync(
+                async connection => await connection.GetManagerByIdOrThrowAsync(request.Id),
+                logger,
+                "GetManagerById");
 
-            // Bước 2: Lấy manager theo ID từ cache
-            var managers = await connection.GetAllAsync<Managers>();
-            var manager = managers.FirstOrDefault(m => m.Id == request.Id && !m.IsDeleted);
-
-            if (manager == null)
-            {
-                logger.LogWarning("Manager not found with ID: {ManagerId}", request.Id);
-                throw new InvalidOperationException($"Manager with ID {request.Id} not found");
-            }
-
-            // Bước 3: Map entity sang DTO
+            // Map entity sang DTO
             var managerDetailDto = new ManagerDetailDto(
                 Id: manager.Id,
                 IdentityNumber: manager.IdentityNumber,
