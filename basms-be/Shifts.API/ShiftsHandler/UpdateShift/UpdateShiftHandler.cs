@@ -1,8 +1,10 @@
+using Shifts.API.Utilities;
+
 namespace Shifts.API.ShiftsHandler.UpdateShift;
 
 public record UpdateShiftCommand(
     Guid ShiftId,
-    DateTime? ShiftDate,       
+    DateTime? ShiftDate,
     TimeSpan? StartTime,
     TimeSpan? EndTime,
     int? RequiredGuards,
@@ -28,20 +30,29 @@ internal class UpdateShiftHandler(
             logger.LogInformation("Updating shift {ShiftId}", request.ShiftId);
 
             using var connection = await dbFactory.CreateConnectionAsync();
-            
-            var shift = await connection.GetAsync<Models.Shifts>(request.ShiftId);
 
-            if (shift == null || shift.IsDeleted)
-            {
-                logger.LogWarning("Shift {ShiftId} not found", request.ShiftId);
-                throw new InvalidOperationException($"Shift {request.ShiftId} not found");
-            }
+            var shift = await connection.GetShiftByIdOrThrowAsync(request.ShiftId);
 
             logger.LogInformation(
                 "Found shift {ShiftId} at location {LocationId}",
                 shift.Id,
                 shift.LocationId);
-            
+
+            if (request.ShiftDate.HasValue)
+            {
+                var today = DateTime.UtcNow.Date;
+                if (request.ShiftDate.Value.Date <= today)
+                {
+                    logger.LogWarning(
+                        "Cannot update shift to date {ShiftDate:yyyy-MM-dd} which is not after today ({Today:yyyy-MM-dd})",
+                        request.ShiftDate.Value,
+                        today);
+                    throw new InvalidOperationException(
+                        $"Không thể cập nhật ca trực với ngày {request.ShiftDate.Value:yyyy-MM-dd}. " +
+                        $"Ngày ca trực phải sau ngày hôm nay ({today:yyyy-MM-dd}).");
+                }
+            }
+
             if (request.ShiftDate.HasValue && request.ShiftDate.Value.Date != shift.ShiftDate.Date)
             {
                 logger.LogInformation(

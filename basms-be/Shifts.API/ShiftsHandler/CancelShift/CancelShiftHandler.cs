@@ -1,16 +1,17 @@
-namespace Shifts.API.ShiftsHandler.CancelShift;
+using Shifts.API.Utilities;
 
+namespace Shifts.API.ShiftsHandler.CancelShift;
 
 public record CancelShiftCommand(
     Guid ShiftId,
-    string CancellationReason,      
-    Guid CancelledBy              
+    string CancellationReason,
+    Guid CancelledBy
 ) : ICommand<CancelShiftResult>;
 
 public record CancelShiftResult(
     bool Success,
     string Message,
-    int AffectedGuards             
+    int AffectedGuards
 );
 
 internal class CancelShiftHandler(
@@ -31,13 +32,7 @@ internal class CancelShiftHandler(
 
             using var connection = await dbFactory.CreateConnectionAsync();
 
-            var shift = await connection.GetAsync<Models.Shifts>(request.ShiftId);
-
-            if (shift == null || shift.IsDeleted)
-            {
-                logger.LogWarning("Shift {ShiftId} not found", request.ShiftId);
-                throw new InvalidOperationException($"Shift {request.ShiftId} not found");
-            }
+            var shift = await connection.GetShiftByIdOrThrowAsync(request.ShiftId);
             
             if (shift.Status == "CANCELLED")
             {

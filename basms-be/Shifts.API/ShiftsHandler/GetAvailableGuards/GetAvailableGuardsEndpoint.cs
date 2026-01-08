@@ -19,21 +19,18 @@ public class GetAvailableGuardsEndpoint : ICarterModule
             );
 
             var result = await sender.Send(query);
-
             return Results.Ok(result);
         })
-        .RequireAuthorization()
-        .WithTags("Shifts")
-        .WithName("GetAvailableGuards")
-        .Produces<GetAvailableGuardsResult>(StatusCodes.Status200OK)
-        .ProducesProblem(StatusCodes.Status400BadRequest)
-        .ProducesProblem(StatusCodes.Status500InternalServerError)
-        .WithSummary("Get available guards for a shift time slot")
-        .WithDescription(@"Returns a list of all guards with their availability status:
+        .AddStandardGetDocumentation<GetAvailableGuardsResult>(
+            tag: "Shifts",
+            name: "GetAvailableGuards",
+            summary: "Get available guards for a shift time slot",
+            description: @"Returns a list of all guards with their availability status:
             - Available: Guard is free and can be assigned
             - Busy: Guard already has a conflicting shift
             - OnLeave: Guard has approved leave request
 
-            This helps managers easily see which guards can be assigned to a shift.");
+            This helps managers easily see which guards can be assigned to a shift.",
+            canReturnNotFound: false);
     }
 }

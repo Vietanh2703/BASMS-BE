@@ -1,3 +1,5 @@
+using Shifts.API.Utilities;
+
 namespace Shifts.API.ShiftsHandler.GetShiftTemplateByManager;
 
 public class GetShiftTemplateByManagerEndpoint : ICarterModule
@@ -12,9 +14,7 @@ public class GetShiftTemplateByManagerEndpoint : ICarterModule
             ILogger<GetShiftTemplateByManagerEndpoint> logger,
             CancellationToken cancellationToken) =>
         {
-            logger.LogInformation(
-                "GET /api/shifts/templates/by-manager/{ManagerId} - Getting shift templates",
-                managerId);
+            logger.LogInformation("GET /api/shifts/templates/by-manager/{ManagerId} - Getting shift templates", managerId);
 
             var query = new GetShiftTemplateByManagerQuery(
                 ManagerId: managerId,
@@ -26,11 +26,7 @@ public class GetShiftTemplateByManagerEndpoint : ICarterModule
 
             if (!result.Success)
             {
-                logger.LogWarning(
-                    "Failed to get shift templates for Manager {ManagerId}: {Error}",
-                    managerId,
-                    result.ErrorMessage);
-
+                logger.LogWarning("Failed to get shift templates for Manager {ManagerId}: {Error}", managerId, result.ErrorMessage);
                 return Results.BadRequest(new
                 {
                     success = false,
@@ -38,10 +34,7 @@ public class GetShiftTemplateByManagerEndpoint : ICarterModule
                 });
             }
 
-            logger.LogInformation(
-                "Found {Count} shift templates for Manager {ManagerId}",
-                result.TotalCount,
-                managerId);
+            logger.LogInformation("Found {Count} shift templates for Manager {ManagerId}", result.TotalCount, managerId);
 
             return Results.Ok(new
             {
@@ -56,10 +49,11 @@ public class GetShiftTemplateByManagerEndpoint : ICarterModule
                 }
             });
         })
-        .WithName("GetShiftTemplateByManager")
-        .WithTags("Shift Templates")
-        .Produces(200)
-        .Produces(400)
-        .WithSummary("Get all shift templates for a specific manager");
+        .AddStandardGetDocumentation<object>(
+            tag: "Shift Templates",
+            name: "GetShiftTemplateByManager",
+            summary: "Get all shift templates for a specific manager",
+            requiresAuth: false,
+            canReturnNotFound: false);
     }
 }

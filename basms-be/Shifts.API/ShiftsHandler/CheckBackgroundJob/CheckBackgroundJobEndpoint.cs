@@ -1,3 +1,5 @@
+using Shifts.API.Utilities;
+
 namespace Shifts.API.ShiftsHandler.CheckBackgroundJob;
 
 public class CheckBackgroundJobEndpoint : ICarterModule
@@ -83,11 +85,14 @@ public class CheckBackgroundJobEndpoint : ICarterModule
 
             return Results.Ok(response);
         })
-        .WithName("CheckBackgroundJobStatus")
-        .WithTags("Shifts - Background Jobs")
-        .WithSummary("Check background job status and diagnostics")
-        .WithDescription("Returns information about auto-generate shifts background job");
-        
+        .AddStandardGetDocumentation<object>(
+            tag: "Shifts - Background Jobs",
+            name: "CheckBackgroundJobStatus",
+            summary: "Check background job status and diagnostics",
+            description: "Returns information about auto-generate shifts background job",
+            requiresAuth: false,
+            canReturnNotFound: false);
+
         app.MapPost("/api/shifts/background-job/trigger-manual", async (
             [FromServices] IDbConnectionFactory dbFactory,
             [FromServices] IRequestClient<GetContractRequest> contractClient,
@@ -200,10 +205,11 @@ public class CheckBackgroundJobEndpoint : ICarterModule
                 Results = results
             });
         })
-        .WithName("TriggerBackgroundJobManual")
-        .WithTags("Shifts - Background Jobs")
-        .WithSummary("Manually trigger background job check (for testing)");
-
+        .AddStandardPostDocumentation<object>(
+            tag: "Shifts - Background Jobs",
+            name: "TriggerBackgroundJobManual",
+            summary: "Manually trigger background job check (for testing)",
+            requiresAuth: false);
 
         app.MapGet("/api/shifts/background-job/check-contract/{contractId:guid}", async (
             [FromRoute] Guid contractId,
@@ -296,8 +302,11 @@ public class CheckBackgroundJobEndpoint : ICarterModule
                 }
             });
         })
-        .WithName("CheckContractBackgroundJob")
-        .WithTags("Shifts - Background Jobs")
-        .WithSummary("Check if specific contract will trigger background job");
+        .AddStandardGetDocumentation<object>(
+            tag: "Shifts - Background Jobs",
+            name: "CheckContractBackgroundJob",
+            summary: "Check if specific contract will trigger background job",
+            requiresAuth: false,
+            canReturnNotFound: false);
     }
 }

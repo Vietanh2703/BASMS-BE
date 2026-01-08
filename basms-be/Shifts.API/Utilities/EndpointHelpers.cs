@@ -1,16 +1,7 @@
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
-
 namespace Shifts.API.Utilities;
 
-/// <summary>
-/// Helper methods để setup endpoints một cách clean và consistent
-/// </summary>
 public static class EndpointHelpers
 {
-    /// <summary>
-    /// Add standard endpoint documentation với common status codes
-    /// </summary>
     public static RouteHandlerBuilder AddStandardEndpointDocumentation(
         this RouteHandlerBuilder builder,
         string tag,
@@ -44,9 +35,6 @@ public static class EndpointHelpers
         return builder;
     }
 
-    /// <summary>
-    /// Add standard POST endpoint documentation (201 Created)
-    /// </summary>
     public static RouteHandlerBuilder AddStandardPostDocumentation<TResponse>(
         this RouteHandlerBuilder builder,
         string tag,
@@ -64,9 +52,6 @@ public static class EndpointHelpers
         return builder;
     }
 
-    /// <summary>
-    /// Add standard GET endpoint documentation (200 OK)
-    /// </summary>
     public static RouteHandlerBuilder AddStandardGetDocumentation<TResponse>(
         this RouteHandlerBuilder builder,
         string tag,
@@ -88,9 +73,6 @@ public static class EndpointHelpers
         return builder;
     }
 
-    /// <summary>
-    /// Add standard PUT endpoint documentation (200 OK)
-    /// </summary>
     public static RouteHandlerBuilder AddStandardPutDocumentation<TResponse>(
         this RouteHandlerBuilder builder,
         string tag,
@@ -108,9 +90,6 @@ public static class EndpointHelpers
         return builder;
     }
 
-    /// <summary>
-    /// Add standard DELETE endpoint documentation (200 OK)
-    /// </summary>
     public static RouteHandlerBuilder AddStandardDeleteDocumentation<TResponse>(
         this RouteHandlerBuilder builder,
         string tag,
@@ -128,9 +107,6 @@ public static class EndpointHelpers
         return builder;
     }
 
-    /// <summary>
-    /// Add standard PATCH endpoint documentation (200 OK)
-    /// </summary>
     public static RouteHandlerBuilder AddStandardPatchDocumentation<TResponse>(
         this RouteHandlerBuilder builder,
         string tag,
@@ -146,5 +122,16 @@ public static class EndpointHelpers
             .ProducesProblem(StatusCodes.Status404NotFound);
 
         return builder;
+    }
+    
+    public static Guid GetUserIdFromContext(this HttpContext context)
+    {
+        var userIdClaim = context.User.FindFirst("userId")?.Value;
+        if (!string.IsNullOrEmpty(userIdClaim) && Guid.TryParse(userIdClaim, out var userId))
+        {
+            return userId;
+        }
+
+        return Guid.NewGuid();
     }
 }

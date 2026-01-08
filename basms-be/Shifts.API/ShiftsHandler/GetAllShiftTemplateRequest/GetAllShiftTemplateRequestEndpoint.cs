@@ -1,3 +1,5 @@
+using Shifts.API.Utilities;
+
 namespace Shifts.API.ShiftsHandler.GetAllShiftTemplateRequest;
 
 public class GetAllShiftTemplateRequestEndpoint : ICarterModule
@@ -75,14 +77,9 @@ public class GetAllShiftTemplateRequestEndpoint : ICarterModule
                 })
             });
         })
-        .RequireAuthorization()
-        .WithTags("Shift Templates")
-        .WithName("GetAllShiftTemplateRequest")
-        .Produces<GetAllShiftTemplateRequestResult>(StatusCodes.Status200OK)
-        .ProducesProblem(StatusCodes.Status400BadRequest)
-        .ProducesProblem(StatusCodes.Status401Unauthorized)
-        .ProducesProblem(StatusCodes.Status404NotFound)
-        .ProducesProblem(StatusCodes.Status500InternalServerError)
-        .WithSummary("Get all shift templates pending shift creation");
+        .AddStandardGetDocumentation<GetAllShiftTemplateRequestResult>(
+            tag: "Shift Templates",
+            name: "GetAllShiftTemplateRequest",
+            summary: "Get all shift templates pending shift creation");
     }
 }

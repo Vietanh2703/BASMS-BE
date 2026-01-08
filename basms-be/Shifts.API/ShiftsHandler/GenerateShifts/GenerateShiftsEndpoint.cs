@@ -14,17 +14,12 @@ public class GenerateShiftsEndpoint : ICarterModule
             );
 
             var result = await sender.Send(command);
-
             return Results.Ok(result);
         })
-        .WithTags("Shifts - Auto Generation")
-        .WithName("GenerateShifts")
-        .Produces<GenerateShiftsResult>(StatusCodes.Status200OK)
-        .ProducesProblem(StatusCodes.Status400BadRequest)
-        .ProducesProblem(StatusCodes.Status401Unauthorized)
-        .ProducesProblem(StatusCodes.Status404NotFound)
-        .ProducesProblem(StatusCodes.Status500InternalServerError)
-        .WithSummary("Generate shifts from shift template");
+        .AddStandardPostDocumentation<GenerateShiftsResult>(
+            tag: "Shifts - Auto Generation",
+            name: "GenerateShifts",
+            summary: "Generate shifts from shift template");
     }
 }
 

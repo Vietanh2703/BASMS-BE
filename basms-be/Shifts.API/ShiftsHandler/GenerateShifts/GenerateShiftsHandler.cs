@@ -20,13 +20,29 @@ public class GenerateShiftsHandler(
             command.ShiftTemplateIds.Count,
             command.ManagerId);
 
-        var generateFrom = command.GenerateFromDate ?? DateTime.UtcNow.Date;
-        var generateTo = generateFrom.AddDays(command.GenerateDays);
+        var today = DateTime.UtcNow.Date;
+        var generateFrom = command.GenerateFromDate ?? today.AddDays(1);
 
         var createdShifts = new List<Models.Shifts>();
         var generatedShifts = new List<GeneratedShiftDto>();
         var skipReasons = new List<SkipReason>();
         var errors = new List<string>();
+
+        if (generateFrom <= today)
+        {
+            errors.Add(
+                $"GenerateFromDate {generateFrom:yyyy-MM-dd} phải sau ngày hôm nay. " +
+                $"Ngày tạo ca phải sau ({today:yyyy-MM-dd}).");
+            logger.LogError(
+                "GenerateFromDate {GenerateFromDate:yyyy-MM-dd} is not after today (today: {Today:yyyy-MM-dd})",
+                generateFrom,
+                today);
+            var generateToError = generateFrom.AddDays(command.GenerateDays);
+            return CreateErrorResult(generateFrom, generateToError, errors);
+        }
+
+        var generateTo = generateFrom.AddDays(command.GenerateDays);
+        logger.LogInformation("✓ Generate date range validation passed: {From:yyyy-MM-dd} to {To:yyyy-MM-dd}", generateFrom, generateTo);
 
         using var connection = await connectionFactory.CreateConnectionAsync();
 

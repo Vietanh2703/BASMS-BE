@@ -257,7 +257,15 @@ public class ImportShiftTemplatesHandler(
         {
             warnings.Add($"GuardsPerShift {schedule.GuardsPerShift} seems unusually high. Please verify.");
         }
-        
+
+        var today = DateTime.UtcNow.Date;
+        if (schedule.EffectiveFrom.Date <= today)
+        {
+            errors.Add(
+                $"EffectiveFrom {schedule.EffectiveFrom:yyyy-MM-dd} phải sau ngày hôm nay ({today:yyyy-MM-dd}). " +
+                $"Không thể tạo shift template với ngày bắt đầu trong quá khứ hoặc hôm nay.");
+        }
+
         if (schedule.EffectiveTo.HasValue && schedule.EffectiveTo.Value < schedule.EffectiveFrom)
         {
             errors.Add(

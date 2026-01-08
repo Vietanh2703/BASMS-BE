@@ -1,15 +1,16 @@
+using Shifts.API.Utilities;
+
 namespace Shifts.API.TeamsHandler.CreateTeam;
 
 public record CreateTeamCommand(
-    Guid ManagerId,                 
-    string TeamName,               
-    string? Specialization,        
-    string? Description,            
-    int MinMembers,                 
-    int? MaxMembers,               
-    Guid CreatedBy                  
+    Guid ManagerId,
+    string TeamName,
+    string? Specialization,
+    string? Description,
+    int MinMembers,
+    int? MaxMembers,
+    Guid CreatedBy
 ) : ICommand<CreateTeamResult>;
-
 
 public record CreateTeamResult(
     Guid TeamId,
@@ -34,22 +35,10 @@ internal class CreateTeamHandler(
                 request.ManagerId);
 
             using var connection = await dbFactory.CreateConnectionAsync();
-            
+
             logger.LogInformation("Validating manager {ManagerId}", request.ManagerId);
 
-            var manager = await connection.QueryFirstOrDefaultAsync<Managers>(
-                @"SELECT * FROM managers
-                  WHERE Id = @ManagerId
-                    AND IsDeleted = 0
-                    AND IsActive = 1",
-                new { request.ManagerId });
-
-            if (manager == null)
-            {
-                logger.LogWarning("Manager {ManagerId} not found or inactive", request.ManagerId);
-                throw new InvalidOperationException(
-                    $"Manager {request.ManagerId} không tồn tại hoặc không active");
-            }
+            var manager = await connection.GetManagerByIdOrThrowAsync(request.ManagerId);
 
             logger.LogInformation(
                 "Manager validated: {FullName} ({EmployeeCode})",

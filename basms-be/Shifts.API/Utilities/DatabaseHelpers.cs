@@ -1,20 +1,9 @@
-using System.Data;
-using Dapper.Contrib.Extensions;
 using BuildingBlocks.Exceptions;
-using Shifts.API.Models;
-
 namespace Shifts.API.Utilities;
 
-/// <summary>
-/// Database helper methods để giảm code lặp lại trong handlers
-/// </summary>
 public static class DatabaseHelpers
 {
     #region Guard Helpers
-
-    /// <summary>
-    /// Get guard by ID với validation, tự động throw exception nếu không tìm thấy
-    /// </summary>
     public static async Task<Guards> GetGuardByIdOrThrowAsync(
         this IDbConnection connection,
         Guid guardId,
@@ -117,10 +106,6 @@ public static class DatabaseHelpers
     #endregion
 
     #region Manager Helpers
-
-    /// <summary>
-    /// Get manager by ID với validation
-    /// </summary>
     public static async Task<Managers> GetManagerByIdOrThrowAsync(
         this IDbConnection connection,
         Guid managerId,
@@ -205,10 +190,6 @@ public static class DatabaseHelpers
     #endregion
 
     #region Shift Helpers
-
-    /// <summary>
-    /// Get shift by ID với validation
-    /// </summary>
     public static async Task<Models.Shifts> GetShiftByIdOrThrowAsync(
         this IDbConnection connection,
         Guid shiftId,
@@ -284,10 +265,6 @@ public static class DatabaseHelpers
     #endregion
 
     #region Team Helpers
-
-    /// <summary>
-    /// Get team by ID với validation
-    /// </summary>
     public static async Task<Teams> GetTeamByIdOrThrowAsync(
         this IDbConnection connection,
         Guid teamId,
@@ -339,10 +316,6 @@ public static class DatabaseHelpers
     #endregion
 
     #region Shift Assignment Helpers
-
-    /// <summary>
-    /// Get shift assignment by ID
-    /// </summary>
     public static async Task<ShiftAssignments> GetShiftAssignmentByIdOrThrowAsync(
         this IDbConnection connection,
         Guid assignmentId,
@@ -396,10 +369,6 @@ public static class DatabaseHelpers
     #endregion
 
     #region Wage Rate Helpers
-
-    /// <summary>
-    /// Get wage rate by ID
-    /// </summary>
     public static async Task<WageRates> GetWageRateByIdOrThrowAsync(
         this IDbConnection connection,
         Guid wageRateId,

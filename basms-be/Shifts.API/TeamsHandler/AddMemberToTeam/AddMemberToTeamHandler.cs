@@ -1,13 +1,14 @@
+using Shifts.API.Utilities;
+
 namespace Shifts.API.TeamsHandler.AddMemberToTeam;
 
 public record AddMemberToTeamCommand(
-    Guid TeamId,                    
-    Guid GuardId,                  
-    string Role,                    
-    string? JoiningNotes,           
-    Guid CreatedBy                  
+    Guid TeamId,
+    Guid GuardId,
+    string Role,
+    string? JoiningNotes,
+    Guid CreatedBy
 ) : ICommand<AddMemberToTeamResult>;
-
 
 public record AddMemberToTeamResult(
     Guid TeamMemberId,
@@ -36,17 +37,10 @@ internal class AddMemberToTeamHandler(
                 request.Role);
 
             using var connection = await dbFactory.CreateConnectionAsync();
-            
+
             logger.LogInformation("Validating team {TeamId}", request.TeamId);
 
-            var team = await connection.GetAsync<Teams>(request.TeamId);
-
-            if (team == null || team.IsDeleted)
-            {
-                logger.LogWarning("Team {TeamId} not found", request.TeamId);
-                throw new InvalidOperationException(
-                    $"Team {request.TeamId} không tồn tại");
-            }
+            var team = await connection.GetTeamByIdOrThrowAsync(request.TeamId);
 
             if (!team.IsActive)
             {
@@ -77,14 +71,7 @@ internal class AddMemberToTeamHandler(
 
             logger.LogInformation("Validating guard {GuardId}", request.GuardId);
 
-            var guard = await connection.GetAsync<Guards>(request.GuardId);
-
-            if (guard == null || guard.IsDeleted)
-            {
-                logger.LogWarning("Guard {GuardId} not found", request.GuardId);
-                throw new InvalidOperationException(
-                    $"Guard {request.GuardId} không tồn tại");
-            }
+            var guard = await connection.GetGuardByIdOrThrowAsync(request.GuardId);
 
             if (!guard.IsActive)
             {

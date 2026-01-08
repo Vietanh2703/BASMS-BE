@@ -1,3 +1,5 @@
+using Shifts.API.Utilities;
+
 namespace Shifts.API.TeamsHandler.CreateTeam;
 
 /// <summary>
@@ -18,12 +20,6 @@ public class CreateTeamEndpoint : ICarterModule
     {
         app.MapPost("/api/shifts/teams", async (CreateTeamRequest req, ISender sender, HttpContext context) =>
         {
-            var userIdClaim = context.User.FindFirst("userId")?.Value;
-            if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
-            {
-                userId = Guid.NewGuid();
-            }
-            
             var command = new CreateTeamCommand(
                 ManagerId: req.ManagerId,
                 TeamName: req.TeamName,
@@ -31,19 +27,15 @@ public class CreateTeamEndpoint : ICarterModule
                 Description: req.Description,
                 MinMembers: req.MinMembers,
                 MaxMembers: req.MaxMembers,
-                CreatedBy: userId
+                CreatedBy: context.GetUserIdFromContext()
             );
-            
-            var result = await sender.Send(command);
 
+            var result = await sender.Send(command);
             return Results.Created($"/teams/{result.TeamId}", result);
         })
-        .RequireAuthorization()
-        .WithTags("Teams")
-        .WithName("CreateTeam")
-        .Produces<CreateTeamResult>(StatusCodes.Status201Created)
-        .ProducesProblem(StatusCodes.Status400BadRequest)
-        .ProducesProblem(StatusCodes.Status500InternalServerError)
-        .WithSummary("Create a new team");
+        .AddStandardPostDocumentation<CreateTeamResult>(
+            tag: "Teams",
+            name: "CreateTeam",
+            summary: "Create a new team");
     }
 }

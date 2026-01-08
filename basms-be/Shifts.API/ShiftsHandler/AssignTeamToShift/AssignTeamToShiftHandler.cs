@@ -1,3 +1,5 @@
+using Shifts.API.Utilities;
+
 namespace Shifts.API.ShiftsHandler.AssignTeamToShift;
 
 internal class AssignTeamToShiftHandler(
@@ -25,11 +27,12 @@ internal class AssignTeamToShiftHandler(
             var dailySummaries = new List<DailyAssignmentSummary>();
             var warnings = new List<string>();
             var errors = new List<string>();
-            var team = await connection.GetAsync<Teams>(request.TeamId);
 
-            if (team == null || team.IsDeleted || !team.IsActive)
+            var team = await connection.GetTeamByIdOrThrowAsync(request.TeamId);
+
+            if (!team.IsActive)
             {
-                errors.Add($"Team {request.TeamId} không tồn tại hoặc không active");
+                errors.Add($"Team {team.TeamCode} không active");
                 return new AssignTeamToShiftResult
                 {
                     Success = false,

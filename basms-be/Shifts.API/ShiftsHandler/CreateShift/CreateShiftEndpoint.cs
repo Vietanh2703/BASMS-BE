@@ -1,3 +1,5 @@
+using Shifts.API.Utilities;
+
 namespace Shifts.API.ShiftsHandler.CreateShift;
 
 public record CreateShiftRequest(
@@ -17,12 +19,6 @@ public class CreateShiftEndpoint : ICarterModule
     {
         app.MapPost("/api/shifts", async (CreateShiftRequest req, ISender sender, HttpContext context) =>
         {
-            var userIdClaim = context.User.FindFirst("userId")?.Value;
-            if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
-            {
-                userId = Guid.NewGuid();
-            }
-            
             var command = new CreateShiftCommand(
                 ContractId: req.ContractId,
                 LocationId: req.LocationId,
@@ -32,18 +28,15 @@ public class CreateShiftEndpoint : ICarterModule
                 RequiredGuards: req.RequiredGuards,
                 ShiftType: req.ShiftType,
                 Description: req.Description,
-                CreatedBy: userId
+                CreatedBy: context.GetUserIdFromContext()
             );
-            
+
             var result = await sender.Send(command);
             return Results.Created($"/shifts/{result.ShiftId}", result);
         })
-        .RequireAuthorization()
-        .WithTags("Shifts")
-        .WithName("CreateShift")
-        .Produces<CreateShiftResult>(StatusCodes.Status201Created)
-        .ProducesProblem(StatusCodes.Status400BadRequest)
-        .ProducesProblem(StatusCodes.Status500InternalServerError)
-        .WithSummary("Create a new shift");
+        .AddStandardPostDocumentation<CreateShiftResult>(
+            tag: "Shifts",
+            name: "CreateShift",
+            summary: "Create a new shift");
     }
 }

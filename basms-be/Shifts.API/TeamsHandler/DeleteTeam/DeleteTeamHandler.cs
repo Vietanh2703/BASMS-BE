@@ -1,8 +1,10 @@
+using Shifts.API.Utilities;
+
 namespace Shifts.API.TeamsHandler.DeleteTeam;
 
 public record DeleteTeamCommand(
     Guid TeamId,
-    Guid DeletedBy  
+    Guid DeletedBy
 ) : ICommand<DeleteTeamResult>;
 
 public record DeleteTeamResult(
@@ -24,15 +26,8 @@ internal class DeleteTeamHandler(
             logger.LogInformation("Soft deleting team {TeamId}", request.TeamId);
 
             using var connection = await dbFactory.CreateConnectionAsync();
-            var team = await connection.GetAsync<Models.Teams>(request.TeamId);
 
-            if (team == null || team.IsDeleted)
-            {
-                logger.LogWarning("Team {TeamId} not found or already deleted", request.TeamId);
-                return new DeleteTeamResult(
-                    false,
-                    "Team không tồn tại hoặc đã bị xóa");
-            }
+            var team = await connection.GetTeamByIdOrThrowAsync(request.TeamId);
 
             logger.LogInformation(
                 "Found team: {TeamCode} - {TeamName}",

@@ -1,17 +1,7 @@
-using System.Data;
-using Microsoft.Extensions.Logging;
-using Shifts.API.Data;
-
 namespace Shifts.API.Utilities;
 
-/// <summary>
-/// Helper để thực hiện database transactions một cách clean
-/// </summary>
 public static class TransactionHelper
 {
-    /// <summary>
-    /// Execute một action trong transaction với auto commit/rollback
-    /// </summary>
     public static async Task<TResult> ExecuteInTransactionAsync<TResult>(
         this IDbConnectionFactory connectionFactory,
         Func<IDbConnection, IDbTransaction, Task<TResult>> action,
@@ -41,10 +31,7 @@ public static class TransactionHelper
             throw;
         }
     }
-
-    /// <summary>
-    /// Execute một action trong transaction (void return)
-    /// </summary>
+    
     public static async Task ExecuteInTransactionAsync(
         this IDbConnectionFactory connectionFactory,
         Func<IDbConnection, IDbTransaction, Task> action,
@@ -72,10 +59,7 @@ public static class TransactionHelper
             throw;
         }
     }
-
-    /// <summary>
-    /// Execute query without transaction (for read-only operations)
-    /// </summary>
+    
     public static async Task<TResult> ExecuteQueryAsync<TResult>(
         this IDbConnectionFactory connectionFactory,
         Func<IDbConnection, Task<TResult>> query,

@@ -34,7 +34,20 @@ internal class CreateShiftHandler(
                 "Creating shift for location {LocationId} on {ShiftDate:yyyy-MM-dd}",
                 request.LocationId,
                 request.ShiftDate);
-            
+
+            var today = DateTime.UtcNow.Date;
+            if (request.ShiftDate.Date <= today)
+            {
+                logger.LogWarning(
+                    "Shift date {ShiftDate:yyyy-MM-dd} is not after today (today: {Today:yyyy-MM-dd})",
+                    request.ShiftDate,
+                    today);
+                throw new InvalidOperationException(
+                    $"Không thể tạo ca trực với ngày {request.ShiftDate:yyyy-MM-dd}. " +
+                    $"Ngày ca trực phải sau ngày hôm nay ({today:yyyy-MM-dd}).");
+            }
+
+            logger.LogInformation("✓ Shift date validation passed");
             logger.LogInformation("Validating shift time overlap");
 
             var overlapValidation = await shiftValidator.ValidateShiftTimeOverlapAsync(
@@ -188,9 +201,9 @@ internal class CreateShiftHandler(
             date = date.AddDays(3);
         }
 
-        return System.Globalization.CultureInfo.InvariantCulture.Calendar.GetWeekOfYear(
+        return CultureInfo.InvariantCulture.Calendar.GetWeekOfYear(
             date,
-            System.Globalization.CalendarWeekRule.FirstFourDayWeek,
+            CalendarWeekRule.FirstFourDayWeek,
             DayOfWeek.Monday);
     }
 }
