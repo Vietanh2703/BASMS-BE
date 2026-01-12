@@ -1,3 +1,5 @@
+using Shifts.API.Utilities;
+
 namespace Shifts.API.ShiftsHandler.AssignTeamToShift;
 
 internal class AssignTeamToShiftHandler(
@@ -25,11 +27,12 @@ internal class AssignTeamToShiftHandler(
             var dailySummaries = new List<DailyAssignmentSummary>();
             var warnings = new List<string>();
             var errors = new List<string>();
-            var team = await connection.GetAsync<Teams>(request.TeamId);
 
-            if (team == null || team.IsDeleted || !team.IsActive)
+            var team = await connection.GetTeamByIdOrThrowAsync(request.TeamId);
+
+            if (!team.IsActive)
             {
-                errors.Add($"Team {request.TeamId} không tồn tại hoặc không active");
+                errors.Add($"Team {team.TeamCode} không active");
                 return new AssignTeamToShiftResult
                 {
                     Success = false,
@@ -188,6 +191,35 @@ internal class AssignTeamToShiftHandler(
 
                 foreach (var guardId in validGuardIds)
                 {
+                    // CRITICAL FIX: Check if guard already has assignment for this shift
+                    var existingAssignment = await connection.QueryFirstOrDefaultAsync<ShiftAssignments>(
+                        @"SELECT * FROM shift_assignments
+                          WHERE ShiftId = @ShiftId
+                            AND GuardId = @GuardId
+                            AND IsDeleted = 0
+                            AND Status NOT IN ('CANCELLED', 'DECLINED')",
+                        new { ShiftId = shift.Id, GuardId = guardId });
+
+                    if (existingAssignment != null)
+                    {
+                        var guardName = guardDict.TryGetValue(guardId, out var g) ? g.FullName : "Unknown";
+                        var employeeCode = guardDict.TryGetValue(guardId, out var gc) ? gc.EmployeeCode : "Unknown";
+
+                        warnings.Add(
+                            $"Ngày {currentDate:yyyy-MM-dd}: {employeeCode} ({guardName}) " +
+                            $"đã có assignment vào shift này (ID: {existingAssignment.Id}). " +
+                            $"Assignment type: {existingAssignment.AssignmentType}" +
+                            (existingAssignment.TeamId.HasValue ? $", TeamId: {existingAssignment.TeamId}" : ", Individual assignment") +
+                            ". Bỏ qua để tránh duplicate.");
+
+                        logger.LogWarning(
+                            "Guard {GuardId} already assigned to shift {ShiftId}, skipping",
+                            guardId, shift.Id);
+
+                        skippedGuardNames.Add(guardName);
+                        continue;
+                    }
+
                     var assignment = new ShiftAssignments
                     {
                         Id = Guid.NewGuid(),

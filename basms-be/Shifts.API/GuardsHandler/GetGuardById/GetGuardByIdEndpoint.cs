@@ -10,13 +10,10 @@ public class GetGuardByIdEndpoint : ICarterModule
             var result = await sender.Send(query);
             return Results.Ok(result);
         })
-        .RequireAuthorization()
-        .WithTags("Guards")
-        .WithName("GetGuardById")
-        .Produces<GetGuardByIdResult>(StatusCodes.Status200OK)
-        .ProducesProblem(StatusCodes.Status401Unauthorized)
-        .ProducesProblem(StatusCodes.Status404NotFound)
-        .ProducesProblem(StatusCodes.Status500InternalServerError)
-        .WithSummary("Get guard by ID");
+        .AddStandardGetDocumentation<GetGuardByIdResult>(
+            tag: "Guards",
+            name: "GetGuardById",
+            summary: "Get guard by ID",
+            description: "Retrieves detailed information of a specific guard by their ID from cache");
     }
 }

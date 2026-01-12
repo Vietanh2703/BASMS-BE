@@ -1,3 +1,5 @@
+using Shifts.API.Utilities;
+
 namespace Shifts.API.ShiftsHandler.CancelShift;
 
 public record CancelShiftRequest(
@@ -15,12 +17,6 @@ public class CancelShiftEndpoint : ICarterModule
             ISender sender,
             HttpContext context) =>
         {
-            var userIdClaim = context.User.FindFirst("userId")?.Value;
-            if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
-            {
-                userId = Guid.NewGuid();
-            }
-            
             if (string.IsNullOrWhiteSpace(req.CancellationReason))
             {
                 return Results.BadRequest(new
@@ -29,13 +25,13 @@ public class CancelShiftEndpoint : ICarterModule
                     message = "Vui lòng cung cấp lý do hủy ca trực"
                 });
             }
-            
+
             var command = new CancelShiftCommand(
                 ShiftId: shiftId,
                 CancellationReason: req.CancellationReason,
-                CancelledBy: userId
+                CancelledBy: context.GetUserIdFromContext()
             );
-            
+
             var result = await sender.Send(command);
 
             if (!result.Success)
@@ -46,16 +42,12 @@ public class CancelShiftEndpoint : ICarterModule
                     affectedGuards = result.AffectedGuards
                 });
             }
-            
+
             return Results.Ok(result);
         })
-        .RequireAuthorization()
-        .WithTags("Shifts")
-        .WithName("CancelShift")
-        .Produces<CancelShiftResult>(StatusCodes.Status200OK)
-        .ProducesProblem(StatusCodes.Status400BadRequest)
-        .ProducesProblem(StatusCodes.Status404NotFound)
-        .ProducesProblem(StatusCodes.Status500InternalServerError)
-        .WithSummary("Cancel a shift");
+        .AddStandardPostDocumentation<CancelShiftResult>(
+            tag: "Shifts",
+            name: "CancelShift",
+            summary: "Cancel a shift");
     }
 }

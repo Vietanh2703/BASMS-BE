@@ -1,42 +1,45 @@
 namespace Users.API.UsersHandler.UpdateUser;
 
+/// <summary>
+/// Validator cho UpdateUserCommand - Sử dụng ValidationHelpers để giảm code lặp lại
+/// </summary>
 public class UpdateUserValidator : AbstractValidator<UpdateUserCommand>
 {
     public UpdateUserValidator()
     {
+        // User ID - using reusable helper
         RuleFor(x => x.Id)
-            .NotEmpty().WithMessage("User ID is required")
-            .NotEqual(Guid.Empty).WithMessage("User ID must be a valid GUID");
+            .GuidValidation("User ID");
 
+        // Email - using reusable helper (not required for update)
         RuleFor(x => x.Email)
-            .EmailAddress().WithMessage("Invalid email format")
-            .MaximumLength(255).WithMessage("Email must not exceed 255 characters")
+            .EmailValidation(isRequired: false)
             .When(x => !string.IsNullOrEmpty(x.Email));
 
+        // Full Name - specific validation
         RuleFor(x => x.FullName)
             .MaximumLength(255).WithMessage("Full name must not exceed 255 characters")
             .When(x => !string.IsNullOrEmpty(x.FullName));
 
+        // Phone - using reusable helper
         RuleFor(x => x.Phone)
-            .Matches(@"^\+?[1-9]\d{1,14}$").WithMessage("Invalid phone number format")
-            .When(x => !string.IsNullOrEmpty(x.Phone));
+            .PhoneValidation();
 
+        // Birth Day - using reusable helper
         RuleFor(x => x.BirthDay)
-            .InclusiveBetween(1, 31).WithMessage("Birth day must be between 1 and 31")
-            .When(x => x.BirthDay.HasValue);
+            .BirthDayValidation();
 
+        // Birth Month - using reusable helper
         RuleFor(x => x.BirthMonth)
-            .InclusiveBetween(1, 12).WithMessage("Birth month must be between 1 and 12")
-            .When(x => x.BirthMonth.HasValue);
+            .BirthMonthValidation();
 
+        // Birth Year - using reusable helper
         RuleFor(x => x.BirthYear)
-            .InclusiveBetween(1900, DateTime.Now.Year).WithMessage($"Birth year must be between 1900 and {DateTime.Now.Year}")
-            .When(x => x.BirthYear.HasValue);
+            .BirthYearValidation();
 
+        // Status - using reusable helper
         RuleFor(x => x.Status)
-            .Must(x => new[] { "active", "inactive", "suspended", "deleted" }.Contains(x))
-            .WithMessage("Status must be one of: active, inactive, suspended, deleted")
-            .When(x => !string.IsNullOrEmpty(x.Status));
+            .UserStatusValidation();
     }
 }
 

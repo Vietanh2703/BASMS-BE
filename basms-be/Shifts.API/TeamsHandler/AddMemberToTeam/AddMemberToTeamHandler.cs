@@ -1,13 +1,14 @@
+using Shifts.API.Utilities;
+
 namespace Shifts.API.TeamsHandler.AddMemberToTeam;
 
 public record AddMemberToTeamCommand(
-    Guid TeamId,                    
-    Guid GuardId,                  
-    string Role,                    
-    string? JoiningNotes,           
-    Guid CreatedBy                  
+    Guid TeamId,
+    Guid GuardId,
+    string Role,
+    string? JoiningNotes,
+    Guid CreatedBy
 ) : ICommand<AddMemberToTeamResult>;
-
 
 public record AddMemberToTeamResult(
     Guid TeamMemberId,
@@ -36,17 +37,10 @@ internal class AddMemberToTeamHandler(
                 request.Role);
 
             using var connection = await dbFactory.CreateConnectionAsync();
-            
+
             logger.LogInformation("Validating team {TeamId}", request.TeamId);
 
-            var team = await connection.GetAsync<Teams>(request.TeamId);
-
-            if (team == null || team.IsDeleted)
-            {
-                logger.LogWarning("Team {TeamId} not found", request.TeamId);
-                throw new InvalidOperationException(
-                    $"Team {request.TeamId} không tồn tại");
-            }
+            var team = await connection.GetTeamByIdOrThrowAsync(request.TeamId);
 
             if (!team.IsActive)
             {
@@ -77,14 +71,7 @@ internal class AddMemberToTeamHandler(
 
             logger.LogInformation("Validating guard {GuardId}", request.GuardId);
 
-            var guard = await connection.GetAsync<Guards>(request.GuardId);
-
-            if (guard == null || guard.IsDeleted)
-            {
-                logger.LogWarning("Guard {GuardId} not found", request.GuardId);
-                throw new InvalidOperationException(
-                    $"Guard {request.GuardId} không tồn tại");
-            }
+            var guard = await connection.GetGuardByIdOrThrowAsync(request.GuardId);
 
             if (!guard.IsActive)
             {
@@ -108,6 +95,47 @@ internal class AddMemberToTeamHandler(
                 guard.FullName,
                 guard.EmployeeCode,
                 guard.CertificationLevel ?? "N/A");
+
+            // Check if guard is already in another active team
+            logger.LogInformation("Checking if guard {GuardId} belongs to any other active team", request.GuardId);
+
+            var existingTeamMembership = await connection.QueryFirstOrDefaultAsync<dynamic>(
+                @"SELECT
+                    tm.Id AS MembershipId,
+                    tm.TeamId,
+                    tm.Role,
+                    t.TeamCode,
+                    t.TeamName
+                  FROM team_members tm
+                  INNER JOIN teams t ON t.Id = tm.TeamId
+                  WHERE tm.GuardId = @GuardId
+                    AND tm.IsActive = 1
+                    AND tm.IsDeleted = 0
+                    AND t.IsActive = 1
+                    AND t.IsDeleted = 0
+                    AND tm.TeamId != @TeamId",
+                new { request.GuardId, request.TeamId });
+
+            if (existingTeamMembership != null)
+            {
+                string teamCode = (string)existingTeamMembership.TeamCode;
+                string teamName = (string)existingTeamMembership.TeamName;
+                string role = (string)existingTeamMembership.Role;
+
+                logger.LogWarning(
+                    "Guard {GuardId} is already a member of team {TeamCode} ({TeamName}) with role {Role}",
+                    request.GuardId,
+                    teamCode,
+                    teamName,
+                    role);
+
+                throw new InvalidOperationException(
+                    $"Guard {guard.FullName} ({guard.EmployeeCode}) đã là thành viên của team {teamCode} - {teamName} " +
+                    $"với vai trò {role}. " +
+                    $"Vui lòng remove khỏi team đó trước khi thêm vào team mới.");
+            }
+
+            logger.LogInformation("Guard {GuardId} is not in any other active team", request.GuardId);
 
             if (team.MaxMembers.HasValue && team.MaxMembers.Value == 1)
             {
@@ -165,10 +193,39 @@ internal class AddMemberToTeamHandler(
                 else
                 {
                     logger.LogInformation(
-                        "Guard {GuardId} was previously in team {TeamId} but is inactive, reactivating...",
+                        "Guard {GuardId} was previously in team {TeamId} but is inactive, checking before reactivation...",
                         request.GuardId,
                         request.TeamId);
-                    
+
+                    // CRITICAL FIX: Check if guard is currently active in another team before reactivation
+                    var currentActiveTeam = await connection.QueryFirstOrDefaultAsync<dynamic>(
+                        @"SELECT tm.TeamId, t.TeamCode, t.TeamName, tm.Role
+                          FROM team_members tm
+                          INNER JOIN teams t ON t.Id = tm.TeamId
+                          WHERE tm.GuardId = @GuardId
+                            AND tm.IsActive = 1 AND tm.IsDeleted = 0
+                            AND t.IsActive = 1 AND t.IsDeleted = 0
+                            AND tm.TeamId != @TeamId",
+                        new { request.GuardId, request.TeamId });
+
+                    if (currentActiveTeam != null)
+                    {
+                        string currentTeamCode = (string)currentActiveTeam.TeamCode;
+                        string currentTeamName = (string)currentActiveTeam.TeamName;
+                        string currentRole = (string)currentActiveTeam.Role;
+
+                        logger.LogWarning(
+                            "Cannot reactivate - guard {GuardId} is active in team {CurrentTeamCode}",
+                            request.GuardId, currentTeamCode);
+
+                        throw new InvalidOperationException(
+                            $"Không thể reactivate guard {guard.FullName} trong team {team.TeamCode}. " +
+                            $"Guard đang active ở team {currentTeamCode} - {currentTeamName} với vai trò {currentRole}. " +
+                            $"Vui lòng remove khỏi team đó trước hoặc dùng Transfer API.");
+                    }
+
+                    logger.LogInformation("Guard {GuardId} not in other active team, reactivating", request.GuardId);
+
                     existingMembership.IsActive = true;
                     existingMembership.Role = request.Role.ToUpper();
                     existingMembership.JoiningNotes = request.JoiningNotes;

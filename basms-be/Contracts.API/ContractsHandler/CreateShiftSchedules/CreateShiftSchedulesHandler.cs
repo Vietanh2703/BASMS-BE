@@ -74,7 +74,22 @@ internal class CreateShiftSchedulesHandler(
                     ErrorMessage = $"Contract with ID {request.ContractId} not found"
                 };
             }
-            
+
+            var today = DateTime.UtcNow.Date;
+            if (request.EffectiveFrom.Date <= today)
+            {
+                logger.LogWarning(
+                    "EffectiveFrom {EffectiveFrom:yyyy-MM-dd} is not after today ({Today:yyyy-MM-dd})",
+                    request.EffectiveFrom,
+                    today);
+                return new CreateShiftSchedulesResult
+                {
+                    Success = false,
+                    ErrorMessage = $"EffectiveFrom {request.EffectiveFrom:yyyy-MM-dd} phải sau ngày hôm nay ({today:yyyy-MM-dd}). " +
+                                 $"Không thể tạo shift schedule với ngày bắt đầu trong quá khứ hoặc hôm nay."
+                };
+            }
+
             if (request.LocationId.HasValue)
             {
                 var locationExists = await connection.ExecuteScalarAsync<bool>(

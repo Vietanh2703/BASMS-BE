@@ -44,15 +44,12 @@ internal class GetGuardByIdHandler(
         try
         {
             logger.LogInformation("Getting guard by ID: {GuardId}", request.Id);
-            using var connection = await connectionFactory.CreateConnectionAsync();
-            var guards = await connection.GetAllAsync<Guards>();
-            var guard = guards.FirstOrDefault(g => g.Id == request.Id && !g.IsDeleted);
 
-            if (guard == null)
-            {
-                logger.LogWarning("Guard not found with ID: {GuardId}", request.Id);
-                throw new InvalidOperationException($"Guard with ID {request.Id} not found");
-            }
+            // Sử dụng ExecuteQueryAsync helper để clean code
+            var guard = await connectionFactory.ExecuteQueryAsync(
+                async connection => await connection.GetGuardByIdOrThrowAsync(request.Id),
+                logger,
+                "GetGuardById");
 
             var guardDetailDto = new GuardDetailDto(
                 Id: guard.Id,

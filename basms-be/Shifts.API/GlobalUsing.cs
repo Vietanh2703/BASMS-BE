@@ -32,3 +32,4 @@ global using Amazon;
 global using Amazon.Extensions.NETCore.Setup;
 global using Amazon.Runtime;
 global using BuildingBlocks.Extensions;
+global using Shifts.API.Utilities;

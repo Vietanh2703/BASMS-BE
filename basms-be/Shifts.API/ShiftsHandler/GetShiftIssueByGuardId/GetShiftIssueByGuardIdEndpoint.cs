@@ -1,3 +1,5 @@
+using Shifts.API.Utilities;
+
 namespace Shifts.API.ShiftsHandler.GetShiftIssueByGuardId;
 
 public class GetShiftIssueByGuardIdEndpoint : ICarterModule
@@ -10,21 +12,14 @@ public class GetShiftIssueByGuardIdEndpoint : ICarterModule
             ILogger<GetShiftIssueByGuardIdEndpoint> logger,
             CancellationToken cancellationToken) =>
         {
-            logger.LogInformation(
-                "GET /api/guards/{GuardId}/shift-issues - Getting shift issues for guard",
-                guardId);
+            logger.LogInformation("GET /api/guards/{GuardId}/shift-issues - Getting shift issues for guard", guardId);
 
             var query = new GetShiftIssueByGuardIdQuery(guardId);
-
             var result = await sender.Send(query, cancellationToken);
 
             if (!result.Success)
             {
-                logger.LogWarning(
-                    "Failed to get shift issues for Guard {GuardId}: {Error}",
-                    guardId,
-                    result.ErrorMessage);
-
+                logger.LogWarning("Failed to get shift issues for Guard {GuardId}: {Error}", guardId, result.ErrorMessage);
                 return Results.BadRequest(new
                 {
                     success = false,
@@ -32,10 +27,7 @@ public class GetShiftIssueByGuardIdEndpoint : ICarterModule
                 });
             }
 
-            logger.LogInformation(
-                "Found {Count} shift issues for Guard {GuardId}",
-                result.TotalIssues,
-                guardId);
+            logger.LogInformation("Found {Count} shift issues for Guard {GuardId}", result.TotalIssues, guardId);
 
             return Results.Ok(new
             {
@@ -48,13 +40,9 @@ public class GetShiftIssueByGuardIdEndpoint : ICarterModule
                 }
             });
         })
-        .RequireAuthorization()
-        .WithName("GetShiftIssueByGuardId")
-        .WithTags("Guards - Issues")
-        .Produces(200)
-        .Produces(400)
-        .Produces(401)
-        .Produces(404)
-        .WithSummary("Lấy danh sách shift issues của guard");
+        .AddStandardGetDocumentation<object>(
+            tag: "Guards - Issues",
+            name: "GetShiftIssueByGuardId",
+            summary: "Lấy danh sách shift issues của guard");
     }
 }

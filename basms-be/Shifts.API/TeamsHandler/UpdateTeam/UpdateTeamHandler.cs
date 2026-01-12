@@ -2,14 +2,13 @@ namespace Shifts.API.TeamsHandler.UpdateTeam;
 
 public record UpdateTeamCommand(
     Guid TeamId,
-    string? TeamName,           
+    string? TeamName,
     string? Specialization,
     string? Description,
     int? MinMembers,
     int? MaxMembers,
     Guid UpdatedBy
 ) : ICommand<UpdateTeamResult>;
-
 
 public record UpdateTeamResult(bool Success, string Message);
 
@@ -27,13 +26,8 @@ internal class UpdateTeamHandler(
             logger.LogInformation("Updating team {TeamId}", request.TeamId);
 
             using var connection = await dbFactory.CreateConnectionAsync();
-            
-            var team = await connection.GetAsync<Teams>(request.TeamId);
-            if (team == null || team.IsDeleted)
-            {
-                logger.LogWarning("Team {TeamId} not found", request.TeamId);
-                throw new InvalidOperationException($"Team {request.TeamId} không tồn tại");
-            }
+
+            var team = await connection.GetTeamByIdOrThrowAsync(request.TeamId);
 
             logger.LogInformation(
                 "Found team {TeamId}: {TeamCode} - {TeamName}",
@@ -74,7 +68,7 @@ internal class UpdateTeamHandler(
                 }
             }
 
-            logger.LogInformation("✓ Input validation passed");
+            logger.LogInformation("Input validation passed");
             
             bool hasChanges = false;
             var changesList = new List<string>();

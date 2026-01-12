@@ -73,6 +73,21 @@ internal class UpdateShiftSchedulesHandler(
                 };
             }
 
+            var today = DateTime.UtcNow.Date;
+            if (request.EffectiveFrom.Date <= today)
+            {
+                logger.LogWarning(
+                    "EffectiveFrom {EffectiveFrom:yyyy-MM-dd} is not after today ({Today:yyyy-MM-dd})",
+                    request.EffectiveFrom,
+                    today);
+                return new UpdateShiftSchedulesResult
+                {
+                    Success = false,
+                    ErrorMessage = $"EffectiveFrom {request.EffectiveFrom:yyyy-MM-dd} phải sau ngày hôm nay ({today:yyyy-MM-dd}). " +
+                                 $"Không thể cập nhật shift schedule với ngày bắt đầu trong quá khứ hoặc hôm nay."
+                };
+            }
+
             var updateQuery = @"
                 UPDATE contract_shift_schedules SET
                     ScheduleName = @ScheduleName,

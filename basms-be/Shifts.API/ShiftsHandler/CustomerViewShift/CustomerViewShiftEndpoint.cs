@@ -14,9 +14,7 @@ public class CustomerViewShiftEndpoint : ICarterModule
             ILogger<CustomerViewShiftEndpoint> logger,
             CancellationToken cancellationToken) =>
         {
-            logger.LogInformation(
-                "GET /api/shifts/customer/{ContractId}/view - Customer viewing contract shifts",
-                contractId);
+            logger.LogInformation("GET /api/shifts/customer/{ContractId}/view - Customer viewing contract shifts", contractId);
 
             var query = new CustomerViewShiftQuery(
                 ContractId: contractId,
@@ -30,11 +28,7 @@ public class CustomerViewShiftEndpoint : ICarterModule
 
             if (!result.Success)
             {
-                logger.LogWarning(
-                    "Failed to get shifts for contract {ContractId}: {Error}",
-                    contractId,
-                    result.ErrorMessage);
-
+                logger.LogWarning("Failed to get shifts for contract {ContractId}: {Error}", contractId, result.ErrorMessage);
                 return Results.BadRequest(new
                 {
                     success = false,
@@ -42,10 +36,7 @@ public class CustomerViewShiftEndpoint : ICarterModule
                 });
             }
 
-            logger.LogInformation(
-                "Retrieved {Count} shifts for contract {ContractId}",
-                result.Shifts.Count,
-                contractId);
+            logger.LogInformation("Retrieved {Count} shifts for contract {ContractId}", result.Shifts.Count, contractId);
 
             return Results.Ok(new
             {
@@ -64,11 +55,9 @@ public class CustomerViewShiftEndpoint : ICarterModule
                 }
             });
         })
-        .RequireAuthorization()
-        .WithName("CustomerViewShift")
-        .WithTags("Shifts", "Customer")
-        .Produces(200)
-        .Produces(400)
-        .WithSummary("Customer xem các ca trực của contract");
+        .AddStandardGetDocumentation<object>(
+            tag: "Shifts",
+            name: "CustomerViewShift",
+            summary: "Customer xem các ca trực của contract");
     }
 }

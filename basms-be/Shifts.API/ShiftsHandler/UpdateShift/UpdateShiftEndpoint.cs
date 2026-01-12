@@ -1,3 +1,5 @@
+using Shifts.API.Utilities;
+
 namespace Shifts.API.ShiftsHandler.UpdateShift;
 
 public record UpdateShiftRequest(
@@ -14,12 +16,6 @@ public class UpdateShiftEndpoint : ICarterModule
     {
         app.MapPut("/api/shifts/{id:guid}", async (Guid id, UpdateShiftRequest req, ISender sender, HttpContext context) =>
         {
-            var userIdClaim = context.User.FindFirst("userId")?.Value;
-            if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
-            {
-                userId = Guid.NewGuid(); 
-            }
-            
             var command = new UpdateShiftCommand(
                 ShiftId: id,
                 ShiftDate: req.ShiftDate,
@@ -27,20 +23,15 @@ public class UpdateShiftEndpoint : ICarterModule
                 EndTime: req.EndTime,
                 RequiredGuards: req.RequiredGuards,
                 Description: req.Description,
-                UpdatedBy: userId
+                UpdatedBy: context.GetUserIdFromContext()
             );
-            
+
             var result = await sender.Send(command);
-            
             return Results.Ok(result);
         })
-        .RequireAuthorization()
-        .WithTags("Shifts")
-        .WithName("UpdateShift")
-        .Produces<UpdateShiftResult>(StatusCodes.Status200OK)
-        .ProducesProblem(StatusCodes.Status404NotFound)
-        .ProducesProblem(StatusCodes.Status400BadRequest)
-        .ProducesProblem(StatusCodes.Status500InternalServerError)
-        .WithSummary("Update an existing shift");
+        .AddStandardPutDocumentation<UpdateShiftResult>(
+            tag: "Shifts",
+            name: "UpdateShift",
+            summary: "Update an existing shift");
     }
 }

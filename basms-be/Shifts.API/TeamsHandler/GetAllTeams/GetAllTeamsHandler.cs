@@ -66,7 +66,7 @@ internal class GetAllTeamsHandler(
                 new { ManagerId = request.ManagerId });
 
             logger.LogInformation(
-                "✓ Returning {Count} teams for manager {ManagerId}",
+                "Returning {Count} teams for manager {ManagerId}",
                 teams.Count(),
                 request.ManagerId);
 

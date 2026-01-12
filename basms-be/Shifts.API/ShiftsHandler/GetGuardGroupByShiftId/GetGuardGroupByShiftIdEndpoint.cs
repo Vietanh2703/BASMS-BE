@@ -1,3 +1,5 @@
+using Shifts.API.Utilities;
+
 namespace Shifts.API.ShiftsHandler.GetGuardGroupByShiftId;
 
 public class GetGuardGroupByShiftIdEndpoint : ICarterModule
@@ -10,21 +12,14 @@ public class GetGuardGroupByShiftIdEndpoint : ICarterModule
             ILogger<GetGuardGroupByShiftIdEndpoint> logger,
             CancellationToken cancellationToken) =>
         {
-            logger.LogInformation(
-                "GET /api/shifts/{ShiftId}/guards - Getting guard group for shift",
-                shiftId);
+            logger.LogInformation("GET /api/shifts/{ShiftId}/guards - Getting guard group for shift", shiftId);
 
             var query = new GetGuardGroupByShiftIdQuery(shiftId);
-
             var result = await sender.Send(query, cancellationToken);
 
             if (!result.Success)
             {
-                logger.LogWarning(
-                    "Failed to get guard group for Shift {ShiftId}: {Error}",
-                    shiftId,
-                    result.ErrorMessage);
-
+                logger.LogWarning("Failed to get guard group for Shift {ShiftId}: {Error}", shiftId, result.ErrorMessage);
                 return Results.BadRequest(new
                 {
                     success = false,
@@ -32,10 +27,7 @@ public class GetGuardGroupByShiftIdEndpoint : ICarterModule
                 });
             }
 
-            logger.LogInformation(
-                "Found {Count} guards for Shift {ShiftId}",
-                result.TotalGuards,
-                shiftId);
+            logger.LogInformation("Found {Count} guards for Shift {ShiftId}", result.TotalGuards, shiftId);
 
             return Results.Ok(new
             {
@@ -50,13 +42,9 @@ public class GetGuardGroupByShiftIdEndpoint : ICarterModule
                 }
             });
         })
-        .RequireAuthorization()
-        .WithName("GetGuardGroupByShiftId")
-        .WithTags("Shifts - Guards")
-        .Produces(200)
-        .Produces(400)
-        .Produces(401)
-        .Produces(404)
-        .WithSummary("Lấy danh sách guards được phân công vào shift");
+        .AddStandardGetDocumentation<object>(
+            tag: "Shifts - Guards",
+            name: "GetGuardGroupByShiftId",
+            summary: "Lấy danh sách guards được phân công vào shift");
     }
 }

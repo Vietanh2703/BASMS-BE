@@ -1,12 +1,14 @@
+using Shifts.API.Utilities;
+
 namespace Shifts.API.ShiftsHandler.AssignTeamToShift;
 
 public record AssignTeamToShiftRequest(
     DateTime StartDate,
     DateTime EndDate,
-    string ShiftTimeSlot,  
+    string ShiftTimeSlot,
     Guid LocationId,
     Guid? ContractId,
-    string AssignmentType,    
+    string AssignmentType,
     string? AssignmentNotes
 );
 
@@ -20,12 +22,6 @@ public class AssignTeamToShiftEndpoint : ICarterModule
             ISender sender,
             HttpContext context) =>
         {
-            var userIdClaim = context.User.FindFirst("userId")?.Value;
-            if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
-            {
-                userId = Guid.NewGuid();
-            }
-
             var validTimeSlots = new[] { "MORNING", "AFTERNOON", "EVENING" };
             if (!validTimeSlots.Contains(req.ShiftTimeSlot.ToUpper()))
             {
@@ -36,7 +32,7 @@ public class AssignTeamToShiftEndpoint : ICarterModule
                     received = req.ShiftTimeSlot
                 });
             }
-            
+
             if (req.EndDate < req.StartDate)
             {
                 return Results.BadRequest(new
@@ -45,7 +41,7 @@ public class AssignTeamToShiftEndpoint : ICarterModule
                     message = "EndDate phải lớn hơn hoặc bằng StartDate"
                 });
             }
-            
+
             var command = new AssignTeamToShiftCommand(
                 TeamId: teamId,
                 StartDate: req.StartDate.Date,
@@ -55,9 +51,9 @@ public class AssignTeamToShiftEndpoint : ICarterModule
                 ContractId: req.ContractId,
                 AssignmentType: req.AssignmentType.ToUpper(),
                 AssignmentNotes: req.AssignmentNotes,
-                AssignedBy: userId
+                AssignedBy: context.GetUserIdFromContext()
             );
-            
+
             var result = await sender.Send(command);
             if (!result.Success)
             {
@@ -70,12 +66,9 @@ public class AssignTeamToShiftEndpoint : ICarterModule
             }
             return Results.Ok(result);
         })
-        .RequireAuthorization()
-        .WithTags("Shifts", "Teams")
-        .WithName("AssignTeamToShift")
-        .Produces<AssignTeamToShiftResult>(StatusCodes.Status200OK)
-        .ProducesProblem(StatusCodes.Status400BadRequest)
-        .ProducesProblem(StatusCodes.Status500InternalServerError)
-        .WithSummary("Assign team to shifts (multi-day)");
+        .AddStandardPostDocumentation<AssignTeamToShiftResult>(
+            tag: "Shifts",
+            name: "AssignTeamToShift",
+            summary: "Assign team to shifts (multi-day)");
     }
 }

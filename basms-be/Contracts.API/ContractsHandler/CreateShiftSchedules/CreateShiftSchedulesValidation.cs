@@ -77,7 +77,9 @@ public class CreateShiftSchedulesValidation : AbstractValidator<CreateShiftSched
 
         RuleFor(x => x.EffectiveFrom)
             .NotEmpty()
-            .WithMessage("Effective from date is required");
+            .WithMessage("Effective from date is required")
+            .Must(BeAfterToday)
+            .WithMessage(x => $"EffectiveFrom {x.EffectiveFrom:yyyy-MM-dd} phải sau ngày hôm nay ({DateTime.UtcNow.Date:yyyy-MM-dd})");
 
         RuleFor(x => x)
             .Must(x => !x.EffectiveTo.HasValue || x.EffectiveTo.Value >= x.EffectiveFrom)
@@ -104,5 +106,11 @@ public class CreateShiftSchedulesValidation : AbstractValidator<CreateShiftSched
         }
 
         return true;
+    }
+
+    private bool BeAfterToday(DateTime date)
+    {
+        var today = DateTime.UtcNow.Date;
+        return date.Date > today;
     }
 }

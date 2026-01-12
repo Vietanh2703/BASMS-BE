@@ -1,3 +1,5 @@
+using Shifts.API.Utilities;
+
 namespace Shifts.API.ShiftsHandler.GetContractManaged;
 
 public class GetContractManagedEndpoint : ICarterModule
@@ -11,7 +13,6 @@ public class GetContractManagedEndpoint : ICarterModule
             ILogger<GetContractManagedEndpoint> logger,
             CancellationToken cancellationToken) =>
         {
-
             var query = new GetContractManagedQuery(
                 ManagerId: managerId,
                 Status: status
@@ -21,11 +22,7 @@ public class GetContractManagedEndpoint : ICarterModule
 
             if (!result.Success)
             {
-                logger.LogWarning(
-                    "Failed to get contracts for Manager {ManagerId}: {Error}",
-                    managerId,
-                    result.ErrorMessage);
-
+                logger.LogWarning("Failed to get contracts for Manager {ManagerId}: {Error}", managerId, result.ErrorMessage);
                 return Results.BadRequest(new
                 {
                     success = false,
@@ -33,10 +30,7 @@ public class GetContractManagedEndpoint : ICarterModule
                 });
             }
 
-            logger.LogInformation(
-                "Found {Count} unique contracts for Manager {ManagerId}",
-                result.TotalCount,
-                managerId);
+            logger.LogInformation("Found {Count} unique contracts for Manager {ManagerId}", result.TotalCount, managerId);
 
             return Results.Ok(new
             {
@@ -50,12 +44,10 @@ public class GetContractManagedEndpoint : ICarterModule
                 }
             });
         })
-        .RequireAuthorization()
-        .WithName("GetContractManaged")
-        .WithTags("Contracts - Manager")
-        .Produces(200)
-        .Produces(400)
-        .Produces(401)
-        .WithSummary("Lấy danh sách contracts UNIQUE mà manager phụ trách");
+        .AddStandardGetDocumentation<object>(
+            tag: "Contracts - Manager",
+            name: "GetContractManaged",
+            summary: "Lấy danh sách contracts UNIQUE mà manager phụ trách",
+            canReturnNotFound: false);
     }
 }

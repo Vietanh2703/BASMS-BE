@@ -1,5 +1,6 @@
-namespace Shifts.API.GuardsHandler.GuardViewShiftAssigned;
+using Shifts.API.Utilities;
 
+namespace Shifts.API.GuardsHandler.GuardViewShiftAssigned;
 
 public class GuardViewShiftAssignedEndpoint : ICarterModule
 {
@@ -14,9 +15,7 @@ public class GuardViewShiftAssignedEndpoint : ICarterModule
             ILogger<GuardViewShiftAssignedEndpoint> logger,
             CancellationToken cancellationToken) =>
         {
-            logger.LogInformation(
-                "GET /api/shifts/guards/{GuardId}/assigned - Guard viewing assigned shift schedule",
-                guardId);
+            logger.LogInformation("GET /api/shifts/guards/{GuardId}/assigned - Guard viewing assigned shift schedule", guardId);
 
             var query = new GuardViewShiftAssignedQuery(
                 GuardId: guardId,
@@ -29,11 +28,7 @@ public class GuardViewShiftAssignedEndpoint : ICarterModule
 
             if (!result.Success)
             {
-                logger.LogWarning(
-                    "Failed to get assigned shifts for guard {GuardId}: {Error}",
-                    guardId,
-                    result.ErrorMessage);
-
+                logger.LogWarning("Failed to get assigned shifts for guard {GuardId}: {Error}", guardId, result.ErrorMessage);
                 return Results.BadRequest(new
                 {
                     success = false,
@@ -41,10 +36,7 @@ public class GuardViewShiftAssignedEndpoint : ICarterModule
                 });
             }
 
-            logger.LogInformation(
-                "Retrieved {Count} assigned shifts for guard {GuardId}",
-                result.Shifts.Count,
-                guardId);
+            logger.LogInformation("Retrieved {Count} assigned shifts for guard {GuardId}", result.Shifts.Count, guardId);
 
             return Results.Ok(new
             {
@@ -61,11 +53,9 @@ public class GuardViewShiftAssignedEndpoint : ICarterModule
                 }
             });
         })
-        .RequireAuthorization()
-        .WithName("GuardViewShiftAssigned")
-        .WithTags("Guards", "Shifts")
-        .Produces(200)
-        .Produces(400)
-        .WithSummary("Guard xem lịch ca trực được phân công");
+        .AddStandardGetDocumentation<object>(
+            tag: "Guards",
+            name: "GuardViewShiftAssigned",
+            summary: "Guard xem lịch ca trực được phân công");
     }
 }
