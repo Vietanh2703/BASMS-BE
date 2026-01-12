@@ -70,20 +70,45 @@ internal class RequestGuardToManagerHandler(
                 );
             }
 
+            // CRITICAL FIX: Enhanced validation for pending requests
             if (guard.ContractType == "join_in_request" && guard.DirectManagerId != null)
             {
-                logger.LogWarning(
-                    "Guard {GuardId} already has a pending request to Manager {ExistingManagerId}",
-                    command.GuardId,
-                    guard.DirectManagerId);
+                // Allow guard to update request to SAME manager
+                if (guard.DirectManagerId == command.ManagerId)
+                {
+                    logger.LogInformation(
+                        "Guard {GuardId} is updating request to same Manager {ManagerId}",
+                        command.GuardId,
+                        command.ManagerId);
+                    // Continue to update the request
+                }
+                else
+                {
+                    // Get existing manager info for better error message
+                    var existingManager = await connection.QueryFirstOrDefaultAsync<Managers>(
+                        @"SELECT Id, FullName, EmployeeCode FROM managers
+                          WHERE Id = @ManagerId AND IsDeleted = 0",
+                        new { ManagerId = guard.DirectManagerId });
 
-                return new RequestGuardToManagerResult(
-                    Success: false,
-                    Message: "You already have a pending join request. Please wait for approval or cancel the existing request.",
-                    GuardId: command.GuardId,
-                    ManagerId: command.ManagerId,
-                    RequestedAt: DateTime.UtcNow
-                );
+                    string existingManagerInfo = existingManager != null
+                        ? $"{existingManager.FullName} ({existingManager.EmployeeCode})"
+                        : guard.DirectManagerId.ToString();
+
+                    logger.LogWarning(
+                        "Guard {GuardId} already has pending request to Manager {ExistingManagerId}, cannot request to {NewManagerId}",
+                        command.GuardId,
+                        guard.DirectManagerId,
+                        command.ManagerId);
+
+                    return new RequestGuardToManagerResult(
+                        Success: false,
+                        Message: $"Bạn đã có yêu cầu join đang chờ duyệt với Manager {existingManagerInfo}. " +
+                                $"Vui lòng đợi phê duyệt hoặc hủy yêu cầu hiện tại trước khi gửi yêu cầu mới đến manager khác.",
+                        GuardId: command.GuardId,
+                        ManagerId: command.ManagerId,
+                        RequestedAt: DateTime.UtcNow
+                    );
+                }
             }
 
             using var transaction = connection.BeginTransaction();
