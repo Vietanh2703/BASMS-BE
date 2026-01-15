@@ -82,28 +82,9 @@ dotnet run
 
 Repeat for other services as needed.
 
-## Deployment
-
-For production deployment on VPS:
-
-```bash
-# Create .env file with required environment variables
-docker-compose -f docker-compose.yml up -d
-```
-
-See [INSTALL.md](./INSTALL.md) for full environment variable reference.
-
 ## Contributing
 
 Contributions are welcome! Please ensure:
 - Code follows existing patterns and conventions
 - All tests pass before submitting PR
 - Commit messages are clear and descriptive
-
-## License
-
-[Add your license here]
-
-## Contact
-
-[Add contact information or links]
