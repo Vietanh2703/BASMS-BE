@@ -60,9 +60,15 @@ public class ImportShiftTemplatesHandler(
                 
                 var templateCode = GenerateTemplateCode(schedule);
 
+                // Check for existing template by both TemplateCode AND ContractId
+                // This ensures templates are independent per contract (same customer can have
+                // multiple contracts with identical shift schedules without overwriting)
                 var existingTemplate = await connection.QueryFirstOrDefaultAsync<ShiftTemplates>(
-                    "SELECT * FROM shift_templates WHERE TemplateCode = @TemplateCode AND IsDeleted = 0",
-                    new { TemplateCode = templateCode });
+                    @"SELECT * FROM shift_templates
+                      WHERE TemplateCode = @TemplateCode
+                        AND ContractId = @ContractId
+                        AND IsDeleted = 0",
+                    new { TemplateCode = templateCode, ContractId = request.ContractId });
                 
                 ShiftTemplates template;
                 string action;
