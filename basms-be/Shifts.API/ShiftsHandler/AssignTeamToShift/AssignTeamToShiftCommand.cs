@@ -1,15 +1,16 @@
 namespace Shifts.API.ShiftsHandler.AssignTeamToShift;
 
 public record AssignTeamToShiftCommand(
-    Guid TeamId,                  
-    DateTime StartDate,           
-    DateTime EndDate,              
-    string ShiftTimeSlot,          
-    Guid LocationId,                
-    Guid? ContractId,               
-    string AssignmentType,          
-    string? AssignmentNotes,        
-    Guid AssignedBy                 
+    Guid TeamId,
+    DateTime StartDate,
+    DateTime EndDate,
+    string ShiftTimeSlot,
+    Guid? ShiftTemplateId,
+    Guid LocationId,
+    Guid? ContractId,
+    string AssignmentType,
+    string? AssignmentNotes,
+    Guid AssignedBy
 ) : ICommand<AssignTeamToShiftResult>;
 
 
