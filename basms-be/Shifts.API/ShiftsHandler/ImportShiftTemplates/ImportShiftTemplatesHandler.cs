@@ -399,6 +399,9 @@ public class ImportShiftTemplatesHandler(
         existing.UpdatedAt = DateTime.UtcNow;
         existing.UpdatedBy = request.ImportedBy;
 
+        // Reset status to allow manager to create new shifts for updated template
+        existing.Status = "await_create_shift";
+
         return existing;
     }
 }
