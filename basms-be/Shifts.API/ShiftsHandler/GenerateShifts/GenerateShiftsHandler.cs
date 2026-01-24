@@ -697,8 +697,9 @@ public class GenerateShiftsHandler(
                     var assignCommand = new AssignTeamToShiftCommand(
                         TeamId: template.TeamId!.Value,
                         StartDate: group.Key.Date,
-                        EndDate: group.Key.Date, 
+                        EndDate: group.Key.Date,
                         ShiftTimeSlot: group.Key.TimeSlot,
+                        ShiftTemplateId: template.Id,
                         LocationId: firstShift.LocationId,
                         ContractId: template.ContractId,
                         AssignmentType: "REGULAR",

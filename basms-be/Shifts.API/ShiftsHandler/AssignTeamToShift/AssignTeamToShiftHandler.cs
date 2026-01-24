@@ -130,12 +130,15 @@ internal class AssignTeamToShiftHandler(
                     request.LocationId,
                     currentDate,
                     request.ShiftTimeSlot,
-                    request.ContractId);
+                    request.ContractId,
+                    request.ShiftTemplateId);
 
                 if (shift == null)
                 {
-                    warnings.Add(
-                        $"Ngày {currentDate:yyyy-MM-dd}: Không tìm thấy ca {ShiftClassificationHelper.GetVietnameseSlotName(request.ShiftTimeSlot)}");
+                    var shiftInfo = request.ShiftTemplateId.HasValue
+                        ? $"template {request.ShiftTemplateId}"
+                        : ShiftClassificationHelper.GetVietnameseSlotName(request.ShiftTimeSlot);
+                    warnings.Add($"Ngày {currentDate:yyyy-MM-dd}: Không tìm thấy ca {shiftInfo}");
                     currentDate = currentDate.AddDays(1);
                     continue;
                 }
@@ -336,13 +339,15 @@ internal class AssignTeamToShiftHandler(
         Guid locationId,
         DateTime date,
         string timeSlot,
-        Guid? contractId)
+        Guid? contractId,
+        Guid? shiftTemplateId)
     {
         logger.LogInformation(
-            "Searching for shift: Location={LocationId}, Date={Date}, TimeSlot={TimeSlot}",
+            "Searching for shift: Location={LocationId}, Date={Date}, TimeSlot={TimeSlot}, TemplateId={TemplateId}",
             locationId,
             date.ToString("yyyy-MM-dd"),
-            timeSlot);
+            timeSlot,
+            shiftTemplateId);
 
         var query = @"
             SELECT * FROM shifts
@@ -356,30 +361,49 @@ internal class AssignTeamToShiftHandler(
             query += " AND ContractId = @ContractId";
         }
 
+        // If ShiftTemplateId is provided, use it for exact matching
+        if (shiftTemplateId.HasValue)
+        {
+            query += " AND ShiftTemplateId = @ShiftTemplateId";
+        }
+
         query += " ORDER BY ShiftStart ASC";
 
         var shifts = await connection.QueryAsync<Models.Shifts>(
             query,
-            new { LocationId = locationId, Date = date, ContractId = contractId });
-        
-        var matchingShift = shifts.FirstOrDefault(s =>
-            ShiftClassificationHelper.ClassifyShiftTimeSlot(s.ShiftStart) == timeSlot);
+            new { LocationId = locationId, Date = date, ContractId = contractId, ShiftTemplateId = shiftTemplateId });
+
+        Models.Shifts? matchingShift;
+
+        if (shiftTemplateId.HasValue)
+        {
+            // When template ID is provided, get the first match (should be exact)
+            matchingShift = shifts.FirstOrDefault();
+        }
+        else
+        {
+            // Fallback to time slot classification for backward compatibility
+            matchingShift = shifts.FirstOrDefault(s =>
+                ShiftClassificationHelper.ClassifyShiftTimeSlot(s.ShiftStart) == timeSlot);
+        }
 
         if (matchingShift == null)
         {
             logger.LogWarning(
-                "No shift found for Location={LocationId}, Date={Date}, TimeSlot={TimeSlot}",
+                "No shift found for Location={LocationId}, Date={Date}, TimeSlot={TimeSlot}, TemplateId={TemplateId}",
                 locationId,
                 date.ToString("yyyy-MM-dd"),
-                timeSlot);
+                timeSlot,
+                shiftTemplateId);
         }
         else
         {
             logger.LogInformation(
-                "Found shift {ShiftId}: {ShiftStart} - {ShiftEnd}",
+                "Found shift {ShiftId}: {ShiftStart} - {ShiftEnd} (TemplateId={TemplateId})",
                 matchingShift.Id,
                 matchingShift.ShiftStart.ToString("HH:mm"),
-                matchingShift.ShiftEnd.ToString("HH:mm"));
+                matchingShift.ShiftEnd.ToString("HH:mm"),
+                matchingShift.ShiftTemplateId);
         }
 
         return matchingShift;
